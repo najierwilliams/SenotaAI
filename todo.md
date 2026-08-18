@@ -19,6 +19,8 @@
 - [x] Verify the dashboard at desktop and mobile breakpoints, save a final checkpoint, and synchronize the source code to `najierwilliams/SenotaAI`.
 - [x] Configure the agent for on-demand high-performance inference rather than requiring a permanently online Ollama host.
 - [ ] Add the selected provider’s `OLLAMA_BASE_URL` and, if required, `OLLAMA_API_KEY` through protected server-side configuration before the first live run; GitHub and Vercel credentials are validated.
+- [x] Repair the invalid Git commit author email and repush the SenotaAI repository so Vercel can verify and deploy the commits.
+- [x] Verify the SenotaAI Vercel project and the repaired commit through an accessible Vercel API scope; the owner screenshot shows a Ready deployment, but the currently connected API scope exposes only `life-plus`.
 - [x] Stream incremental Ollama reasoning and response chunks through the task activity feed.
 - [x] Stream connector and Vercel deployment/build progress into the live activity feed where the external API supports it.
 - [x] Persist recurring-schedule run history linked to each schedule and expose it in the dashboard.
