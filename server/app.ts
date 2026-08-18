@@ -8,7 +8,6 @@ import {
   updateAgentSchedule,
 } from "./agent/db";
 import { executeScheduledRun } from "./agent/scheduledExecution";
-import { getOwnerSessionUser } from "./ownerAuth";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
 import { registerOAuthRoutes } from "./_core/oauth";
@@ -29,8 +28,6 @@ export function createApp() {
   app.post("/api/agent/tasks/:taskId/run", async (req, res) => {
     let streamClosed = false;
     try {
-      const user = await getOwnerSessionUser(req);
-      if (!user) return res.status(401).json({ error: "owner-session-required" });
       const taskId = Number(req.params.taskId);
       if (!Number.isInteger(taskId) || taskId <= 0) return res.status(400).json({ error: "invalid-task-id" });
 
@@ -44,7 +41,7 @@ export function createApp() {
 
       await runAutonomousTask({
         taskId,
-        userId: user.id,
+        userId: Number(process.env.SENOTA_DIRECT_USER_ID || 0),
         emit: payload => {
           if (!streamClosed) res.write(`event: agent\ndata: ${JSON.stringify(payload)}\n\n`);
         },

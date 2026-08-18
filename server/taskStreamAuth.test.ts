@@ -1,28 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
-import type { User } from "../drizzle/schema";
 
-const getOwnerSessionUser = vi.fn();
 const runAutonomousTask = vi.fn();
 
-vi.mock("./ownerAuth", () => ({ getOwnerSessionUser }));
 vi.mock("./agent/engine", () => ({ runAutonomousTask }));
 
 const { createApp } = await import("./_core/index");
 
-const owner: User = {
-  id: 42,
-  openId: "senota-password-owner",
-  name: "Senota owner",
-  email: "owner@senota.local",
-  loginMethod: "password",
-  role: "admin",
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  lastSignedIn: new Date(),
-};
-
-describe("password-session task stream", () => {
+describe("direct-access task stream", () => {
   let server: Server;
   let baseUrl = "";
 
@@ -38,15 +23,7 @@ describe("password-session task stream", () => {
     await new Promise<void>(resolve => server.close(() => resolve()));
   });
 
-  it("returns 401 without an owner session", async () => {
-    getOwnerSessionUser.mockResolvedValueOnce(null);
-    const response = await fetch(`${baseUrl}/api/agent/tasks/5/run`, { method: "POST" });
-    expect(response.status).toBe(401);
-    await expect(response.json()).resolves.toEqual({ error: "owner-session-required" });
-  });
-
-  it("accepts an owner session and emits an SSE connection and activity event", async () => {
-    getOwnerSessionUser.mockResolvedValueOnce(owner);
+  it("emits an SSE connection and activity event without a login session", async () => {
     runAutonomousTask.mockImplementationOnce(async ({ emit }) => {
       emit({ kind: "planning", status: "running", title: "Planning", timestamp: 1 });
     });
@@ -58,6 +35,12 @@ describe("password-session task stream", () => {
     expect(body).toContain("event: connected");
     expect(body).toContain("event: agent");
     expect(body).toContain("Planning");
-    expect(runAutonomousTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 5, userId: 42 }));
+    expect(runAutonomousTask).toHaveBeenCalledWith(expect.objectContaining({ taskId: 5, userId: 0 }));
+  });
+
+  it("rejects malformed task IDs", async () => {
+    const response = await fetch(`${baseUrl}/api/agent/tasks/nope/run`, { method: "POST" });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "invalid-task-id" });
   });
 });

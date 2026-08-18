@@ -19,6 +19,10 @@ describe("Ollama configuration", () => {
     });
   });
 
+  it("uses the verified available GPT-OSS model when no default model is configured", () => {
+    expect(getOllamaConfig({ OLLAMA_BASE_URL: "https://ollama.com" }).defaultModel).toBe("gpt-oss:20b");
+  });
+
   it("rejects non-HTTPS inference endpoints in production", () => {
     expect(() => getOllamaConfig({ OLLAMA_BASE_URL: "http://insecure.example.com", NODE_ENV: "production" })).toThrow("must use HTTPS");
   });

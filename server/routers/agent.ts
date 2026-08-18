@@ -2,7 +2,7 @@ import { parse as parseCookie } from "cookie";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { createHeartbeatJob, updateHeartbeatJob } from "../_core/heartbeat";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import {
   createAgentSchedule,
   createAgentTask,
@@ -21,6 +21,7 @@ import {
 import { isValidSixFieldCron } from "../agent/schedule";
 import { statusAfterApprovalDecision } from "../agent/state";
 import { decideApprovalAndQueue } from "../agent/approvalWorkflow";
+import { chatWithOllama } from "../agent/ollama";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
 const cronSchema = z.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -30,6 +31,28 @@ function currentSessionToken(cookieHeader: string | undefined) {
 }
 
 export const agentRouter = router({
+  chat: publicProcedure
+    .input(z.object({
+      model: z.string().trim().min(1).max(128).optional(),
+      messages: z.array(z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().trim().min(1).max(16_000),
+      })).min(1).max(30),
+    }))
+    .mutation(async ({ input }) => {
+      const response = await chatWithOllama({
+        model: input.model,
+        messages: [
+          {
+            role: "system",
+            content: "You are SenotaAI, an autonomous software-agent assistant. Help the user plan, build, debug, and deploy software. Be clear about which actions need confirmation before execution.",
+          },
+          ...input.messages,
+        ],
+      });
+      return { content: response.content, thinking: response.thinking };
+    }),
+
   dashboard: protectedProcedure.query(async ({ ctx }) => {
     const [settings, tasks, memories, schedules] = await Promise.all([
       getOrCreateAgentSettings(ctx.user.id),
@@ -40,7 +63,7 @@ export const agentRouter = router({
     return { settings, tasks, memories, schedules };
   }),
 
-  connections: protectedProcedure.query(async () => ({
+  connections: publicProcedure.query(async () => ({
     ollamaConfigured: Boolean(process.env.OLLAMA_BASE_URL),
     githubConfigured: Boolean(process.env.GITHUB_TOKEN),
     vercelConfigured: Boolean(process.env.VERCEL_TOKEN),

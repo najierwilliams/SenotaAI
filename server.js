@@ -277,53 +277,13 @@ async function getUserByOpenId(openId) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
-async function getOwnerAccess() {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(ownerAccess).where(eq(ownerAccess.instanceKey, OWNER_INSTANCE_KEY)).limit(1);
-  return result[0];
-}
-async function getPasswordOwner() {
-  const access = await getOwnerAccess();
-  if (!access) return null;
-  const db = await getDb();
-  if (!db) return null;
-  const result = await db.select().from(users).where(eq(users.id, access.userId)).limit(1);
-  return result[0] ?? null;
-}
-async function setupPasswordOwner(passwordHash) {
-  const db = await getDb();
-  if (!db) throw new Error("Database is unavailable.");
-  if (await getOwnerAccess()) throw new Error("An owner password has already been created.");
-  const now = Date.now();
-  await db.insert(users).values({
-    openId: PASSWORD_OWNER_OPEN_ID,
-    name: "Senota owner",
-    email: "owner@senota.local",
-    loginMethod: "password",
-    role: "admin",
-    lastSignedIn: /* @__PURE__ */ new Date()
-  }).onDuplicateKeyUpdate({ set: { name: "Senota owner", loginMethod: "password", role: "admin", lastSignedIn: /* @__PURE__ */ new Date() } });
-  const owner = await getUserByOpenId(PASSWORD_OWNER_OPEN_ID);
-  if (!owner) throw new Error("Unable to create the Senota owner account.");
-  await db.insert(ownerAccess).values({
-    instanceKey: OWNER_INSTANCE_KEY,
-    userId: owner.id,
-    passwordHash,
-    createdAt: now,
-    updatedAt: now
-  });
-  return owner;
-}
-var _db, PASSWORD_OWNER_OPEN_ID, OWNER_INSTANCE_KEY;
+var _db;
 var init_db = __esm({
   "server/db.ts"() {
     "use strict";
     init_schema();
     init_env();
     _db = null;
-    PASSWORD_OWNER_OPEN_ID = "senota-password-owner";
-    OWNER_INSTANCE_KEY = "primary";
   }
 });
 
@@ -958,8 +918,11 @@ function getOllamaConfig(env = process.env) {
   return {
     baseUrl,
     apiKey: env.OLLAMA_API_KEY?.trim() || void 0,
-    defaultModel: env.OLLAMA_DEFAULT_MODEL?.trim() || "llama3"
+    defaultModel: env.OLLAMA_DEFAULT_MODEL?.trim() || "gpt-oss:20b"
   };
+}
+async function chatWithOllama(input) {
+  return streamChatWithOllama(input, () => void 0);
 }
 async function streamChatWithOllama(input, onChunk) {
   const config = getOllamaConfig();
@@ -1290,107 +1253,8 @@ async function executeScheduledRun(input) {
   return { taskId: task.id, result };
 }
 
-// server/ownerAuth.ts
-init_db();
-import { scrypt as scryptCallback, randomBytes, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
-import { SignJWT, jwtVerify } from "jose";
-import { parse } from "cookie";
-
-// server/_core/cookies.ts
-function isSecureRequest(req) {
-  if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
-}
-function getSessionCookieOptions(req) {
-  return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req)
-  };
-}
-
-// server/ownerAuth.ts
-init_env();
-var scrypt = promisify(scryptCallback);
-var OWNER_SESSION_COOKIE = "senota_owner_session";
-var OWNER_SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1e3;
-function secretKey() {
-  if (!ENV.cookieSecret) throw new Error("Server session secret is not configured.");
-  return new TextEncoder().encode(ENV.cookieSecret);
-}
-function passwordValidationMessage(password) {
-  if (password.length < 12) return "Use at least 12 characters.";
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use a mix of letters and numbers.";
-  return null;
-}
-async function hashPassword(password) {
-  const salt = randomBytes(16);
-  const derived = await scrypt(password, salt, 64);
-  return `scrypt$${salt.toString("base64url")}$${derived.toString("base64url")}`;
-}
-async function verifyPassword(password, passwordHash) {
-  const [algorithm, encodedSalt, encodedHash] = passwordHash.split("$");
-  if (algorithm !== "scrypt" || !encodedSalt || !encodedHash) return false;
-  const salt = Buffer.from(encodedSalt, "base64url");
-  const expected = Buffer.from(encodedHash, "base64url");
-  const actual = await scrypt(password, salt, expected.length);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-async function createOwnerSessionToken(payload) {
-  return new SignJWT(payload).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("7d").sign(secretKey());
-}
-async function readOwnerSessionToken(token) {
-  const verified = await jwtVerify(token, secretKey());
-  const userId = Number(verified.payload.userId);
-  const sessionVersion = Number(verified.payload.sessionVersion);
-  if (!Number.isInteger(userId) || !Number.isInteger(sessionVersion)) return null;
-  return { userId, sessionVersion };
-}
-async function getOwnerSessionUser(req) {
-  const token = parse(req.headers.cookie ?? "")[OWNER_SESSION_COOKIE];
-  if (!token) return null;
-  try {
-    const session = await readOwnerSessionToken(token);
-    if (!session) return null;
-    const access = await getOwnerAccess();
-    if (!access || access.userId !== session.userId || access.sessionVersion !== session.sessionVersion) return null;
-    return await getPasswordOwner();
-  } catch {
-    return null;
-  }
-}
-async function establishOwnerPassword(password) {
-  const message = passwordValidationMessage(password);
-  if (message) throw new Error(message);
-  return setupPasswordOwner(await hashPassword(password));
-}
-async function authenticateOwnerPassword(password) {
-  const access = await getOwnerAccess();
-  if (!access || !await verifyPassword(password, access.passwordHash)) return null;
-  return getPasswordOwner();
-}
-async function setOwnerSession(req, res, user) {
-  const access = await getOwnerAccess();
-  if (!access || access.userId !== user.id) throw new Error("Owner access is not configured.");
-  const token = await createOwnerSessionToken({ userId: user.id, sessionVersion: access.sessionVersion });
-  res.cookie(OWNER_SESSION_COOKIE, token, {
-    ...getSessionCookieOptions(req),
-    sameSite: "lax",
-    maxAge: OWNER_SESSION_LIFETIME_MS
-  });
-}
-function clearOwnerSession(req, res) {
-  res.clearCookie(OWNER_SESSION_COOKIE, {
-    ...getSessionCookieOptions(req),
-    sameSite: "lax",
-    maxAge: -1
-  });
-}
+// server/_core/systemRouter.ts
+import { z } from "zod";
 
 // shared/const.ts
 var COOKIE_NAME = "app_session_id";
@@ -1413,9 +1277,6 @@ var decodeOAuthState = (state) => {
   }
   return { redirectUri: decoded };
 };
-
-// server/_core/systemRouter.ts
-import { z } from "zod";
 
 // server/_core/trpc.ts
 import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
@@ -1612,6 +1473,25 @@ function currentSessionToken(cookieHeader) {
   return parseCookie(cookieHeader ?? "")[COOKIE_NAME] ?? "";
 }
 var agentRouter = router({
+  chat: publicProcedure.input(z2.object({
+    model: z2.string().trim().min(1).max(128).optional(),
+    messages: z2.array(z2.object({
+      role: z2.enum(["user", "assistant"]),
+      content: z2.string().trim().min(1).max(16e3)
+    })).min(1).max(30)
+  })).mutation(async ({ input }) => {
+    const response = await chatWithOllama({
+      model: input.model,
+      messages: [
+        {
+          role: "system",
+          content: "You are SenotaAI, an autonomous software-agent assistant. Help the user plan, build, debug, and deploy software. Be clear about which actions need confirmation before execution."
+        },
+        ...input.messages
+      ]
+    });
+    return { content: response.content, thinking: response.thinking };
+  }),
   dashboard: protectedProcedure.query(async ({ ctx }) => {
     const [settings, tasks, memories, schedules] = await Promise.all([
       getOrCreateAgentSettings(ctx.user.id),
@@ -1621,7 +1501,7 @@ var agentRouter = router({
     ]);
     return { settings, tasks, memories, schedules };
   }),
-  connections: protectedProcedure.query(async () => ({
+  connections: publicProcedure.query(async () => ({
     ollamaConfigured: Boolean(process.env.OLLAMA_BASE_URL),
     githubConfigured: Boolean(process.env.GITHUB_TOKEN),
     vercelConfigured: Boolean(process.env.VERCEL_TOKEN),
@@ -1743,35 +1623,9 @@ var agentRouter = router({
 });
 
 // server/routers.ts
-import { z as z3 } from "zod";
-init_db();
-var passwordInput = z3.object({ password: z3.string().min(1), confirmPassword: z3.string().optional() });
 var appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    status: publicProcedure.query(async () => ({ configured: Boolean(await getOwnerAccess()) })),
-    setup: publicProcedure.input(passwordInput).mutation(async ({ ctx, input }) => {
-      if (input.password !== input.confirmPassword) throw new Error("Passwords do not match.");
-      await establishOwnerPassword(input.password);
-      return { configured: true };
-    }),
-    login: publicProcedure.input(z3.object({ password: z3.string().min(1) })).mutation(async ({ ctx, input }) => {
-      const user = await authenticateOwnerPassword(input.password);
-      if (!user) throw new Error("Incorrect password.");
-      await setOwnerSession(ctx.req, ctx.res, user);
-      return { success: true };
-    }),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      clearOwnerSession(ctx.req, ctx.res);
-      return {
-        success: true
-      };
-    })
-  }),
   agent: agentRouter
 });
 
@@ -1790,7 +1644,7 @@ init_db();
 init_env();
 import axios from "axios";
 import { parse as parseCookieHeader } from "cookie";
-import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
+import { SignJWT, jwtVerify } from "jose";
 var isNonEmptyString2 = (value) => typeof value === "string" && value.length > 0;
 var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
 var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
@@ -1914,12 +1768,12 @@ var SDKServer = class {
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
-    const secretKey2 = this.getSessionSecret();
-    return new SignJWT2({
+    const secretKey = this.getSessionSecret();
+    return new SignJWT({
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name
-    }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey2);
+    }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey);
   }
   async verifySession(cookieValue) {
     if (!cookieValue) {
@@ -1927,8 +1781,8 @@ var SDKServer = class {
       return null;
     }
     try {
-      const secretKey2 = this.getSessionSecret();
-      const { payload } = await jwtVerify2(cookieValue, secretKey2, {
+      const secretKey = this.getSessionSecret();
+      const { payload } = await jwtVerify(cookieValue, secretKey, {
         algorithms: ["HS256"]
       });
       const { openId, appId, name } = payload;
@@ -2037,8 +1891,7 @@ var sdk = new SDKServer();
 // server/_core/context.ts
 async function createContext(opts) {
   let user = null;
-  user = await getOwnerSessionUser(opts.req);
-  if (!user && opts.req.headers.authorization) {
+  if (opts.req.headers.authorization) {
     try {
       user = await sdk.authenticateRequest(opts.req);
     } catch {
@@ -2055,6 +1908,25 @@ async function createContext(opts) {
 // server/_core/oauth.ts
 init_db();
 import { parse as parseCookieHeader2 } from "cookie";
+
+// server/_core/cookies.ts
+function isSecureRequest(req) {
+  if (req.protocol === "https") return true;
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  if (!forwardedProto) return false;
+  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
+  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+}
+function getSessionCookieOptions(req) {
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "none",
+    secure: isSecureRequest(req)
+  };
+}
+
+// server/_core/oauth.ts
 function getQueryParam(req, key) {
   const value = req.query[key];
   return typeof value === "string" ? value : void 0;
@@ -2154,8 +2026,6 @@ function createApp() {
   app2.post("/api/agent/tasks/:taskId/run", async (req, res) => {
     let streamClosed = false;
     try {
-      const user = await getOwnerSessionUser(req);
-      if (!user) return res.status(401).json({ error: "owner-session-required" });
       const taskId = Number(req.params.taskId);
       if (!Number.isInteger(taskId) || taskId <= 0) return res.status(400).json({ error: "invalid-task-id" });
       res.status(200);
@@ -2172,7 +2042,7 @@ data: ${JSON.stringify({ taskId, timestamp: Date.now() })}
       });
       await runAutonomousTask({
         taskId,
-        userId: user.id,
+        userId: Number(process.env.SENOTA_DIRECT_USER_ID || 0),
         emit: (payload) => {
           if (!streamClosed) res.write(`event: agent
 data: ${JSON.stringify(payload)}
