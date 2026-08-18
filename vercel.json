@@ -2,11 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "express",
   "buildCommand": "pnpm build",
-  "functions": {
-    "server.js": {
-      "includeFiles": "dist/**"
-    }
-  },
   "rewrites": [
     { "source": "/:path((?!api(?:/|$)).*)", "destination": "/index.html" }
   ]

@@ -10,11 +10,7 @@ describe("Vercel deployment routing", () => {
 
     expect(config.framework).toBe("express");
     expect(config.outputDirectory).toBeUndefined();
-    expect(config.functions).toEqual({
-      "server.js": {
-        includeFiles: "dist/**",
-      },
-    });
+    expect(config.functions).toBeUndefined();
     expect(config.rewrites).toEqual([
       {
         source: "/:path((?!api(?:/|$)).*)",
@@ -25,12 +21,12 @@ describe("Vercel deployment routing", () => {
 
   it("uses the built Express application from a recognized root entry", async () => {
     const functionEntry = await readFile(
-      resolve(process.cwd(), "server.js"),
+      resolve(process.cwd(), "server", "vercel-entry.ts"),
       "utf8",
     );
 
     expect(functionEntry).toContain('import express from "express"');
-    expect(functionEntry).toContain('import { createApp } from "./dist/index.js"');
+    expect(functionEntry).toContain('import { createApp } from "./_core/index"');
     expect(functionEntry).toContain("export default createApp()");
   });
 });
