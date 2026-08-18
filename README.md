@@ -47,6 +47,12 @@ The dashboard stores only non-sensitive preferences, such as the repository name
 
 Install dependencies with `pnpm install`, then start the application with `pnpm dev`. The project uses React, Tailwind, Express, tRPC, Drizzle, and MySQL/TiDB. Run `pnpm check` for TypeScript validation and `pnpm test` for the Vitest suite.
 
+## Source-control workflow
+
+The application workspace is maintained at `/home/ubuntu/senota-ai` and its intended source repository is [`najierwilliams/SenotaAI`](https://github.com/najierwilliams/SenotaAI). The synchronization workflow is deliberately simple: validate the local project with `pnpm check` and `pnpm test`, create a managed project checkpoint, copy the validated source into a clean checkout of the private repository while preserving that checkout’s `.git` directory, then commit and push to `main`.
+
+Do not commit `.env` files, local logs, `node_modules`, or token values. The database migration files under `drizzle/`, the project documentation under `docs/`, and `todo.md` are source-controlled because they document schema history, engineering decisions, and the active delivery backlog.
+
 ## Scheduling
 
 Recurring tasks use six-field UTC cron syntax: `seconds minutes hours day-of-month month day-of-week`. The application must first be published so the scheduler can invoke the production callback at `/api/scheduled/agent-run`. The callback locates scheduled tasks only from the scheduler-issued identity, not from attacker-controlled request data.

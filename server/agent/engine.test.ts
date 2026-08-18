@@ -34,6 +34,7 @@ vi.mock("./connectors", () => ({ getAgentToolDefinitions: mocks.tools, executeCo
 vi.mock("../_core/notification", () => ({ notifyOwner: mocks.notify }));
 
 import { runAutonomousTask } from "./engine";
+import { decideApprovalAndQueue } from "./approvalWorkflow";
 
 const task = {
   id: 7,
@@ -94,5 +95,27 @@ describe("autonomous agent control loop", () => {
     expect(result.status).toBe("failed");
     expect(mocks.executeTool).toHaveBeenCalledTimes(12);
     expect(mocks.updateTask).toHaveBeenCalledWith(7, expect.objectContaining({ status: "failed" }));
+  });
+
+  it("continues an approved task through a resumed engine execution", async () => {
+    let currentStatus = "awaiting_approval";
+    const updateTask = vi.fn(async (_taskId: number, update: { status?: string }) => {
+      if (update.status) currentStatus = update.status;
+    });
+    await decideApprovalAndQueue({
+      approvalId: 11,
+      userId: 1,
+      approved: true,
+      resolveApproval: vi.fn().mockResolvedValue({ id: 11, taskId: 7 }),
+      updateTask,
+    });
+    mocks.getTask.mockImplementation(async () => ({ ...task, status: currentStatus }));
+    mocks.updateTask.mockResolvedValue(undefined);
+    mocks.stream.mockResolvedValue({ content: "The approved update is complete.", thinking: "", toolCalls: [] });
+
+    const result = await runAutonomousTask({ taskId: 7, userId: 1 });
+
+    expect(currentStatus).toBe("queued");
+    expect(result).toMatchObject({ status: "completed" });
   });
 });

@@ -14,6 +14,17 @@ export type StreamedAgentEvent = {
   };
 };
 
+export function parseAgentSseFrames(input: string): { events: StreamedAgentEvent[]; remainder: string } {
+  const frames = input.split("\n\n");
+  const remainder = frames.pop() ?? "";
+  const events = frames.flatMap((frame) => {
+    const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+    if (!data) return [];
+    try { return [JSON.parse(data) as StreamedAgentEvent]; } catch { return []; }
+  });
+  return { events, remainder };
+}
+
 export async function streamAgentTask(taskId: number, onEvent: (event: StreamedAgentEvent) => void) {
   const response = await fetch(`/api/agent/tasks/${taskId}/run`, {
     method: "POST",
@@ -31,16 +42,9 @@ export async function streamAgentTask(taskId: number, onEvent: (event: StreamedA
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() ?? "";
-    for (const frame of frames) {
-      const data = frame.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
-      if (!data) continue;
-      try {
-        onEvent(JSON.parse(data) as StreamedAgentEvent);
-      } catch {
-        // Ignore malformed keep-alive frames; the authoritative trace is persisted server-side.
-      }
-    }
+    const parsed = parseAgentSseFrames(buffer);
+    buffer = parsed.remainder;
+    parsed.events.forEach(onEvent);
   }
+  if (buffer.trim()) parseAgentSseFrames(`${buffer}\n\n`).events.forEach(onEvent);
 }

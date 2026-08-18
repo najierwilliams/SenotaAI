@@ -1,6 +1,6 @@
 # Project TODO
 
-- [ ] Align the active SenotaAI application workspace with `najierwilliams/SenotaAI` and document the source-control workflow.
+- [x] Align the active SenotaAI application workspace with `najierwilliams/SenotaAI` and document the source-control workflow.
 - [x] Define an explicit autonomy policy separating read-only work, reversible repository changes, approval-gated destructive operations, and deployment actions.
 - [x] Create a persistent data model for agent tasks, step traces, learned memories, schedules, approval requests, and notification events.
 - [x] Build the dark SenotaAI dashboard shell with sidebar navigation for Dashboard, New Task, Task History, Agent Memory, and Settings.
@@ -16,15 +16,20 @@
 - [x] Implement owner notifications for task completion, failure, and approval-required states.
 - [x] Implement recurring agent tasks with valid cron scheduling, run history, and bounded scheduled execution.
 - [x] Add server and interface tests for task state transitions, approval enforcement, agent loop bounds, and connector adapters.
-- [ ] Verify the dashboard at desktop and mobile breakpoints, save a final checkpoint, and synchronize the source code to `najierwilliams/SenotaAI`.
-- [ ] Configure the agent for on-demand high-performance inference rather than requiring a permanently online Ollama host.
-- [ ] Add `OLLAMA_*`, `GITHUB_TOKEN`, and `VERCEL_*` production credentials through protected server-side configuration before the first live run.
+- [x] Verify the dashboard at desktop and mobile breakpoints, save a final checkpoint, and synchronize the source code to `najierwilliams/SenotaAI`.
+- [x] Configure the agent for on-demand high-performance inference rather than requiring a permanently online Ollama host.
+- [ ] Add the selected provider’s `OLLAMA_BASE_URL` and, if required, `OLLAMA_API_KEY` through protected server-side configuration before the first live run; GitHub and Vercel credentials are validated.
 - [x] Stream incremental Ollama reasoning and response chunks through the task activity feed.
 - [x] Stream connector and Vercel deployment/build progress into the live activity feed where the external API supports it.
 - [x] Persist recurring-schedule run history linked to each schedule and expose it in the dashboard.
 - [x] Add automated coverage for agent state transitions, approval and resume behavior, loop limits, scheduled execution, connector adapters, and task interface states.
 - [x] Stream Vercel deployment events or build-log chunks where the deployment API provides them, and document connector capabilities limited to status polling.
 - [x] Add workflow-level tests for approval-to-resume, scheduled callback task creation, connector request behavior, and task trace interface states.
-- [ ] Add an approval-decision to resumed-task integration test.
-- [ ] Add mocked GitHub and Vercel adapter request-behavior tests.
-- [ ] Add task-detail, task-history, and schedule-run-history interface state tests.
+- [x] Add an approval-decision to resumed-task integration test.
+- [x] Add mocked GitHub and Vercel adapter request-behavior tests.
+- [x] Add task-detail, task-history, and schedule-run-history interface state tests.
+- [x] Document the GitHub synchronization workflow for `najierwilliams/SenotaAI` explicitly in the repository guide.
+- [x] Verify SenotaAI at a mobile viewport and record the results.
+- [x] Add an integration-style test that covers approval decision through task re-queueing and resumed agent execution.
+- [x] Add rendered Task Detail, Task History, and schedule-run-history screen-state tests.
+- [x] Add an approval decision to resumed autonomous engine execution integration test.
