@@ -18,7 +18,10 @@
 - [x] Add server and interface tests for task state transitions, approval enforcement, agent loop bounds, and connector adapters.
 - [x] Verify the dashboard at desktop and mobile breakpoints, save a final checkpoint, and synchronize the source code to `najierwilliams/SenotaAI`.
 - [x] Configure the agent for on-demand high-performance inference rather than requiring a permanently online Ollama host.
-- [ ] Add the selected provider’s `OLLAMA_BASE_URL` and, if required, `OLLAMA_API_KEY` through protected server-side configuration before the first live run; GitHub and Vercel credentials are validated.
+- [x] Add the selected provider’s `OLLAMA_BASE_URL` and, if required, `OLLAMA_API_KEY` through protected server-side configuration before the first live run; GitHub and Vercel credentials are validated.
+- [x] Select a provider and obtain an Ollama-compatible HTTPS endpoint and access key for live SenotaAI task execution.
+- [x] Evaluate the best free endpoint option for initial SenotaAI coding-agent tests and document its usage limits.
+- [x] Resolve or retry the sandbox-to-Ollama TLS validation timeout before confirming live model execution is active.
 - [x] Repair the invalid Git commit author email and repush the SenotaAI repository so Vercel can verify and deploy the commits.
 - [x] Verify the SenotaAI Vercel project and the repaired commit through an accessible Vercel API scope; the owner screenshot shows a Ready deployment, but the currently connected API scope exposes only `life-plus`.
 - [x] Stream incremental Ollama reasoning and response chunks through the task activity feed.
