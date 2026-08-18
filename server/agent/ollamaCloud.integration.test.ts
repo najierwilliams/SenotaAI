@@ -4,7 +4,9 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-describe("configured Ollama Cloud endpoint", () => {
+const describeLive = process.env.RUN_LIVE_CONNECTOR_TESTS === "1" ? describe : describe.skip;
+
+describeLive("configured Ollama Cloud endpoint", () => {
   it("authenticates and lists models through the native Ollama API without exposing the key", async () => {
     const baseUrl = process.env.OLLAMA_BASE_URL?.replace(/\/$/, "");
     const apiKey = process.env.OLLAMA_API_KEY;

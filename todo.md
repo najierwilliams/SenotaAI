@@ -38,3 +38,5 @@
 - [x] Add an integration-style test that covers approval decision through task re-queueing and resumed agent execution.
 - [x] Add rendered Task Detail, Task History, and schedule-run-history screen-state tests.
 - [x] Add an approval decision to resumed autonomous engine execution integration test.
+- [x] Verify that Vercel has deployed the latest SenotaAI activation commit and report the live website URL.
+- [ ] Fix the Vercel build or runtime routing issue that is serving bundled server source instead of the SenotaAI dashboard.
