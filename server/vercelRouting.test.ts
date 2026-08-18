@@ -8,6 +8,12 @@ describe("Vercel deployment routing", () => {
       await readFile(resolve(process.cwd(), "vercel.json"), "utf8"),
     ) as { rewrites?: Array<{ source?: string; destination?: string }> };
 
+    expect(config.framework).toBeNull();
+    expect(config.functions).toEqual({
+      "api/[...path].js": {
+        includeFiles: "dist/**",
+      },
+    });
     expect(config.rewrites).toEqual([
       {
         source: "/:path((?!api(?:/|$)).*)",
