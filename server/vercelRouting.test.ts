@@ -26,7 +26,7 @@ describe("Vercel deployment routing", () => {
     );
 
     expect(functionEntry).toContain('import express from "express"');
-    expect(functionEntry).toContain('import { createApp } from "./_core/index"');
+    expect(functionEntry).toContain('import { createApp } from "./app"');
     expect(functionEntry).toContain("export default createApp()");
   });
 });

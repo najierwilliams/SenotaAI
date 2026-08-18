@@ -1,19 +1,9 @@
-import "dotenv/config";
-import express from "express";
 import { createServer, type Server } from "http";
 import net from "net";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
-import { registerStorageProxy } from "./storageProxy";
-import { appRouter } from "../routers";
-import { createContext } from "./context";
+import { createApp } from "../app";
 import { serveStatic, setupVite } from "./vite";
-import { sdk } from "./sdk";
-import { runAutonomousTask } from "../agent/engine";
-import { createAgentTask, getAgentScheduleByCronTaskUid, getOrCreateAgentSettings, updateAgentSchedule } from "../agent/db";
-import { buildScheduledTaskInput } from "../agent/schedule";
-import { executeScheduledRun } from "../agent/scheduledExecution";
-import { getOwnerSessionUser } from "../ownerAuth";
+
+export { createApp };
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -27,107 +17,27 @@ function isPortAvailable(port: number): Promise<boolean> {
 
 async function findAvailablePort(startPort: number = 3000): Promise<number> {
   for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
+    if (await isPortAvailable(port)) return port;
   }
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
-export function createApp() {
-  const app = express();
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  registerStorageProxy(app);
-  registerOAuthRoutes(app);
-  app.post("/api/agent/tasks/:taskId/run", async (req, res) => {
-    let streamClosed = false;
-    try {
-      const user = await getOwnerSessionUser(req);
-      if (!user) return res.status(401).json({ error: "owner-session-required" });
-      const taskId = Number(req.params.taskId);
-      if (!Number.isInteger(taskId) || taskId <= 0) return res.status(400).json({ error: "invalid-task-id" });
-
-      res.status(200);
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      res.flushHeaders();
-      res.write(`event: connected\ndata: ${JSON.stringify({ taskId, timestamp: Date.now() })}\n\n`);
-      res.on("close", () => { streamClosed = true; });
-
-      await runAutonomousTask({
-        taskId,
-        userId: user.id,
-        emit: (payload) => {
-          if (!streamClosed) res.write(`event: agent\ndata: ${JSON.stringify(payload)}\n\n`);
-        },
-      });
-      if (!streamClosed) res.end();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (res.headersSent) {
-        if (!streamClosed) res.write(`event: error\ndata: ${JSON.stringify({ message, timestamp: Date.now() })}\n\n`);
-        if (!streamClosed) res.end();
-      } else {
-        res.status(500).json({ error: message });
-      }
-    }
-  });
-  app.post("/api/scheduled/agent-run", async (req, res) => {
-    try {
-      const user = await sdk.authenticateRequest(req);
-      if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
-      const schedule = await getAgentScheduleByCronTaskUid(user.taskUid);
-      if (!schedule || schedule.status !== "active") return res.json({ ok: true, skipped: "orphan-or-paused" });
-
-      const settings = await getOrCreateAgentSettings(schedule.userId);
-      const execution = await executeScheduledRun({
-        schedule,
-        repository: settings.githubRepository,
-        createTask: createAgentTask,
-        runTask: (taskId, userId) => runAutonomousTask({ taskId, userId }),
-        updateSchedule: updateAgentSchedule,
-      });
-      res.json({ ok: true, ...execution });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
-    }
-  });
-  // tRPC API
-  app.use(
-    "/api/trpc",
-    createExpressMiddleware({
-      router: appRouter,
-      createContext,
-    })
-  );
-  if (process.env.NODE_ENV === "production" && !process.env.VERCEL) serveStatic(app);
-  return app;
-}
-
 async function startServer() {
   const app = createApp();
-  const server = createServer(app);
+  const server: Server = createServer(app);
 
-  // Development mode layers Vite on top of the API routes. Vercel imports the
-  // exported Express app directly and serves the built public directory itself.
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
+  } else if (!process.env.VERCEL) {
+    serveStatic(app);
   }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
+  if (port !== preferredPort) console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  server.listen(port, () => console.log(`Server running on http://localhost:${port}/`));
 }
 
-if (!process.env.VERCEL && !process.env.VITEST && process.env.NODE_ENV !== "test") startServer().catch(console.error);
+if (!process.env.VERCEL && !process.env.VITEST && process.env.NODE_ENV !== "test") {
+  startServer().catch(console.error);
+}

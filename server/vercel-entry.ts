@@ -1,7 +1,7 @@
 import express from "express";
-import { createApp } from "./_core/index";
+import { createApp } from "./app";
 
 // The Vercel build emits this module to the recognized root `server.js` entry.
-// Keep the direct Express import so Vercel detects the generated application.
+// It imports no development-only Vite code and keeps Express detection explicit.
 void express;
 export default createApp();

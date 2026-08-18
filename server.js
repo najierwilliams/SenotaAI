@@ -8,6 +8,24 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// server/_core/env.ts
+var ENV;
+var init_env = __esm({
+  "server/_core/env.ts"() {
+    "use strict";
+    ENV = {
+      appId: process.env.VITE_APP_ID ?? "",
+      cookieSecret: process.env.JWT_SECRET ?? "",
+      databaseUrl: process.env.DATABASE_URL ?? "",
+      oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+      ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+      isProduction: process.env.NODE_ENV === "production",
+      forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
+      forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
+    };
+  }
+});
+
 // drizzle/schema.ts
 import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 var users, ownerAccess, taskStatuses, executionModes, stepStatuses, approvalStatuses, scheduleStatuses, notificationStatuses, agentTasks, agentSteps, agentMemories, agentApprovals, agentSchedules, agentSettings, agentNotifications;
@@ -188,24 +206,6 @@ var init_schema = __esm({
   }
 });
 
-// server/_core/env.ts
-var ENV;
-var init_env = __esm({
-  "server/_core/env.ts"() {
-    "use strict";
-    ENV = {
-      appId: process.env.VITE_APP_ID ?? "",
-      cookieSecret: process.env.JWT_SECRET ?? "",
-      databaseUrl: process.env.DATABASE_URL ?? "",
-      oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
-      ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-      isProduction: process.env.NODE_ENV === "production",
-      forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
-      forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
-    };
-  }
-});
-
 // server/db.ts
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
@@ -328,8 +328,8 @@ var init_db = __esm({
 });
 
 // server/agent/db.ts
-var db_exports2 = {};
-__export(db_exports2, {
+var db_exports = {};
+__export(db_exports, {
   createAgentApproval: () => createAgentApproval,
   createAgentMemory: () => createAgentMemory,
   createAgentSchedule: () => createAgentSchedule,
@@ -543,409 +543,11 @@ var init_db2 = __esm({
 });
 
 // server/vercel-entry.ts
-import express3 from "express";
-
-// server/_core/index.ts
-import "dotenv/config";
 import express2 from "express";
-import { createServer } from "http";
-import net from "net";
+
+// server/app.ts
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-
-// shared/const.ts
-var COOKIE_NAME = "app_session_id";
-var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
-var AXIOS_TIMEOUT_MS = 3e4;
-var UNAUTHED_ERR_MSG = "Please login (10001)";
-var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
-var OAUTH_STATE_COOKIE = "__Host-oauth_state";
-var decodeOAuthState = (state) => {
-  let decoded;
-  try {
-    decoded = atob(state);
-  } catch {
-    return { redirectUri: "" };
-  }
-  try {
-    const parsed = JSON.parse(decoded);
-    if (parsed && typeof parsed.redirectUri === "string") return parsed;
-  } catch {
-  }
-  return { redirectUri: decoded };
-};
-
-// server/_core/oauth.ts
-init_db();
-import { parse as parseCookieHeader2 } from "cookie";
-
-// server/_core/cookies.ts
-function isSecureRequest(req) {
-  if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
-}
-function getSessionCookieOptions(req) {
-  return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req)
-  };
-}
-
-// shared/_core/errors.ts
-var HttpError = class extends Error {
-  constructor(statusCode, message) {
-    super(message);
-    this.statusCode = statusCode;
-    this.name = "HttpError";
-  }
-};
-var ForbiddenError = (msg) => new HttpError(403, msg);
-
-// server/_core/sdk.ts
-init_db();
-init_env();
-import axios from "axios";
-import { parse as parseCookieHeader } from "cookie";
-import { SignJWT, jwtVerify } from "jose";
-var isNonEmptyString = (value) => typeof value === "string" && value.length > 0;
-var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
-var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
-var GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
-var OAuthService = class {
-  constructor(client) {
-    this.client = client;
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
-      console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
-      );
-    }
-  }
-  decodeState(state) {
-    return decodeOAuthState(state).redirectUri;
-  }
-  async getTokenByCode(code, state) {
-    const payload = {
-      clientId: ENV.appId,
-      grantType: "authorization_code",
-      code,
-      redirectUri: this.decodeState(state)
-    };
-    const { data } = await this.client.post(
-      EXCHANGE_TOKEN_PATH,
-      payload
-    );
-    return data;
-  }
-  async getUserInfoByToken(token) {
-    const { data } = await this.client.post(
-      GET_USER_INFO_PATH,
-      {
-        accessToken: token.accessToken
-      }
-    );
-    return data;
-  }
-};
-var createOAuthHttpClient = () => axios.create({
-  baseURL: ENV.oAuthServerUrl,
-  timeout: AXIOS_TIMEOUT_MS
-});
-var SDKServer = class {
-  client;
-  oauthService;
-  constructor(client = createOAuthHttpClient()) {
-    this.client = client;
-    this.oauthService = new OAuthService(this.client);
-  }
-  deriveLoginMethod(platforms, fallback) {
-    if (fallback && fallback.length > 0) return fallback;
-    if (!Array.isArray(platforms) || platforms.length === 0) return null;
-    const set = new Set(
-      platforms.filter((p) => typeof p === "string")
-    );
-    if (set.has("REGISTERED_PLATFORM_EMAIL")) return "email";
-    if (set.has("REGISTERED_PLATFORM_GOOGLE")) return "google";
-    if (set.has("REGISTERED_PLATFORM_APPLE")) return "apple";
-    if (set.has("REGISTERED_PLATFORM_MICROSOFT") || set.has("REGISTERED_PLATFORM_AZURE"))
-      return "microsoft";
-    if (set.has("REGISTERED_PLATFORM_GITHUB")) return "github";
-    const first = Array.from(set)[0];
-    return first ? first.toLowerCase() : null;
-  }
-  /**
-   * Exchange OAuth authorization code for access token
-   * @example
-   * const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-   */
-  async exchangeCodeForToken(code, state) {
-    return this.oauthService.getTokenByCode(code, state);
-  }
-  /**
-   * Get user information using access token
-   * @example
-   * const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-   */
-  async getUserInfo(accessToken) {
-    const data = await this.oauthService.getUserInfoByToken({
-      accessToken
-    });
-    const loginMethod = this.deriveLoginMethod(
-      data?.platforms,
-      data?.platform ?? data.platform ?? null
-    );
-    return {
-      ...data,
-      platform: loginMethod,
-      loginMethod
-    };
-  }
-  parseCookies(cookieHeader) {
-    if (!cookieHeader) {
-      return /* @__PURE__ */ new Map();
-    }
-    const parsed = parseCookieHeader(cookieHeader);
-    return new Map(Object.entries(parsed));
-  }
-  getSessionSecret() {
-    const secret = ENV.cookieSecret;
-    return new TextEncoder().encode(secret);
-  }
-  /**
-   * Create a session token for a Manus user openId
-   * @example
-   * const sessionToken = await sdk.createSessionToken(userInfo.openId);
-   */
-  async createSessionToken(openId, options = {}) {
-    return this.signSession(
-      {
-        openId,
-        appId: ENV.appId,
-        name: options.name || ""
-      },
-      options
-    );
-  }
-  async signSession(payload, options = {}) {
-    const issuedAt = Date.now();
-    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
-    const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
-    const secretKey2 = this.getSessionSecret();
-    return new SignJWT({
-      openId: payload.openId,
-      appId: payload.appId,
-      name: payload.name
-    }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey2);
-  }
-  async verifySession(cookieValue) {
-    if (!cookieValue) {
-      console.warn("[Auth] Missing session cookie");
-      return null;
-    }
-    try {
-      const secretKey2 = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey2, {
-        algorithms: ["HS256"]
-      });
-      const { openId, appId, name } = payload;
-      if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isNonEmptyString(name)) {
-        console.warn("[Auth] Session payload missing required fields");
-        return null;
-      }
-      return {
-        openId,
-        appId,
-        name
-      };
-    } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
-      return null;
-    }
-  }
-  async getUserInfoWithJwt(jwtToken) {
-    const payload = {
-      jwtToken,
-      projectId: ENV.appId
-    };
-    const { data } = await this.client.post(
-      GET_USER_INFO_WITH_JWT_PATH,
-      payload
-    );
-    const loginMethod = this.deriveLoginMethod(
-      data?.platforms,
-      data?.platform ?? data.platform ?? null
-    );
-    return {
-      ...data,
-      platform: loginMethod,
-      loginMethod
-    };
-  }
-  async authenticateRequest(req) {
-    const cookies = this.parseCookies(req.headers.cookie);
-    let sessionToken = cookies.get(COOKIE_NAME);
-    if (!sessionToken) {
-      const authHeader = req.headers.authorization;
-      if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
-        sessionToken = authHeader.slice(7);
-      }
-    }
-    const session = await this.verifySession(sessionToken);
-    if (!session) {
-      throw ForbiddenError("Invalid session cookie");
-    }
-    if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
-      const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
-      const taskUid = userInfo.taskUid ?? null;
-      if (!taskUid) {
-        throw ForbiddenError("Cron session missing task_uid");
-      }
-      return buildCronUser(userInfo);
-    }
-    const sessionUserId = session.openId;
-    const signedInAt = /* @__PURE__ */ new Date();
-    let user = await getUserByOpenId(sessionUserId);
-    if (!user) {
-      try {
-        const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
-        await upsertUser({
-          openId: userInfo.openId,
-          name: userInfo.name || null,
-          email: userInfo.email ?? null,
-          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-          lastSignedIn: signedInAt
-        });
-        user = await getUserByOpenId(userInfo.openId);
-      } catch (error) {
-        console.error("[Auth] Failed to sync user from OAuth:", error);
-        throw ForbiddenError("Failed to sync user info");
-      }
-    }
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
-    await upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt
-    });
-    return user;
-  }
-};
-var CRON_OPEN_ID_PREFIX = "cron_";
-function buildCronUser(userInfo) {
-  const now = /* @__PURE__ */ new Date();
-  return {
-    id: -1,
-    openId: userInfo.openId,
-    name: userInfo.name || "Manus Scheduled Task",
-    email: null,
-    loginMethod: null,
-    role: "user",
-    createdAt: now,
-    updatedAt: now,
-    lastSignedIn: now,
-    taskUid: userInfo.taskUid ?? void 0,
-    isCron: true
-  };
-}
-var sdk = new SDKServer();
-
-// server/_core/oauth.ts
-function getQueryParam(req, key) {
-  const value = req.query[key];
-  return typeof value === "string" ? value : void 0;
-}
-function registerOAuthRoutes(app) {
-  app.get("/api/oauth/callback", async (req, res) => {
-    const code = getQueryParam(req, "code");
-    const state = getQueryParam(req, "state");
-    if (!code || !state) {
-      res.status(400).json({ error: "code and state are required" });
-      return;
-    }
-    const { nonce } = decodeOAuthState(state);
-    const expectedNonce = parseCookieHeader2(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
-    if (!nonce || nonce !== expectedNonce) {
-      res.status(403).json({ error: "invalid oauth state" });
-      return;
-    }
-    res.clearCookie(OAUTH_STATE_COOKIE, { path: "/", secure: true, sameSite: "none" });
-    try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-      if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
-        return;
-      }
-      await upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-        lastSignedIn: /* @__PURE__ */ new Date()
-      });
-      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
-        name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS
-      });
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-      res.redirect(302, "/");
-    } catch (error) {
-      console.error("[OAuth] Callback failed", error);
-      res.status(500).json({ error: "OAuth callback failed" });
-    }
-  });
-}
-
-// server/_core/storageProxy.ts
-init_env();
-function registerStorageProxy(app) {
-  app.get("/manus-storage/*", async (req, res) => {
-    const key = req.params[0];
-    if (!key) {
-      res.status(400).send("Missing storage key");
-      return;
-    }
-    if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-      res.status(500).send("Storage proxy not configured");
-      return;
-    }
-    try {
-      const forgeUrl = new URL(
-        "v1/storage/presign/get",
-        ENV.forgeApiUrl.replace(/\/+$/, "") + "/"
-      );
-      forgeUrl.searchParams.set("path", key);
-      const forgeResp = await fetch(forgeUrl, {
-        headers: { Authorization: `Bearer ${ENV.forgeApiKey}` }
-      });
-      if (!forgeResp.ok) {
-        const body = await forgeResp.text().catch(() => "");
-        console.error(`[StorageProxy] forge error: ${forgeResp.status} ${body}`);
-        res.status(502).send("Storage backend error");
-        return;
-      }
-      const { url } = await forgeResp.json();
-      if (!url) {
-        res.status(502).send("Empty signed URL from backend");
-        return;
-      }
-      res.set("Cache-Control", "no-store");
-      res.redirect(307, url);
-    } catch (err) {
-      console.error("[StorageProxy] failed:", err);
-      res.status(502).send("Storage proxy error");
-    }
-  });
-}
-
-// server/_core/systemRouter.ts
-import { z } from "zod";
+import express from "express";
 
 // server/_core/notification.ts
 init_env();
@@ -953,7 +555,7 @@ import { TRPCError } from "@trpc/server";
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
 var trimValue = (value) => value.trim();
-var isNonEmptyString2 = (value) => typeof value === "string" && value.trim().length > 0;
+var isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
 var buildEndpointUrl = (baseUrl) => {
   const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   return new URL(
@@ -962,13 +564,13 @@ var buildEndpointUrl = (baseUrl) => {
   ).toString();
 };
 var validatePayload = (input) => {
-  if (!isNonEmptyString2(input.title)) {
+  if (!isNonEmptyString(input.title)) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Notification title is required."
     });
   }
-  if (!isNonEmptyString2(input.content)) {
+  if (!isNonEmptyString(input.content)) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Notification content is required."
@@ -1028,699 +630,6 @@ async function notifyOwner(payload) {
     console.warn("[Notification] Error calling notification service:", error);
     return false;
   }
-}
-
-// server/_core/trpc.ts
-import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
-import superjson from "superjson";
-var t = initTRPC.context().create({
-  transformer: superjson
-});
-var router = t.router;
-var publicProcedure = t.procedure;
-var requireUser = t.middleware(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
-  }
-  return next({
-    ctx: {
-      ...ctx,
-      user: ctx.user
-    }
-  });
-});
-var protectedProcedure = t.procedure.use(requireUser);
-var adminProcedure = t.procedure.use(
-  t.middleware(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user
-      }
-    });
-  })
-);
-
-// server/_core/systemRouter.ts
-var systemRouter = router({
-  health: publicProcedure.input(
-    z.object({
-      timestamp: z.number().min(0, "timestamp cannot be negative")
-    })
-  ).query(() => ({
-    ok: true
-  })),
-  notifyOwner: adminProcedure.input(
-    z.object({
-      title: z.string().min(1, "title is required"),
-      content: z.string().min(1, "content is required")
-    })
-  ).mutation(async ({ input }) => {
-    const delivered = await notifyOwner(input);
-    return {
-      success: delivered
-    };
-  })
-});
-
-// server/routers/agent.ts
-import { parse as parseCookie } from "cookie";
-import { z as z2 } from "zod";
-
-// server/_core/heartbeat.ts
-init_env();
-import { TRPCError as TRPCError3 } from "@trpc/server";
-var SERVICE = "webdevtoken.v1.WebDevService";
-var buildEndpoint = (rpc) => {
-  if (!ENV.forgeApiUrl) {
-    throw new TRPCError3({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Heartbeat service URL is not configured (BUILT_IN_FORGE_API_URL)."
-    });
-  }
-  if (!ENV.forgeApiKey) {
-    throw new TRPCError3({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Heartbeat service API key is not configured (BUILT_IN_FORGE_API_KEY)."
-    });
-  }
-  const baseUrl = ENV.forgeApiUrl;
-  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  return new URL(`${SERVICE}/${rpc}`, normalizedBase).toString();
-};
-var callForge = async (rpc, body, userSession) => {
-  const endpoint = buildEndpoint(rpc);
-  const headers = {
-    accept: "application/json",
-    authorization: `Bearer ${ENV.forgeApiKey}`,
-    "content-type": "application/json",
-    "connect-protocol-version": "1"
-  };
-  if (userSession) {
-    headers["x-manus-user-session"] = userSession;
-  }
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body)
-    });
-  } catch (error) {
-    throw new TRPCError3({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Heartbeat ${rpc} network error: ${String(error)}`
-    });
-  }
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw mapForgeError(response, detail, rpc);
-  }
-  return await response.json();
-};
-var mapForgeError = (response, detail, rpc) => {
-  const status = response.status;
-  let code = "INTERNAL_SERVER_ERROR";
-  if (status === 401) code = "UNAUTHORIZED";
-  else if (status === 403) code = "FORBIDDEN";
-  else if (status === 404) code = "NOT_FOUND";
-  else if (status === 400 || status === 422) code = "BAD_REQUEST";
-  else if (status === 409) code = "CONFLICT";
-  else if (status === 429) code = "TOO_MANY_REQUESTS";
-  return new TRPCError3({
-    code,
-    message: `Heartbeat ${rpc} failed (${status})${detail ? `: ${detail}` : ""}`
-  });
-};
-var stringifyPayload = (payload) => {
-  if (payload === void 0 || payload === null) return "{}";
-  if (typeof payload === "string") return payload;
-  return JSON.stringify(payload);
-};
-var validateCallbackPath = (path3) => {
-  if (!path3 || !path3.startsWith("/api/scheduled/")) {
-    throw new TRPCError3({
-      code: "BAD_REQUEST",
-      message: "callback path must start with /api/scheduled/"
-    });
-  }
-};
-async function createHeartbeatJob(job, userSession) {
-  validateCallbackPath(job.path);
-  return callForge(
-    "CreateHeartbeatJob",
-    {
-      name: job.name,
-      cronExpression: job.cron,
-      callbackPath: job.path,
-      callbackMethod: job.method ?? "POST",
-      callbackPayload: stringifyPayload(job.payload),
-      description: job.description ?? ""
-    },
-    userSession
-  );
-}
-async function updateHeartbeatJob(taskUid, patch, userSession) {
-  if (patch.path !== void 0) validateCallbackPath(patch.path);
-  const body = { taskUid };
-  if (patch.cron !== void 0) body.cronExpression = patch.cron;
-  if (patch.path !== void 0) body.callbackPath = patch.path;
-  if (patch.method !== void 0) body.callbackMethod = patch.method;
-  if (patch.payload !== void 0) {
-    body.callbackPayload = stringifyPayload(patch.payload);
-  }
-  if (patch.description !== void 0) body.description = patch.description;
-  if (patch.enable !== void 0) body.enable = patch.enable;
-  return callForge(
-    "UpdateHeartbeatJob",
-    body,
-    userSession
-  );
-}
-
-// server/routers/agent.ts
-init_db2();
-
-// server/agent/schedule.ts
-function isValidSixFieldCron(value) {
-  const fields = value.trim().split(/\s+/).filter(Boolean);
-  return fields.length === 6 && fields.every((field) => /^[\d*/?,\-]+$/.test(field));
-}
-function buildScheduledTaskInput(input) {
-  return { ...input };
-}
-
-// server/agent/state.ts
-var MAX_AGENT_TOOL_TURNS = 12;
-var MAX_AGENT_RETRIES = 2;
-var TERMINAL_STATUSES = /* @__PURE__ */ new Set(["completed", "cancelled", "failed"]);
-function isTerminalTaskStatus(status) {
-  return TERMINAL_STATUSES.has(status);
-}
-function agentTurnAvailable(turn) {
-  return turn >= 0 && turn < MAX_AGENT_TOOL_TURNS;
-}
-function boundedRetryCount(configuredRetries) {
-  return Math.max(0, Math.min(configuredRetries, MAX_AGENT_RETRIES));
-}
-function statusAfterApprovalDecision(approved) {
-  return approved ? "queued" : "paused";
-}
-
-// server/agent/approvalWorkflow.ts
-async function decideApprovalAndQueue(input) {
-  const approval = await input.resolveApproval({ approvalId: input.approvalId, userId: input.userId, approved: input.approved });
-  if (!approval) return void 0;
-  const nextStatus = statusAfterApprovalDecision(input.approved);
-  await input.updateTask(approval.taskId, {
-    status: nextStatus,
-    currentPhase: input.approved ? "Approved action is ready to continue" : "Approval declined; task paused"
-  });
-  return approval;
-}
-
-// server/routers/agent.ts
-var executionModeSchema = z2.enum(["confirm", "auto"]);
-var cronSchema = z2.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
-function currentSessionToken(cookieHeader) {
-  return parseCookie(cookieHeader ?? "")[COOKIE_NAME] ?? "";
-}
-var agentRouter = router({
-  dashboard: protectedProcedure.query(async ({ ctx }) => {
-    const [settings, tasks, memories, schedules] = await Promise.all([
-      getOrCreateAgentSettings(ctx.user.id),
-      listAgentTasks(ctx.user.id, 12),
-      listAgentMemories(ctx.user.id),
-      listAgentSchedules(ctx.user.id)
-    ]);
-    return { settings, tasks, memories, schedules };
-  }),
-  connections: protectedProcedure.query(async () => ({
-    ollamaConfigured: Boolean(process.env.OLLAMA_BASE_URL),
-    githubConfigured: Boolean(process.env.GITHUB_TOKEN),
-    vercelConfigured: Boolean(process.env.VERCEL_TOKEN),
-    schedulerReady: process.env.NODE_ENV === "production"
-  })),
-  settings: router({
-    get: protectedProcedure.query(({ ctx }) => getOrCreateAgentSettings(ctx.user.id)),
-    update: protectedProcedure.input(z2.object({
-      defaultModel: z2.string().trim().min(1).max(128).optional(),
-      defaultExecutionMode: executionModeSchema.optional(),
-      defaultMaxRetries: z2.number().int().min(0).max(2).optional(),
-      githubRepository: z2.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "Use owner/repository format.").optional(),
-      vercelProject: z2.string().trim().min(1).max(128).nullable().optional(),
-      notificationsEnabled: z2.boolean().optional()
-    })).mutation(({ ctx, input }) => updateAgentSettings(ctx.user.id, input))
-  }),
-  tasks: router({
-    list: protectedProcedure.query(({ ctx }) => listAgentTasks(ctx.user.id)),
-    get: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).query(({ ctx, input }) => getTaskWithTrace(input.taskId, ctx.user.id)),
-    create: protectedProcedure.input(z2.object({
-      goal: z2.string().trim().min(12, "Describe a concrete outcome in at least 12 characters.").max(12e3),
-      model: z2.string().trim().min(1).max(128).optional(),
-      executionMode: executionModeSchema.optional()
-    })).mutation(async ({ ctx, input }) => {
-      const settings = await getOrCreateAgentSettings(ctx.user.id);
-      return createAgentTask({
-        userId: ctx.user.id,
-        goal: input.goal,
-        model: input.model || settings.defaultModel,
-        executionMode: input.executionMode || settings.defaultExecutionMode,
-        repository: settings.githubRepository
-      });
-    }),
-    pause: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const task = await getAgentTaskForUser(input.taskId, ctx.user.id);
-      if (!task) throw new Error("Task not found.");
-      await updateAgentTask(task.id, { pauseRequested: true });
-      return { ok: true };
-    }),
-    resume: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const task = await getAgentTaskForUser(input.taskId, ctx.user.id);
-      if (!task) throw new Error("Task not found.");
-      await updateAgentTask(task.id, { status: "queued", pauseRequested: false, cancelRequested: false, currentPhase: "Queued for continuation" });
-      return { ok: true };
-    }),
-    cancel: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const task = await getAgentTaskForUser(input.taskId, ctx.user.id);
-      if (!task) throw new Error("Task not found.");
-      await updateAgentTask(task.id, { cancelRequested: true });
-      return { ok: true };
-    })
-  }),
-  approvals: router({
-    decide: protectedProcedure.input(z2.object({ approvalId: z2.number().int().positive(), approved: z2.boolean() })).mutation(async ({ ctx, input }) => {
-      const approval = await decideApprovalAndQueue({
-        approvalId: input.approvalId,
-        userId: ctx.user.id,
-        approved: input.approved,
-        resolveApproval: resolveAgentApproval,
-        updateTask: updateAgentTask
-      });
-      if (!approval) throw new Error("Approval was not found or was already resolved.");
-      return approval;
-    })
-  }),
-  memories: router({
-    list: protectedProcedure.query(({ ctx }) => listAgentMemories(ctx.user.id)),
-    remove: protectedProcedure.input(z2.object({ memoryId: z2.number().int().positive() })).mutation(({ ctx, input }) => deactivateAgentMemory(input.memoryId, ctx.user.id))
-  }),
-  schedules: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
-      const schedules = await listAgentSchedules(ctx.user.id);
-      const { listScheduleRuns: listScheduleRuns2 } = await Promise.resolve().then(() => (init_db2(), db_exports2));
-      return Promise.all(schedules.map(async (schedule) => ({
-        ...schedule,
-        runs: await listScheduleRuns2(schedule.id, ctx.user.id)
-      })));
-    }),
-    create: protectedProcedure.input(z2.object({
-      goal: z2.string().trim().min(12).max(12e3),
-      cronExpression: cronSchema,
-      model: z2.string().trim().min(1).max(128).optional(),
-      executionMode: executionModeSchema.optional()
-    })).mutation(async ({ ctx, input }) => {
-      if (process.env.NODE_ENV !== "production") {
-        throw new Error("Publish SenotaAI before creating scheduled tasks so the callback has a reachable production URL.");
-      }
-      const settings = await getOrCreateAgentSettings(ctx.user.id);
-      const temporaryName = `senota-${ctx.user.id}-${Date.now()}`;
-      const sessionToken = currentSessionToken(ctx.req.headers.cookie);
-      const heartbeat = await createHeartbeatJob({
-        name: temporaryName,
-        cron: input.cronExpression,
-        path: "/api/scheduled/agent-run",
-        payload: {},
-        description: "Recurring SenotaAI autonomous coding task"
-      }, sessionToken);
-      return createAgentSchedule({
-        userId: ctx.user.id,
-        goal: input.goal,
-        cronExpression: input.cronExpression,
-        model: input.model || settings.defaultModel,
-        executionMode: input.executionMode || settings.defaultExecutionMode,
-        scheduleCronTaskUid: heartbeat.taskUid,
-        nextRunAt: heartbeat.nextExecutionAt ? Date.parse(heartbeat.nextExecutionAt) : null
-      });
-    }),
-    setPaused: protectedProcedure.input(z2.object({ scheduleId: z2.number().int().positive(), paused: z2.boolean() })).mutation(async ({ ctx, input }) => {
-      const schedules = await listAgentSchedules(ctx.user.id);
-      const schedule = schedules.find((item) => item.id === input.scheduleId);
-      if (!schedule?.scheduleCronTaskUid) throw new Error("Schedule was not found or has no managed cron job.");
-      const heartbeat = await updateHeartbeatJob(schedule.scheduleCronTaskUid, { enable: !input.paused }, currentSessionToken(ctx.req.headers.cookie));
-      return updateAgentSchedule(input.scheduleId, ctx.user.id, {
-        status: input.paused ? "paused" : "active",
-        nextRunAt: heartbeat.nextExecutionAt ? Date.parse(heartbeat.nextExecutionAt) : null
-      });
-    })
-  })
-});
-
-// server/routers.ts
-import { z as z3 } from "zod";
-
-// server/ownerAuth.ts
-init_db();
-import { scrypt as scryptCallback, randomBytes, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
-import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
-import { parse } from "cookie";
-init_env();
-var scrypt = promisify(scryptCallback);
-var OWNER_SESSION_COOKIE = "senota_owner_session";
-var OWNER_SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1e3;
-function secretKey() {
-  if (!ENV.cookieSecret) throw new Error("Server session secret is not configured.");
-  return new TextEncoder().encode(ENV.cookieSecret);
-}
-function passwordValidationMessage(password) {
-  if (password.length < 12) return "Use at least 12 characters.";
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use a mix of letters and numbers.";
-  return null;
-}
-async function hashPassword(password) {
-  const salt = randomBytes(16);
-  const derived = await scrypt(password, salt, 64);
-  return `scrypt$${salt.toString("base64url")}$${derived.toString("base64url")}`;
-}
-async function verifyPassword(password, passwordHash) {
-  const [algorithm, encodedSalt, encodedHash] = passwordHash.split("$");
-  if (algorithm !== "scrypt" || !encodedSalt || !encodedHash) return false;
-  const salt = Buffer.from(encodedSalt, "base64url");
-  const expected = Buffer.from(encodedHash, "base64url");
-  const actual = await scrypt(password, salt, expected.length);
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-async function createOwnerSessionToken(payload) {
-  return new SignJWT2(payload).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("7d").sign(secretKey());
-}
-async function readOwnerSessionToken(token) {
-  const verified = await jwtVerify2(token, secretKey());
-  const userId = Number(verified.payload.userId);
-  const sessionVersion = Number(verified.payload.sessionVersion);
-  if (!Number.isInteger(userId) || !Number.isInteger(sessionVersion)) return null;
-  return { userId, sessionVersion };
-}
-async function getOwnerSessionUser(req) {
-  const token = parse(req.headers.cookie ?? "")[OWNER_SESSION_COOKIE];
-  if (!token) return null;
-  try {
-    const session = await readOwnerSessionToken(token);
-    if (!session) return null;
-    const access = await getOwnerAccess();
-    if (!access || access.userId !== session.userId || access.sessionVersion !== session.sessionVersion) return null;
-    return await getPasswordOwner();
-  } catch {
-    return null;
-  }
-}
-async function establishOwnerPassword(password) {
-  const message = passwordValidationMessage(password);
-  if (message) throw new Error(message);
-  return setupPasswordOwner(await hashPassword(password));
-}
-async function authenticateOwnerPassword(password) {
-  const access = await getOwnerAccess();
-  if (!access || !await verifyPassword(password, access.passwordHash)) return null;
-  return getPasswordOwner();
-}
-async function setOwnerSession(req, res, user) {
-  const access = await getOwnerAccess();
-  if (!access || access.userId !== user.id) throw new Error("Owner access is not configured.");
-  const token = await createOwnerSessionToken({ userId: user.id, sessionVersion: access.sessionVersion });
-  res.cookie(OWNER_SESSION_COOKIE, token, {
-    ...getSessionCookieOptions(req),
-    sameSite: "lax",
-    maxAge: OWNER_SESSION_LIFETIME_MS
-  });
-}
-function clearOwnerSession(req, res) {
-  res.clearCookie(OWNER_SESSION_COOKIE, {
-    ...getSessionCookieOptions(req),
-    sameSite: "lax",
-    maxAge: -1
-  });
-}
-
-// server/routers.ts
-init_db();
-var passwordInput = z3.object({ password: z3.string().min(1), confirmPassword: z3.string().optional() });
-var appRouter = router({
-  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
-  system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    status: publicProcedure.query(async () => ({ configured: Boolean(await getOwnerAccess()) })),
-    setup: publicProcedure.input(passwordInput).mutation(async ({ ctx, input }) => {
-      if (input.password !== input.confirmPassword) throw new Error("Passwords do not match.");
-      await establishOwnerPassword(input.password);
-      return { configured: true };
-    }),
-    login: publicProcedure.input(z3.object({ password: z3.string().min(1) })).mutation(async ({ ctx, input }) => {
-      const user = await authenticateOwnerPassword(input.password);
-      if (!user) throw new Error("Incorrect password.");
-      await setOwnerSession(ctx.req, ctx.res, user);
-      return { success: true };
-    }),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      clearOwnerSession(ctx.req, ctx.res);
-      return {
-        success: true
-      };
-    })
-  }),
-  agent: agentRouter
-});
-
-// server/_core/context.ts
-async function createContext(opts) {
-  let user = null;
-  user = await getOwnerSessionUser(opts.req);
-  if (!user && opts.req.headers.authorization) {
-    try {
-      user = await sdk.authenticateRequest(opts.req);
-    } catch {
-      user = null;
-    }
-  }
-  return {
-    req: opts.req,
-    res: opts.res,
-    user
-  };
-}
-
-// server/_core/vite.ts
-import express from "express";
-import fs2 from "fs";
-import { nanoid } from "nanoid";
-import path2 from "path";
-import { createServer as createViteServer } from "vite";
-
-// vite.config.ts
-import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
-import fs from "node:fs";
-import path from "node:path";
-import { defineConfig } from "vite";
-import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
-var PROJECT_ROOT = import.meta.dirname;
-var LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
-var MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024;
-var TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6);
-function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
-}
-function trimLogFile(logPath, maxSize) {
-  try {
-    if (!fs.existsSync(logPath) || fs.statSync(logPath).size <= maxSize) {
-      return;
-    }
-    const lines = fs.readFileSync(logPath, "utf-8").split("\n");
-    const keptLines = [];
-    let keptBytes = 0;
-    const targetSize = TRIM_TARGET_BYTES;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const lineBytes = Buffer.byteLength(`${lines[i]}
-`, "utf-8");
-      if (keptBytes + lineBytes > targetSize) break;
-      keptLines.unshift(lines[i]);
-      keptBytes += lineBytes;
-    }
-    fs.writeFileSync(logPath, keptLines.join("\n"), "utf-8");
-  } catch {
-  }
-}
-function writeToLogFile(source, entries) {
-  if (entries.length === 0) return;
-  ensureLogDir();
-  const logPath = path.join(LOG_DIR, `${source}.log`);
-  const lines = entries.map((entry) => {
-    const ts = (/* @__PURE__ */ new Date()).toISOString();
-    return `[${ts}] ${JSON.stringify(entry)}`;
-  });
-  fs.appendFileSync(logPath, `${lines.join("\n")}
-`, "utf-8");
-  trimLogFile(logPath, MAX_LOG_SIZE_BYTES);
-}
-function vitePluginManusDebugCollector() {
-  return {
-    name: "manus-debug-collector",
-    transformIndexHtml(html) {
-      if (process.env.NODE_ENV === "production") {
-        return html;
-      }
-      return {
-        html,
-        tags: [
-          {
-            tag: "script",
-            attrs: {
-              src: "/__manus__/debug-collector.js",
-              defer: true
-            },
-            injectTo: "head"
-          }
-        ]
-      };
-    },
-    configureServer(server) {
-      server.middlewares.use("/__manus__/logs", (req, res, next) => {
-        if (req.method !== "POST") {
-          return next();
-        }
-        const handlePayload = (payload) => {
-          if (payload.consoleLogs?.length > 0) {
-            writeToLogFile("browserConsole", payload.consoleLogs);
-          }
-          if (payload.networkRequests?.length > 0) {
-            writeToLogFile("networkRequests", payload.networkRequests);
-          }
-          if (payload.sessionEvents?.length > 0) {
-            writeToLogFile("sessionReplay", payload.sessionEvents);
-          }
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true }));
-        };
-        const reqBody = req.body;
-        if (reqBody && typeof reqBody === "object") {
-          try {
-            handlePayload(reqBody);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-          return;
-        }
-        let body = "";
-        req.on("data", (chunk) => {
-          body += chunk.toString();
-        });
-        req.on("end", () => {
-          try {
-            const payload = JSON.parse(body);
-            handlePayload(payload);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-        });
-      });
-    }
-  };
-}
-var plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
-var vite_config_default = defineConfig({
-  plugins,
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets")
-    }
-  },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
-  build: {
-    outDir: path.resolve(import.meta.dirname, process.env.VERCEL ? "public" : "dist/public"),
-    emptyOutDir: true
-  },
-  server: {
-    host: true,
-    allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      ".manus-asia.computer",
-      ".manuscomputer.ai",
-      ".manusvm.computer",
-      "localhost",
-      "127.0.0.1"
-    ],
-    fs: {
-      strict: true,
-      deny: ["**/.*"]
-    }
-  }
-});
-
-// server/_core/vite.ts
-async function setupVite(app, server) {
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true
-  };
-  const vite = await createViteServer({
-    ...vite_config_default,
-    configFile: false,
-    server: serverOptions,
-    appType: "custom"
-  });
-  app.use(vite.middlewares);
-  app.use("*", async (req, res, next) => {
-    const url = req.originalUrl;
-    try {
-      const clientTemplate = path2.resolve(
-        import.meta.dirname,
-        "../..",
-        "client",
-        "index.html"
-      );
-      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`
-      );
-      const page = await vite.transformIndexHtml(url, template);
-      res.status(200).set({ "Content-Type": "text/html" }).end(page);
-    } catch (e) {
-      vite.ssrFixStacktrace(e);
-      next(e);
-    }
-  });
-}
-function serveStatic(app) {
-  const distPath = process.env.VERCEL ? path2.resolve(process.cwd(), "public") : process.env.NODE_ENV === "development" ? path2.resolve(import.meta.dirname, "../..", "dist", "public") : path2.resolve(import.meta.dirname, "public");
-  if (!fs2.existsSync(distPath)) {
-    console.error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`
-    );
-  }
-  app.use(express.static(distPath));
-  app.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
-  });
 }
 
 // server/agent/connectors.ts
@@ -1843,14 +752,14 @@ function splitRepository(repository) {
   if (!owner || !repo || repository.split("/").length !== 2) throw new Error("Repository must use the owner/name format.");
   return { owner, repo };
 }
-function validateRepositoryPath(path3) {
-  if (!path3 || path3.startsWith("/") || path3.includes("..") || path3.includes("\\")) {
+function validateRepositoryPath(path) {
+  if (!path || path.startsWith("/") || path.includes("..") || path.includes("\\")) {
     throw new Error("Repository file paths must be relative and cannot include traversal segments.");
   }
 }
-async function githubRequest(path3, init = {}) {
+async function githubRequest(path, init = {}) {
   const { token } = getGitHubConfig();
-  const response = await fetch(`https://api.github.com${path3}`, {
+  const response = await fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -1869,10 +778,10 @@ async function getDefaultBranch(repository) {
   const data = await githubRequest(`/repos/${owner}/${repo}`);
   return data.default_branch;
 }
-async function getFileMetadata(repository, path3, ref) {
-  validateRepositoryPath(path3);
+async function getFileMetadata(repository, path, ref) {
+  validateRepositoryPath(path);
   const { owner, repo } = splitRepository(repository);
-  return githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path3)}?ref=${encodeURIComponent(ref)}`);
+  return githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`);
 }
 async function ensureWorkBranch(ctx) {
   const { owner, repo } = splitRepository(ctx.repository);
@@ -1898,24 +807,24 @@ async function listRepositoryFiles(ctx) {
   return tree.tree.filter((entry) => entry.type === "blob").slice(0, 500).map((entry) => ({ path: entry.path, size: entry.size ?? 0 }));
 }
 async function readRepositoryFile(ctx, args) {
-  const path3 = String(args.path || "");
-  const metadata = await getFileMetadata(ctx.repository, path3, ctx.workBranch);
+  const path = String(args.path || "");
+  const metadata = await getFileMetadata(ctx.repository, path, ctx.workBranch);
   if (metadata.encoding !== "base64" || !metadata.content) throw new Error("Only base64-encoded text files can be read.");
   return { path: metadata.path, sha: metadata.sha, content: Buffer2.from(metadata.content.replace(/\n/g, ""), "base64").toString("utf8") };
 }
 async function writeRepositoryFile(ctx, args) {
-  const path3 = String(args.path || "");
+  const path = String(args.path || "");
   const content = String(args.content || "");
   const message = String(args.message || "Update source file");
-  validateRepositoryPath(path3);
+  validateRepositoryPath(path);
   const { owner, repo } = splitRepository(ctx.repository);
   let existingSha;
   try {
-    existingSha = (await getFileMetadata(ctx.repository, path3, ctx.workBranch)).sha;
+    existingSha = (await getFileMetadata(ctx.repository, path, ctx.workBranch)).sha;
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes("Not Found")) throw error;
   }
-  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path3)}`, {
+  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1925,19 +834,19 @@ async function writeRepositoryFile(ctx, args) {
       ...existingSha ? { sha: existingSha } : {}
     })
   });
-  return { path: result.content?.path || path3, commitSha: result.commit?.sha || null };
+  return { path: result.content?.path || path, commitSha: result.commit?.sha || null };
 }
 async function deleteRepositoryFile(ctx, args) {
-  const path3 = String(args.path || "");
+  const path = String(args.path || "");
   const message = String(args.message || "Remove obsolete source file");
-  const existing = await getFileMetadata(ctx.repository, path3, ctx.workBranch);
+  const existing = await getFileMetadata(ctx.repository, path, ctx.workBranch);
   const { owner, repo } = splitRepository(ctx.repository);
-  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path3)}`, {
+  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, sha: existing.sha, branch: ctx.workBranch })
   });
-  return { path: path3, commitSha: result.commit?.sha || null };
+  return { path, commitSha: result.commit?.sha || null };
 }
 async function openPullRequest(ctx, args) {
   const { owner, repo } = splitRepository(ctx.repository);
@@ -1951,9 +860,9 @@ async function openPullRequest(ctx, args) {
   });
   return { number: result.number, url: result.html_url, state: result.state };
 }
-async function vercelRequest(path3, init = {}) {
+async function vercelRequest(path, init = {}) {
   const config = getVercelConfig();
-  const response = await fetch(`https://api.vercel.com${path3}${path3.includes("?") ? "&" : "?"}${config.teamId ? `teamId=${encodeURIComponent(config.teamId)}` : ""}`, {
+  const response = await fetch(`https://api.vercel.com${path}${path.includes("?") ? "&" : "?"}${config.teamId ? `teamId=${encodeURIComponent(config.teamId)}` : ""}`, {
     ...init,
     headers: { Authorization: `Bearer ${config.token}`, ...init.headers ?? {} },
     signal: AbortSignal.timeout(6e4)
@@ -2141,6 +1050,23 @@ function approvalTitleFor(actionName) {
     redeploy_production: "Redeploy production"
   };
   return labels[actionName] ?? "Execute a sensitive agent action";
+}
+
+// server/agent/state.ts
+var MAX_AGENT_TOOL_TURNS = 12;
+var MAX_AGENT_RETRIES = 2;
+var TERMINAL_STATUSES = /* @__PURE__ */ new Set(["completed", "cancelled", "failed"]);
+function isTerminalTaskStatus(status) {
+  return TERMINAL_STATUSES.has(status);
+}
+function agentTurnAvailable(turn) {
+  return turn >= 0 && turn < MAX_AGENT_TOOL_TURNS;
+}
+function boundedRetryCount(configuredRetries) {
+  return Math.max(0, Math.min(configuredRetries, MAX_AGENT_RETRIES));
+}
+function statusAfterApprovalDecision(approved) {
+  return approved ? "queued" : "paused";
 }
 
 // server/agent/engine.ts
@@ -2333,8 +1259,17 @@ The agent will execute this exact tool request only after approval.`;
   }
 }
 
-// server/_core/index.ts
+// server/app.ts
 init_db2();
+
+// server/agent/schedule.ts
+function isValidSixFieldCron(value) {
+  const fields = value.trim().split(/\s+/).filter(Boolean);
+  return fields.length === 6 && fields.every((field) => /^[\d*/?,\-]+$/.test(field));
+}
+function buildScheduledTaskInput(input) {
+  return { ...input };
+}
 
 // server/agent/scheduledExecution.ts
 async function executeScheduledRun(input) {
@@ -2354,28 +1289,865 @@ async function executeScheduledRun(input) {
   return { taskId: task.id, result };
 }
 
-// server/_core/index.ts
-function isPortAvailable(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
+// server/ownerAuth.ts
+init_db();
+import { scrypt as scryptCallback, randomBytes, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
+import { SignJWT, jwtVerify } from "jose";
+import { parse } from "cookie";
+
+// server/_core/cookies.ts
+function isSecureRequest(req) {
+  if (req.protocol === "https") return true;
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  if (!forwardedProto) return false;
+  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
+  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+}
+function getSessionCookieOptions(req) {
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "none",
+    secure: isSecureRequest(req)
+  };
+}
+
+// server/ownerAuth.ts
+init_env();
+var scrypt = promisify(scryptCallback);
+var OWNER_SESSION_COOKIE = "senota_owner_session";
+var OWNER_SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1e3;
+function secretKey() {
+  if (!ENV.cookieSecret) throw new Error("Server session secret is not configured.");
+  return new TextEncoder().encode(ENV.cookieSecret);
+}
+function passwordValidationMessage(password) {
+  if (password.length < 12) return "Use at least 12 characters.";
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) return "Use a mix of letters and numbers.";
+  return null;
+}
+async function hashPassword(password) {
+  const salt = randomBytes(16);
+  const derived = await scrypt(password, salt, 64);
+  return `scrypt$${salt.toString("base64url")}$${derived.toString("base64url")}`;
+}
+async function verifyPassword(password, passwordHash) {
+  const [algorithm, encodedSalt, encodedHash] = passwordHash.split("$");
+  if (algorithm !== "scrypt" || !encodedSalt || !encodedHash) return false;
+  const salt = Buffer.from(encodedSalt, "base64url");
+  const expected = Buffer.from(encodedHash, "base64url");
+  const actual = await scrypt(password, salt, expected.length);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+async function createOwnerSessionToken(payload) {
+  return new SignJWT(payload).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("7d").sign(secretKey());
+}
+async function readOwnerSessionToken(token) {
+  const verified = await jwtVerify(token, secretKey());
+  const userId = Number(verified.payload.userId);
+  const sessionVersion = Number(verified.payload.sessionVersion);
+  if (!Number.isInteger(userId) || !Number.isInteger(sessionVersion)) return null;
+  return { userId, sessionVersion };
+}
+async function getOwnerSessionUser(req) {
+  const token = parse(req.headers.cookie ?? "")[OWNER_SESSION_COOKIE];
+  if (!token) return null;
+  try {
+    const session = await readOwnerSessionToken(token);
+    if (!session) return null;
+    const access = await getOwnerAccess();
+    if (!access || access.userId !== session.userId || access.sessionVersion !== session.sessionVersion) return null;
+    return await getPasswordOwner();
+  } catch {
+    return null;
+  }
+}
+async function establishOwnerPassword(password) {
+  const message = passwordValidationMessage(password);
+  if (message) throw new Error(message);
+  return setupPasswordOwner(await hashPassword(password));
+}
+async function authenticateOwnerPassword(password) {
+  const access = await getOwnerAccess();
+  if (!access || !await verifyPassword(password, access.passwordHash)) return null;
+  return getPasswordOwner();
+}
+async function setOwnerSession(req, res, user) {
+  const access = await getOwnerAccess();
+  if (!access || access.userId !== user.id) throw new Error("Owner access is not configured.");
+  const token = await createOwnerSessionToken({ userId: user.id, sessionVersion: access.sessionVersion });
+  res.cookie(OWNER_SESSION_COOKIE, token, {
+    ...getSessionCookieOptions(req),
+    sameSite: "lax",
+    maxAge: OWNER_SESSION_LIFETIME_MS
   });
 }
-async function findAvailablePort(startPort = 3e3) {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
+function clearOwnerSession(req, res) {
+  res.clearCookie(OWNER_SESSION_COOKIE, {
+    ...getSessionCookieOptions(req),
+    sameSite: "lax",
+    maxAge: -1
+  });
+}
+
+// shared/const.ts
+var COOKIE_NAME = "app_session_id";
+var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
+var AXIOS_TIMEOUT_MS = 3e4;
+var UNAUTHED_ERR_MSG = "Please login (10001)";
+var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
+var OAUTH_STATE_COOKIE = "__Host-oauth_state";
+var decodeOAuthState = (state) => {
+  let decoded;
+  try {
+    decoded = atob(state);
+  } catch {
+    return { redirectUri: "" };
+  }
+  try {
+    const parsed = JSON.parse(decoded);
+    if (parsed && typeof parsed.redirectUri === "string") return parsed;
+  } catch {
+  }
+  return { redirectUri: decoded };
+};
+
+// server/_core/systemRouter.ts
+import { z } from "zod";
+
+// server/_core/trpc.ts
+import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
+import superjson from "superjson";
+var t = initTRPC.context().create({
+  transformer: superjson
+});
+var router = t.router;
+var publicProcedure = t.procedure;
+var requireUser = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user
+    }
+  });
+});
+var protectedProcedure = t.procedure.use(requireUser);
+var adminProcedure = t.procedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== "admin") {
+      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user
+      }
+    });
+  })
+);
+
+// server/_core/systemRouter.ts
+var systemRouter = router({
+  health: publicProcedure.input(
+    z.object({
+      timestamp: z.number().min(0, "timestamp cannot be negative")
+    })
+  ).query(() => ({
+    ok: true
+  })),
+  notifyOwner: adminProcedure.input(
+    z.object({
+      title: z.string().min(1, "title is required"),
+      content: z.string().min(1, "content is required")
+    })
+  ).mutation(async ({ input }) => {
+    const delivered = await notifyOwner(input);
+    return {
+      success: delivered
+    };
+  })
+});
+
+// server/routers/agent.ts
+import { parse as parseCookie } from "cookie";
+import { z as z2 } from "zod";
+
+// server/_core/heartbeat.ts
+init_env();
+import { TRPCError as TRPCError3 } from "@trpc/server";
+var SERVICE = "webdevtoken.v1.WebDevService";
+var buildEndpoint = (rpc) => {
+  if (!ENV.forgeApiUrl) {
+    throw new TRPCError3({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Heartbeat service URL is not configured (BUILT_IN_FORGE_API_URL)."
+    });
+  }
+  if (!ENV.forgeApiKey) {
+    throw new TRPCError3({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Heartbeat service API key is not configured (BUILT_IN_FORGE_API_KEY)."
+    });
+  }
+  const baseUrl = ENV.forgeApiUrl;
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return new URL(`${SERVICE}/${rpc}`, normalizedBase).toString();
+};
+var callForge = async (rpc, body, userSession) => {
+  const endpoint = buildEndpoint(rpc);
+  const headers = {
+    accept: "application/json",
+    authorization: `Bearer ${ENV.forgeApiKey}`,
+    "content-type": "application/json",
+    "connect-protocol-version": "1"
+  };
+  if (userSession) {
+    headers["x-manus-user-session"] = userSession;
+  }
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+  } catch (error) {
+    throw new TRPCError3({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Heartbeat ${rpc} network error: ${String(error)}`
+    });
+  }
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw mapForgeError(response, detail, rpc);
+  }
+  return await response.json();
+};
+var mapForgeError = (response, detail, rpc) => {
+  const status = response.status;
+  let code = "INTERNAL_SERVER_ERROR";
+  if (status === 401) code = "UNAUTHORIZED";
+  else if (status === 403) code = "FORBIDDEN";
+  else if (status === 404) code = "NOT_FOUND";
+  else if (status === 400 || status === 422) code = "BAD_REQUEST";
+  else if (status === 409) code = "CONFLICT";
+  else if (status === 429) code = "TOO_MANY_REQUESTS";
+  return new TRPCError3({
+    code,
+    message: `Heartbeat ${rpc} failed (${status})${detail ? `: ${detail}` : ""}`
+  });
+};
+var stringifyPayload = (payload) => {
+  if (payload === void 0 || payload === null) return "{}";
+  if (typeof payload === "string") return payload;
+  return JSON.stringify(payload);
+};
+var validateCallbackPath = (path) => {
+  if (!path || !path.startsWith("/api/scheduled/")) {
+    throw new TRPCError3({
+      code: "BAD_REQUEST",
+      message: "callback path must start with /api/scheduled/"
+    });
+  }
+};
+async function createHeartbeatJob(job, userSession) {
+  validateCallbackPath(job.path);
+  return callForge(
+    "CreateHeartbeatJob",
+    {
+      name: job.name,
+      cronExpression: job.cron,
+      callbackPath: job.path,
+      callbackMethod: job.method ?? "POST",
+      callbackPayload: stringifyPayload(job.payload),
+      description: job.description ?? ""
+    },
+    userSession
+  );
+}
+async function updateHeartbeatJob(taskUid, patch, userSession) {
+  if (patch.path !== void 0) validateCallbackPath(patch.path);
+  const body = { taskUid };
+  if (patch.cron !== void 0) body.cronExpression = patch.cron;
+  if (patch.path !== void 0) body.callbackPath = patch.path;
+  if (patch.method !== void 0) body.callbackMethod = patch.method;
+  if (patch.payload !== void 0) {
+    body.callbackPayload = stringifyPayload(patch.payload);
+  }
+  if (patch.description !== void 0) body.description = patch.description;
+  if (patch.enable !== void 0) body.enable = patch.enable;
+  return callForge(
+    "UpdateHeartbeatJob",
+    body,
+    userSession
+  );
+}
+
+// server/routers/agent.ts
+init_db2();
+
+// server/agent/approvalWorkflow.ts
+async function decideApprovalAndQueue(input) {
+  const approval = await input.resolveApproval({ approvalId: input.approvalId, userId: input.userId, approved: input.approved });
+  if (!approval) return void 0;
+  const nextStatus = statusAfterApprovalDecision(input.approved);
+  await input.updateTask(approval.taskId, {
+    status: nextStatus,
+    currentPhase: input.approved ? "Approved action is ready to continue" : "Approval declined; task paused"
+  });
+  return approval;
+}
+
+// server/routers/agent.ts
+var executionModeSchema = z2.enum(["confirm", "auto"]);
+var cronSchema = z2.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
+function currentSessionToken(cookieHeader) {
+  return parseCookie(cookieHeader ?? "")[COOKIE_NAME] ?? "";
+}
+var agentRouter = router({
+  dashboard: protectedProcedure.query(async ({ ctx }) => {
+    const [settings, tasks, memories, schedules] = await Promise.all([
+      getOrCreateAgentSettings(ctx.user.id),
+      listAgentTasks(ctx.user.id, 12),
+      listAgentMemories(ctx.user.id),
+      listAgentSchedules(ctx.user.id)
+    ]);
+    return { settings, tasks, memories, schedules };
+  }),
+  connections: protectedProcedure.query(async () => ({
+    ollamaConfigured: Boolean(process.env.OLLAMA_BASE_URL),
+    githubConfigured: Boolean(process.env.GITHUB_TOKEN),
+    vercelConfigured: Boolean(process.env.VERCEL_TOKEN),
+    schedulerReady: process.env.NODE_ENV === "production"
+  })),
+  settings: router({
+    get: protectedProcedure.query(({ ctx }) => getOrCreateAgentSettings(ctx.user.id)),
+    update: protectedProcedure.input(z2.object({
+      defaultModel: z2.string().trim().min(1).max(128).optional(),
+      defaultExecutionMode: executionModeSchema.optional(),
+      defaultMaxRetries: z2.number().int().min(0).max(2).optional(),
+      githubRepository: z2.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "Use owner/repository format.").optional(),
+      vercelProject: z2.string().trim().min(1).max(128).nullable().optional(),
+      notificationsEnabled: z2.boolean().optional()
+    })).mutation(({ ctx, input }) => updateAgentSettings(ctx.user.id, input))
+  }),
+  tasks: router({
+    list: protectedProcedure.query(({ ctx }) => listAgentTasks(ctx.user.id)),
+    get: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).query(({ ctx, input }) => getTaskWithTrace(input.taskId, ctx.user.id)),
+    create: protectedProcedure.input(z2.object({
+      goal: z2.string().trim().min(12, "Describe a concrete outcome in at least 12 characters.").max(12e3),
+      model: z2.string().trim().min(1).max(128).optional(),
+      executionMode: executionModeSchema.optional()
+    })).mutation(async ({ ctx, input }) => {
+      const settings = await getOrCreateAgentSettings(ctx.user.id);
+      return createAgentTask({
+        userId: ctx.user.id,
+        goal: input.goal,
+        model: input.model || settings.defaultModel,
+        executionMode: input.executionMode || settings.defaultExecutionMode,
+        repository: settings.githubRepository
+      });
+    }),
+    pause: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const task = await getAgentTaskForUser(input.taskId, ctx.user.id);
+      if (!task) throw new Error("Task not found.");
+      await updateAgentTask(task.id, { pauseRequested: true });
+      return { ok: true };
+    }),
+    resume: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const task = await getAgentTaskForUser(input.taskId, ctx.user.id);
+      if (!task) throw new Error("Task not found.");
+      await updateAgentTask(task.id, { status: "queued", pauseRequested: false, cancelRequested: false, currentPhase: "Queued for continuation" });
+      return { ok: true };
+    }),
+    cancel: protectedProcedure.input(z2.object({ taskId: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const task = await getAgentTaskForUser(input.taskId, ctx.user.id);
+      if (!task) throw new Error("Task not found.");
+      await updateAgentTask(task.id, { cancelRequested: true });
+      return { ok: true };
+    })
+  }),
+  approvals: router({
+    decide: protectedProcedure.input(z2.object({ approvalId: z2.number().int().positive(), approved: z2.boolean() })).mutation(async ({ ctx, input }) => {
+      const approval = await decideApprovalAndQueue({
+        approvalId: input.approvalId,
+        userId: ctx.user.id,
+        approved: input.approved,
+        resolveApproval: resolveAgentApproval,
+        updateTask: updateAgentTask
+      });
+      if (!approval) throw new Error("Approval was not found or was already resolved.");
+      return approval;
+    })
+  }),
+  memories: router({
+    list: protectedProcedure.query(({ ctx }) => listAgentMemories(ctx.user.id)),
+    remove: protectedProcedure.input(z2.object({ memoryId: z2.number().int().positive() })).mutation(({ ctx, input }) => deactivateAgentMemory(input.memoryId, ctx.user.id))
+  }),
+  schedules: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const schedules = await listAgentSchedules(ctx.user.id);
+      const { listScheduleRuns: listScheduleRuns2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
+      return Promise.all(schedules.map(async (schedule) => ({
+        ...schedule,
+        runs: await listScheduleRuns2(schedule.id, ctx.user.id)
+      })));
+    }),
+    create: protectedProcedure.input(z2.object({
+      goal: z2.string().trim().min(12).max(12e3),
+      cronExpression: cronSchema,
+      model: z2.string().trim().min(1).max(128).optional(),
+      executionMode: executionModeSchema.optional()
+    })).mutation(async ({ ctx, input }) => {
+      if (process.env.NODE_ENV !== "production") {
+        throw new Error("Publish SenotaAI before creating scheduled tasks so the callback has a reachable production URL.");
+      }
+      const settings = await getOrCreateAgentSettings(ctx.user.id);
+      const temporaryName = `senota-${ctx.user.id}-${Date.now()}`;
+      const sessionToken = currentSessionToken(ctx.req.headers.cookie);
+      const heartbeat = await createHeartbeatJob({
+        name: temporaryName,
+        cron: input.cronExpression,
+        path: "/api/scheduled/agent-run",
+        payload: {},
+        description: "Recurring SenotaAI autonomous coding task"
+      }, sessionToken);
+      return createAgentSchedule({
+        userId: ctx.user.id,
+        goal: input.goal,
+        cronExpression: input.cronExpression,
+        model: input.model || settings.defaultModel,
+        executionMode: input.executionMode || settings.defaultExecutionMode,
+        scheduleCronTaskUid: heartbeat.taskUid,
+        nextRunAt: heartbeat.nextExecutionAt ? Date.parse(heartbeat.nextExecutionAt) : null
+      });
+    }),
+    setPaused: protectedProcedure.input(z2.object({ scheduleId: z2.number().int().positive(), paused: z2.boolean() })).mutation(async ({ ctx, input }) => {
+      const schedules = await listAgentSchedules(ctx.user.id);
+      const schedule = schedules.find((item) => item.id === input.scheduleId);
+      if (!schedule?.scheduleCronTaskUid) throw new Error("Schedule was not found or has no managed cron job.");
+      const heartbeat = await updateHeartbeatJob(schedule.scheduleCronTaskUid, { enable: !input.paused }, currentSessionToken(ctx.req.headers.cookie));
+      return updateAgentSchedule(input.scheduleId, ctx.user.id, {
+        status: input.paused ? "paused" : "active",
+        nextRunAt: heartbeat.nextExecutionAt ? Date.parse(heartbeat.nextExecutionAt) : null
+      });
+    })
+  })
+});
+
+// server/routers.ts
+import { z as z3 } from "zod";
+init_db();
+var passwordInput = z3.object({ password: z3.string().min(1), confirmPassword: z3.string().optional() });
+var appRouter = router({
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query((opts) => opts.ctx.user),
+    status: publicProcedure.query(async () => ({ configured: Boolean(await getOwnerAccess()) })),
+    setup: publicProcedure.input(passwordInput).mutation(async ({ ctx, input }) => {
+      if (input.password !== input.confirmPassword) throw new Error("Passwords do not match.");
+      await establishOwnerPassword(input.password);
+      return { configured: true };
+    }),
+    login: publicProcedure.input(z3.object({ password: z3.string().min(1) })).mutation(async ({ ctx, input }) => {
+      const user = await authenticateOwnerPassword(input.password);
+      if (!user) throw new Error("Incorrect password.");
+      await setOwnerSession(ctx.req, ctx.res, user);
+      return { success: true };
+    }),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      clearOwnerSession(ctx.req, ctx.res);
+      return {
+        success: true
+      };
+    })
+  }),
+  agent: agentRouter
+});
+
+// shared/_core/errors.ts
+var HttpError = class extends Error {
+  constructor(statusCode, message) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = "HttpError";
+  }
+};
+var ForbiddenError = (msg) => new HttpError(403, msg);
+
+// server/_core/sdk.ts
+init_db();
+init_env();
+import axios from "axios";
+import { parse as parseCookieHeader } from "cookie";
+import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
+var isNonEmptyString2 = (value) => typeof value === "string" && value.length > 0;
+var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
+var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
+var GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
+var OAuthService = class {
+  constructor(client) {
+    this.client = client;
+    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+    if (!ENV.oAuthServerUrl) {
+      console.error(
+        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+      );
     }
   }
-  throw new Error(`No available port found starting from ${startPort}`);
+  decodeState(state) {
+    return decodeOAuthState(state).redirectUri;
+  }
+  async getTokenByCode(code, state) {
+    const payload = {
+      clientId: ENV.appId,
+      grantType: "authorization_code",
+      code,
+      redirectUri: this.decodeState(state)
+    };
+    const { data } = await this.client.post(
+      EXCHANGE_TOKEN_PATH,
+      payload
+    );
+    return data;
+  }
+  async getUserInfoByToken(token) {
+    const { data } = await this.client.post(
+      GET_USER_INFO_PATH,
+      {
+        accessToken: token.accessToken
+      }
+    );
+    return data;
+  }
+};
+var createOAuthHttpClient = () => axios.create({
+  baseURL: ENV.oAuthServerUrl,
+  timeout: AXIOS_TIMEOUT_MS
+});
+var SDKServer = class {
+  client;
+  oauthService;
+  constructor(client = createOAuthHttpClient()) {
+    this.client = client;
+    this.oauthService = new OAuthService(this.client);
+  }
+  deriveLoginMethod(platforms, fallback) {
+    if (fallback && fallback.length > 0) return fallback;
+    if (!Array.isArray(platforms) || platforms.length === 0) return null;
+    const set = new Set(
+      platforms.filter((p) => typeof p === "string")
+    );
+    if (set.has("REGISTERED_PLATFORM_EMAIL")) return "email";
+    if (set.has("REGISTERED_PLATFORM_GOOGLE")) return "google";
+    if (set.has("REGISTERED_PLATFORM_APPLE")) return "apple";
+    if (set.has("REGISTERED_PLATFORM_MICROSOFT") || set.has("REGISTERED_PLATFORM_AZURE"))
+      return "microsoft";
+    if (set.has("REGISTERED_PLATFORM_GITHUB")) return "github";
+    const first = Array.from(set)[0];
+    return first ? first.toLowerCase() : null;
+  }
+  /**
+   * Exchange OAuth authorization code for access token
+   * @example
+   * const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+   */
+  async exchangeCodeForToken(code, state) {
+    return this.oauthService.getTokenByCode(code, state);
+  }
+  /**
+   * Get user information using access token
+   * @example
+   * const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+   */
+  async getUserInfo(accessToken) {
+    const data = await this.oauthService.getUserInfoByToken({
+      accessToken
+    });
+    const loginMethod = this.deriveLoginMethod(
+      data?.platforms,
+      data?.platform ?? data.platform ?? null
+    );
+    return {
+      ...data,
+      platform: loginMethod,
+      loginMethod
+    };
+  }
+  parseCookies(cookieHeader) {
+    if (!cookieHeader) {
+      return /* @__PURE__ */ new Map();
+    }
+    const parsed = parseCookieHeader(cookieHeader);
+    return new Map(Object.entries(parsed));
+  }
+  getSessionSecret() {
+    const secret = ENV.cookieSecret;
+    return new TextEncoder().encode(secret);
+  }
+  /**
+   * Create a session token for a Manus user openId
+   * @example
+   * const sessionToken = await sdk.createSessionToken(userInfo.openId);
+   */
+  async createSessionToken(openId, options = {}) {
+    return this.signSession(
+      {
+        openId,
+        appId: ENV.appId,
+        name: options.name || ""
+      },
+      options
+    );
+  }
+  async signSession(payload, options = {}) {
+    const issuedAt = Date.now();
+    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
+    const secretKey2 = this.getSessionSecret();
+    return new SignJWT2({
+      openId: payload.openId,
+      appId: payload.appId,
+      name: payload.name
+    }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey2);
+  }
+  async verifySession(cookieValue) {
+    if (!cookieValue) {
+      console.warn("[Auth] Missing session cookie");
+      return null;
+    }
+    try {
+      const secretKey2 = this.getSessionSecret();
+      const { payload } = await jwtVerify2(cookieValue, secretKey2, {
+        algorithms: ["HS256"]
+      });
+      const { openId, appId, name } = payload;
+      if (!isNonEmptyString2(openId) || !isNonEmptyString2(appId) || !isNonEmptyString2(name)) {
+        console.warn("[Auth] Session payload missing required fields");
+        return null;
+      }
+      return {
+        openId,
+        appId,
+        name
+      };
+    } catch (error) {
+      console.warn("[Auth] Session verification failed", String(error));
+      return null;
+    }
+  }
+  async getUserInfoWithJwt(jwtToken) {
+    const payload = {
+      jwtToken,
+      projectId: ENV.appId
+    };
+    const { data } = await this.client.post(
+      GET_USER_INFO_WITH_JWT_PATH,
+      payload
+    );
+    const loginMethod = this.deriveLoginMethod(
+      data?.platforms,
+      data?.platform ?? data.platform ?? null
+    );
+    return {
+      ...data,
+      platform: loginMethod,
+      loginMethod
+    };
+  }
+  async authenticateRequest(req) {
+    const cookies = this.parseCookies(req.headers.cookie);
+    let sessionToken = cookies.get(COOKIE_NAME);
+    if (!sessionToken) {
+      const authHeader = req.headers.authorization;
+      if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+        sessionToken = authHeader.slice(7);
+      }
+    }
+    const session = await this.verifySession(sessionToken);
+    if (!session) {
+      throw ForbiddenError("Invalid session cookie");
+    }
+    if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
+      const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
+      const taskUid = userInfo.taskUid ?? null;
+      if (!taskUid) {
+        throw ForbiddenError("Cron session missing task_uid");
+      }
+      return buildCronUser(userInfo);
+    }
+    const sessionUserId = session.openId;
+    const signedInAt = /* @__PURE__ */ new Date();
+    let user = await getUserByOpenId(sessionUserId);
+    if (!user) {
+      try {
+        const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
+        await upsertUser({
+          openId: userInfo.openId,
+          name: userInfo.name || null,
+          email: userInfo.email ?? null,
+          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+          lastSignedIn: signedInAt
+        });
+        user = await getUserByOpenId(userInfo.openId);
+      } catch (error) {
+        console.error("[Auth] Failed to sync user from OAuth:", error);
+        throw ForbiddenError("Failed to sync user info");
+      }
+    }
+    if (!user) {
+      throw ForbiddenError("User not found");
+    }
+    await upsertUser({
+      openId: user.openId,
+      lastSignedIn: signedInAt
+    });
+    return user;
+  }
+};
+var CRON_OPEN_ID_PREFIX = "cron_";
+function buildCronUser(userInfo) {
+  const now = /* @__PURE__ */ new Date();
+  return {
+    id: -1,
+    openId: userInfo.openId,
+    name: userInfo.name || "Manus Scheduled Task",
+    email: null,
+    loginMethod: null,
+    role: "user",
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+    taskUid: userInfo.taskUid ?? void 0,
+    isCron: true
+  };
 }
+var sdk = new SDKServer();
+
+// server/_core/context.ts
+async function createContext(opts) {
+  let user = null;
+  user = await getOwnerSessionUser(opts.req);
+  if (!user && opts.req.headers.authorization) {
+    try {
+      user = await sdk.authenticateRequest(opts.req);
+    } catch {
+      user = null;
+    }
+  }
+  return {
+    req: opts.req,
+    res: opts.res,
+    user
+  };
+}
+
+// server/_core/oauth.ts
+init_db();
+import { parse as parseCookieHeader2 } from "cookie";
+function getQueryParam(req, key) {
+  const value = req.query[key];
+  return typeof value === "string" ? value : void 0;
+}
+function registerOAuthRoutes(app) {
+  app.get("/api/oauth/callback", async (req, res) => {
+    const code = getQueryParam(req, "code");
+    const state = getQueryParam(req, "state");
+    if (!code || !state) {
+      res.status(400).json({ error: "code and state are required" });
+      return;
+    }
+    const { nonce } = decodeOAuthState(state);
+    const expectedNonce = parseCookieHeader2(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
+    if (!nonce || nonce !== expectedNonce) {
+      res.status(403).json({ error: "invalid oauth state" });
+      return;
+    }
+    res.clearCookie(OAUTH_STATE_COOKIE, { path: "/", secure: true, sameSite: "none" });
+    try {
+      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+      if (!userInfo.openId) {
+        res.status(400).json({ error: "openId missing from user info" });
+        return;
+      }
+      await upsertUser({
+        openId: userInfo.openId,
+        name: userInfo.name || null,
+        email: userInfo.email ?? null,
+        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        lastSignedIn: /* @__PURE__ */ new Date()
+      });
+      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
+        name: userInfo.name || "",
+        expiresInMs: ONE_YEAR_MS
+      });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.redirect(302, "/");
+    } catch (error) {
+      console.error("[OAuth] Callback failed", error);
+      res.status(500).json({ error: "OAuth callback failed" });
+    }
+  });
+}
+
+// server/_core/storageProxy.ts
+init_env();
+function registerStorageProxy(app) {
+  app.get("/manus-storage/*", async (req, res) => {
+    const key = req.params[0];
+    if (!key) {
+      res.status(400).send("Missing storage key");
+      return;
+    }
+    if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+      res.status(500).send("Storage proxy not configured");
+      return;
+    }
+    try {
+      const forgeUrl = new URL(
+        "v1/storage/presign/get",
+        ENV.forgeApiUrl.replace(/\/+$/, "") + "/"
+      );
+      forgeUrl.searchParams.set("path", key);
+      const forgeResp = await fetch(forgeUrl, {
+        headers: { Authorization: `Bearer ${ENV.forgeApiKey}` }
+      });
+      if (!forgeResp.ok) {
+        const body = await forgeResp.text().catch(() => "");
+        console.error(`[StorageProxy] forge error: ${forgeResp.status} ${body}`);
+        res.status(502).send("Storage backend error");
+        return;
+      }
+      const { url } = await forgeResp.json();
+      if (!url) {
+        res.status(502).send("Empty signed URL from backend");
+        return;
+      }
+      res.set("Cache-Control", "no-store");
+      res.redirect(307, url);
+    } catch (err) {
+      console.error("[StorageProxy] failed:", err);
+      res.status(502).send("Storage proxy error");
+    }
+  });
+}
+
+// server/app.ts
 function createApp() {
-  const app = express2();
-  app.use(express2.json({ limit: "50mb" }));
-  app.use(express2.urlencoded({ limit: "50mb", extended: true }));
+  const app = express();
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   app.post("/api/agent/tasks/:taskId/run", async (req, res) => {
@@ -2448,25 +2220,8 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
       createContext
     })
   );
-  if (process.env.NODE_ENV === "production" && !process.env.VERCEL) serveStatic(app);
   return app;
 }
-async function startServer() {
-  const app = createApp();
-  const server = createServer(app);
-  if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
-  }
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
-  });
-}
-if (!process.env.VERCEL && !process.env.VITEST && process.env.NODE_ENV !== "test") startServer().catch(console.error);
 
 // server/vercel-entry.ts
 var vercel_entry_default = createApp();
