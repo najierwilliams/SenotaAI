@@ -42,10 +42,12 @@
 - [x] Fix the Vercel build or runtime routing issue that is serving bundled server source instead of the SenotaAI dashboard.
 - [x] Replace the broken Manus sign-in flow with first-visit owner-password setup, returning-password login, and a secure session.
 - [x] Restrict SenotaAI dashboard and agent APIs to the established owner-password session.
-- [ ] Verify password setup, login, logout, session persistence, and dashboard task controls on the deployed website.
+- [x] Verify password setup, login, logout, session persistence, and dashboard task controls on the deployed website. Superseded by the requested direct-access workspace.
 - [x] Update non-tRPC agent endpoints to accept the owner-password session and add coverage for password-session task execution and activity streaming.
 - [x] Add automated password-session coverage for both rejected and authenticated task-stream requests, including the SSE response contract.
 - [x] Repair Vercel SPA fallback routing so deployed `/api/*` requests reach the SenotaAI serverless function.
-- [ ] Remove the password setup, login, logout, and session gate so the SenotaAI dashboard opens directly.
-- [ ] Make direct dashboard startup and agent controls handle an unavailable database without blocking the workspace UI.
+- [x] Remove the password setup, login, logout, and session gate so the SenotaAI dashboard opens directly.
+- [x] Make direct dashboard startup and agent controls handle an unavailable database without blocking the workspace UI.
 - [ ] Verify direct public dashboard access and functional agent controls on the deployed Vercel site.
+- [ ] Publish the direct-access release through a verified GitHub or Vercel deployment path and confirm the public site has no login gate.
+- [x] Remove or gracefully redirect database-dependent routes in direct-chat mode so no public navigation path requires the unavailable database.

@@ -5,23 +5,18 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
-import AgentMemory from "./pages/AgentMemory";
 import DashboardLayout from "./components/DashboardLayout";
-import NewTask from "./pages/NewTask";
-import Settings from "./pages/Settings";
-import TaskDetail from "./pages/TaskDetail";
-import TaskHistory from "./pages/TaskHistory";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"}><DashboardLayout><Home /></DashboardLayout></Route>
-      <Route path={"/new"}><DashboardLayout><NewTask /></DashboardLayout></Route>
-      <Route path={"/history"}><DashboardLayout><TaskHistory /></DashboardLayout></Route>
-      <Route path={"/tasks/:id"}>{(params) => <DashboardLayout><TaskDetail taskId={Number(params.id)} /></DashboardLayout>}</Route>
-      <Route path={"/memory"}><DashboardLayout><AgentMemory /></DashboardLayout></Route>
-      <Route path={"/settings"}><DashboardLayout><Settings /></DashboardLayout></Route>
+      <Route path={"/new"}><DashboardLayout><Home /></DashboardLayout></Route>
+      <Route path={"/history"}><DashboardLayout><Home /></DashboardLayout></Route>
+      <Route path={"/memory"}><DashboardLayout><Home /></DashboardLayout></Route>
+      <Route path={"/settings"}><DashboardLayout><Home /></DashboardLayout></Route>
+      <Route path={"/tasks/:id"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
