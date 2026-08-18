@@ -544,6 +544,7 @@ var init_db2 = __esm({
 
 // server/vercel-entry.ts
 import express2 from "express";
+import path from "path";
 
 // server/app.ts
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -752,14 +753,14 @@ function splitRepository(repository) {
   if (!owner || !repo || repository.split("/").length !== 2) throw new Error("Repository must use the owner/name format.");
   return { owner, repo };
 }
-function validateRepositoryPath(path) {
-  if (!path || path.startsWith("/") || path.includes("..") || path.includes("\\")) {
+function validateRepositoryPath(path2) {
+  if (!path2 || path2.startsWith("/") || path2.includes("..") || path2.includes("\\")) {
     throw new Error("Repository file paths must be relative and cannot include traversal segments.");
   }
 }
-async function githubRequest(path, init = {}) {
+async function githubRequest(path2, init = {}) {
   const { token } = getGitHubConfig();
-  const response = await fetch(`https://api.github.com${path}`, {
+  const response = await fetch(`https://api.github.com${path2}`, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -778,10 +779,10 @@ async function getDefaultBranch(repository) {
   const data = await githubRequest(`/repos/${owner}/${repo}`);
   return data.default_branch;
 }
-async function getFileMetadata(repository, path, ref) {
-  validateRepositoryPath(path);
+async function getFileMetadata(repository, path2, ref) {
+  validateRepositoryPath(path2);
   const { owner, repo } = splitRepository(repository);
-  return githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`);
+  return githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path2)}?ref=${encodeURIComponent(ref)}`);
 }
 async function ensureWorkBranch(ctx) {
   const { owner, repo } = splitRepository(ctx.repository);
@@ -807,24 +808,24 @@ async function listRepositoryFiles(ctx) {
   return tree.tree.filter((entry) => entry.type === "blob").slice(0, 500).map((entry) => ({ path: entry.path, size: entry.size ?? 0 }));
 }
 async function readRepositoryFile(ctx, args) {
-  const path = String(args.path || "");
-  const metadata = await getFileMetadata(ctx.repository, path, ctx.workBranch);
+  const path2 = String(args.path || "");
+  const metadata = await getFileMetadata(ctx.repository, path2, ctx.workBranch);
   if (metadata.encoding !== "base64" || !metadata.content) throw new Error("Only base64-encoded text files can be read.");
   return { path: metadata.path, sha: metadata.sha, content: Buffer2.from(metadata.content.replace(/\n/g, ""), "base64").toString("utf8") };
 }
 async function writeRepositoryFile(ctx, args) {
-  const path = String(args.path || "");
+  const path2 = String(args.path || "");
   const content = String(args.content || "");
   const message = String(args.message || "Update source file");
-  validateRepositoryPath(path);
+  validateRepositoryPath(path2);
   const { owner, repo } = splitRepository(ctx.repository);
   let existingSha;
   try {
-    existingSha = (await getFileMetadata(ctx.repository, path, ctx.workBranch)).sha;
+    existingSha = (await getFileMetadata(ctx.repository, path2, ctx.workBranch)).sha;
   } catch (error) {
     if (!(error instanceof Error) || !error.message.includes("Not Found")) throw error;
   }
-  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`, {
+  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path2)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -834,19 +835,19 @@ async function writeRepositoryFile(ctx, args) {
       ...existingSha ? { sha: existingSha } : {}
     })
   });
-  return { path: result.content?.path || path, commitSha: result.commit?.sha || null };
+  return { path: result.content?.path || path2, commitSha: result.commit?.sha || null };
 }
 async function deleteRepositoryFile(ctx, args) {
-  const path = String(args.path || "");
+  const path2 = String(args.path || "");
   const message = String(args.message || "Remove obsolete source file");
-  const existing = await getFileMetadata(ctx.repository, path, ctx.workBranch);
+  const existing = await getFileMetadata(ctx.repository, path2, ctx.workBranch);
   const { owner, repo } = splitRepository(ctx.repository);
-  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`, {
+  const result = await githubRequest(`/repos/${owner}/${repo}/contents/${encodeURIComponent(path2)}`, {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, sha: existing.sha, branch: ctx.workBranch })
   });
-  return { path, commitSha: result.commit?.sha || null };
+  return { path: path2, commitSha: result.commit?.sha || null };
 }
 async function openPullRequest(ctx, args) {
   const { owner, repo } = splitRepository(ctx.repository);
@@ -860,9 +861,9 @@ async function openPullRequest(ctx, args) {
   });
   return { number: result.number, url: result.html_url, state: result.state };
 }
-async function vercelRequest(path, init = {}) {
+async function vercelRequest(path2, init = {}) {
   const config = getVercelConfig();
-  const response = await fetch(`https://api.vercel.com${path}${path.includes("?") ? "&" : "?"}${config.teamId ? `teamId=${encodeURIComponent(config.teamId)}` : ""}`, {
+  const response = await fetch(`https://api.vercel.com${path2}${path2.includes("?") ? "&" : "?"}${config.teamId ? `teamId=${encodeURIComponent(config.teamId)}` : ""}`, {
     ...init,
     headers: { Authorization: `Bearer ${config.token}`, ...init.headers ?? {} },
     signal: AbortSignal.timeout(6e4)
@@ -1548,8 +1549,8 @@ var stringifyPayload = (payload) => {
   if (typeof payload === "string") return payload;
   return JSON.stringify(payload);
 };
-var validateCallbackPath = (path) => {
-  if (!path || !path.startsWith("/api/scheduled/")) {
+var validateCallbackPath = (path2) => {
+  if (!path2 || !path2.startsWith("/api/scheduled/")) {
     throw new TRPCError3({
       code: "BAD_REQUEST",
       message: "callback path must start with /api/scheduled/"
@@ -2058,8 +2059,8 @@ function getQueryParam(req, key) {
   const value = req.query[key];
   return typeof value === "string" ? value : void 0;
 }
-function registerOAuthRoutes(app) {
-  app.get("/api/oauth/callback", async (req, res) => {
+function registerOAuthRoutes(app2) {
+  app2.get("/api/oauth/callback", async (req, res) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
     if (!code || !state) {
@@ -2103,8 +2104,8 @@ function registerOAuthRoutes(app) {
 
 // server/_core/storageProxy.ts
 init_env();
-function registerStorageProxy(app) {
-  app.get("/manus-storage/*", async (req, res) => {
+function registerStorageProxy(app2) {
+  app2.get("/manus-storage/*", async (req, res) => {
     const key = req.params[0];
     if (!key) {
       res.status(400).send("Missing storage key");
@@ -2145,12 +2146,12 @@ function registerStorageProxy(app) {
 
 // server/app.ts
 function createApp() {
-  const app = express();
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  registerStorageProxy(app);
-  registerOAuthRoutes(app);
-  app.post("/api/agent/tasks/:taskId/run", async (req, res) => {
+  const app2 = express();
+  app2.use(express.json({ limit: "50mb" }));
+  app2.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerStorageProxy(app2);
+  registerOAuthRoutes(app2);
+  app2.post("/api/agent/tasks/:taskId/run", async (req, res) => {
     let streamClosed = false;
     try {
       const user = await getOwnerSessionUser(req);
@@ -2193,7 +2194,7 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
       }
     }
   });
-  app.post("/api/scheduled/agent-run", async (req, res) => {
+  app2.post("/api/scheduled/agent-run", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req);
       if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron-only" });
@@ -2213,18 +2214,22 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
       res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
     }
   });
-  app.use(
+  app2.use(
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
       createContext
     })
   );
-  return app;
+  return app2;
 }
 
 // server/vercel-entry.ts
-var vercel_entry_default = createApp();
+var app = createApp();
+var publicDirectory = path.resolve(process.cwd(), "public");
+app.use(express2.static(publicDirectory));
+app.use("*", (_req, res) => res.sendFile(path.resolve(publicDirectory, "index.html")));
+var vercel_entry_default = app;
 export {
   vercel_entry_default as default
 };

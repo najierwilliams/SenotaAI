@@ -10,7 +10,11 @@ describe("Vercel deployment routing", () => {
 
     expect(config.framework).toBe("express");
     expect(config.outputDirectory).toBeUndefined();
-    expect(config.functions).toBeUndefined();
+    expect(config.functions).toEqual({
+      "server.js": {
+        includeFiles: "public/**",
+      },
+    });
     expect(config.rewrites).toEqual([
       {
         source: "/:path((?!api(?:/|$)).*)",
@@ -27,6 +31,7 @@ describe("Vercel deployment routing", () => {
 
     expect(functionEntry).toContain('import express from "express"');
     expect(functionEntry).toContain('import { createApp } from "./app"');
-    expect(functionEntry).toContain("export default createApp()");
+    expect(functionEntry).toContain("app.use(express.static(publicDirectory))");
+    expect(functionEntry).toContain('app.use("*", (_req, res) => res.sendFile');
   });
 });
