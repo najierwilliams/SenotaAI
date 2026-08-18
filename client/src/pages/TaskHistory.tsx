@@ -1,0 +1,15 @@
+import { AgentStatusBadge } from "@/components/AgentStatusBadge";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import { formatDistanceToNow } from "date-fns";
+import { ArrowUpRight, History, Plus, Search } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
+
+export default function TaskHistory() {
+  const [, setLocation] = useLocation();
+  const { data: tasks = [], isLoading } = trpc.agent.tasks.list.useQuery();
+  const [filter, setFilter] = useState("");
+  const displayed = useMemo(() => tasks.filter((task) => task.goal.toLowerCase().includes(filter.toLowerCase()) || task.status.includes(filter.toLowerCase())), [filter, tasks]);
+  return <div className="senota-page space-y-6"><section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-300"><History className="size-4" /> Task history</div><h1 className="font-display text-4xl font-semibold tracking-[-0.045em] text-white">Every run leaves a trail.</h1><p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">Review outcomes, reopen live traces, and continue safely from paused or approved work.</p></div><Button onClick={() => setLocation("/new")} className="rounded-xl bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 size-4" /> New task</Button></section><section className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-card/70"><div className="border-b border-white/10 p-4"><div className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3"><Search className="size-4 text-slate-500" /><input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Filter goals or statuses" className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-600" /></div></div><div className="divide-y divide-white/5">{isLoading ? <div className="p-8 text-sm text-slate-500">Loading task history…</div> : displayed.length ? displayed.map((task) => <button key={task.id} onClick={() => setLocation(`/tasks/${task.id}`)} className="group grid w-full gap-4 p-5 text-left transition hover:bg-white/[0.025] md:grid-cols-[minmax(0,1fr)_150px_130px_28px] md:items-center"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-100 group-hover:text-cyan-100">{task.goal}</p><p className="mt-1.5 font-mono text-xs text-slate-600">RUN-{String(task.id).padStart(4, "0")} · {task.model}</p></div><AgentStatusBadge status={task.status} /><span className="text-xs text-slate-500">{formatDistanceToNow(new Date(task.createdAt), { addSuffix: true })}</span><ArrowUpRight className="size-4 text-slate-600 transition group-hover:text-cyan-300" /></button>) : <div className="p-12 text-center"><p className="text-sm font-medium text-slate-300">No tasks found.</p><p className="mt-2 text-sm text-slate-600">Your completed, paused, and failed runs will be stored here.</p></div>}</div></section></div>;
+}
