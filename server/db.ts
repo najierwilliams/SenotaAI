@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, ownerAccess, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -87,6 +87,52 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+const PASSWORD_OWNER_OPEN_ID = "senota-password-owner";
+const OWNER_INSTANCE_KEY = "primary";
+
+export async function getOwnerAccess() {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(ownerAccess).where(eq(ownerAccess.instanceKey, OWNER_INSTANCE_KEY)).limit(1);
+  return result[0];
+}
+
+export async function getPasswordOwner() {
+  const access = await getOwnerAccess();
+  if (!access) return null;
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(users).where(eq(users.id, access.userId)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function setupPasswordOwner(passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database is unavailable.");
+  if (await getOwnerAccess()) throw new Error("An owner password has already been created.");
+
+  const now = Date.now();
+  await db.insert(users).values({
+    openId: PASSWORD_OWNER_OPEN_ID,
+    name: "Senota owner",
+    email: "owner@senota.local",
+    loginMethod: "password",
+    role: "admin",
+    lastSignedIn: new Date(),
+  }).onDuplicateKeyUpdate({ set: { name: "Senota owner", loginMethod: "password", role: "admin", lastSignedIn: new Date() } });
+
+  const owner = await getUserByOpenId(PASSWORD_OWNER_OPEN_ID);
+  if (!owner) throw new Error("Unable to create the Senota owner account.");
+  await db.insert(ownerAccess).values({
+    instanceKey: OWNER_INSTANCE_KEY,
+    userId: owner.id,
+    passwordHash,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return owner;
 }
 
 // TODO: add feature queries here as your schema grows.

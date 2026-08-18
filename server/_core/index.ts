@@ -13,6 +13,7 @@ import { runAutonomousTask } from "../agent/engine";
 import { createAgentTask, getAgentScheduleByCronTaskUid, getOrCreateAgentSettings, updateAgentSchedule } from "../agent/db";
 import { buildScheduledTaskInput } from "../agent/schedule";
 import { executeScheduledRun } from "../agent/scheduledExecution";
+import { getOwnerSessionUser } from "../ownerAuth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -43,8 +44,8 @@ export function createApp() {
   app.post("/api/agent/tasks/:taskId/run", async (req, res) => {
     let streamClosed = false;
     try {
-      const user = await sdk.authenticateRequest(req);
-      if (user.isCron) return res.status(403).json({ error: "interactive-user-only" });
+      const user = await getOwnerSessionUser(req);
+      if (!user) return res.status(401).json({ error: "owner-session-required" });
       const taskId = Number(req.params.taskId);
       if (!Number.isInteger(taskId) || taskId <= 0) return res.status(400).json({ error: "invalid-task-id" });
 
@@ -103,7 +104,7 @@ export function createApp() {
       createContext,
     })
   );
-  if (process.env.NODE_ENV !== "development" && !process.env.VERCEL) serveStatic(app);
+  if (process.env.NODE_ENV === "production" && !process.env.VERCEL) serveStatic(app);
   return app;
 }
 
@@ -129,4 +130,4 @@ async function startServer() {
   });
 }
 
-if (!process.env.VERCEL) startServer().catch(console.error);
+if (!process.env.VERCEL && !process.env.VITEST && process.env.NODE_ENV !== "test") startServer().catch(console.error);

@@ -25,6 +25,19 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+/** One password-hash record controls the single SenotaAI owner session. */
+export const ownerAccess = mysqlTable("owner_access", {
+  id: int("id").autoincrement().primaryKey(),
+  instanceKey: varchar("instance_key", { length: 32 }).notNull().unique(),
+  userId: int("user_id").notNull().unique(),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  sessionVersion: int("session_version").notNull().default(1),
+  createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+});
+
+export type OwnerAccess = typeof ownerAccess.$inferSelect;
+
 const taskStatuses = [
   "queued",
   "planning",

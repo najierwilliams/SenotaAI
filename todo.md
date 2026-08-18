@@ -39,4 +39,9 @@
 - [x] Add rendered Task Detail, Task History, and schedule-run-history screen-state tests.
 - [x] Add an approval decision to resumed autonomous engine execution integration test.
 - [x] Verify that Vercel has deployed the latest SenotaAI activation commit and report the live website URL.
-- [ ] Fix the Vercel build or runtime routing issue that is serving bundled server source instead of the SenotaAI dashboard.
+- [x] Fix the Vercel build or runtime routing issue that is serving bundled server source instead of the SenotaAI dashboard.
+- [x] Replace the broken Manus sign-in flow with first-visit owner-password setup, returning-password login, and a secure session.
+- [x] Restrict SenotaAI dashboard and agent APIs to the established owner-password session.
+- [ ] Verify password setup, login, logout, session persistence, and dashboard task controls on the deployed website.
+- [x] Update non-tRPC agent endpoints to accept the owner-password session and add coverage for password-session task execution and activity streaming.
+- [x] Add automated password-session coverage for both rejected and authenticated task-stream requests, including the SSE response contract.
