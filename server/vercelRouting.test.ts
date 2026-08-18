@@ -15,4 +15,14 @@ describe("Vercel deployment routing", () => {
       },
     ]);
   });
+
+  it("uses the built Express application from a JavaScript catch-all entry", async () => {
+    const functionEntry = await readFile(
+      resolve(process.cwd(), "api", "[...path].js"),
+      "utf8",
+    );
+
+    expect(functionEntry).toContain('import { createApp } from "../dist/index.js"');
+    expect(functionEntry).toContain("export default createApp()");
+  });
 });
