@@ -45,3 +45,4 @@
 - [ ] Verify password setup, login, logout, session persistence, and dashboard task controls on the deployed website.
 - [x] Update non-tRPC agent endpoints to accept the owner-password session and add coverage for password-session task execution and activity streaming.
 - [x] Add automated password-session coverage for both rejected and authenticated task-stream requests, including the SSE response contract.
+- [ ] Repair Vercel SPA fallback routing so deployed `/api/*` requests reach the SenotaAI serverless function.
