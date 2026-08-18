@@ -9,6 +9,7 @@ describe("Vercel deployment routing", () => {
     ) as { rewrites?: Array<{ source?: string; destination?: string }> };
 
     expect(config.framework).toBe("express");
+    expect(config.outputDirectory).toBeUndefined();
     expect(config.functions).toEqual({
       "server.js": {
         includeFiles: "dist/**",
