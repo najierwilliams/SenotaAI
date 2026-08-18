@@ -1,0 +1,2 @@
+# SenotaAI
+AI system
