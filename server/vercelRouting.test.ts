@@ -8,9 +8,9 @@ describe("Vercel deployment routing", () => {
       await readFile(resolve(process.cwd(), "vercel.json"), "utf8"),
     ) as { rewrites?: Array<{ source?: string; destination?: string }> };
 
-    expect(config.framework).toBeNull();
+    expect(config.framework).toBe("express");
     expect(config.functions).toEqual({
-      "api/[...path].js": {
+      "server.js": {
         includeFiles: "dist/**",
       },
     });
@@ -22,13 +22,13 @@ describe("Vercel deployment routing", () => {
     ]);
   });
 
-  it("uses the built Express application from a JavaScript catch-all entry", async () => {
+  it("uses the built Express application from a recognized root entry", async () => {
     const functionEntry = await readFile(
-      resolve(process.cwd(), "api", "[...path].js"),
+      resolve(process.cwd(), "server.js"),
       "utf8",
     );
 
-    expect(functionEntry).toContain('import { createApp } from "../dist/index.js"');
+    expect(functionEntry).toContain('import { createApp } from "./dist/index.js"');
     expect(functionEntry).toContain("export default createApp()");
   });
 });
