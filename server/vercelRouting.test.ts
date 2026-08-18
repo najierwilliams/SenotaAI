@@ -29,6 +29,7 @@ describe("Vercel deployment routing", () => {
       "utf8",
     );
 
+    expect(functionEntry).toContain('import express from "express"');
     expect(functionEntry).toContain('import { createApp } from "./dist/index.js"');
     expect(functionEntry).toContain("export default createApp()");
   });
