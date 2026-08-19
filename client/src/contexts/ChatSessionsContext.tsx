@@ -9,6 +9,9 @@ export type ChatSession = {
   updatedAt: number;
 };
 
+export const CHAT_SESSIONS_STORAGE_KEY = "senota.chat-sessions.v1";
+export const CHAT_ACTIVE_SESSION_STORAGE_KEY = "senota.active-chat-session.v1";
+
 type ChatSessionsValue = {
   sessions: ChatSession[];
   activeSession: ChatSession;
@@ -19,66 +22,88 @@ type ChatSessionsValue = {
   updateMessages: (id: string, messages: Message[]) => void;
 };
 
-const STORAGE_KEY = "senota.chat-sessions.v1";
-const ACTIVE_KEY = "senota.active-chat-session.v1";
 const ChatSessionsContext = createContext<ChatSessionsValue | null>(null);
 
 function makeId() {
   return globalThis.crypto?.randomUUID?.() ?? `chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function createInitialSession(): ChatSession {
-  const now = Date.now();
-  return { id: makeId(), title: "New conversation", messages: [], createdAt: now, updatedAt: now };
+export function createChatSession(now = Date.now(), id = makeId()): ChatSession {
+  return { id, title: "New conversation", messages: [], createdAt: now, updatedAt: now };
 }
 
-function loadSessions() {
+export function readPersistedChatSessions(rawSessions: string | null): ChatSession[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]") as ChatSession[];
+    const parsed = JSON.parse(rawSessions ?? "[]") as ChatSession[];
     return parsed.filter(session => session?.id && Array.isArray(session.messages)).slice(0, 40);
   } catch {
     return [];
   }
 }
 
+export function prependChatSession(sessions: ChatSession[], session = createChatSession()) {
+  return [session, ...sessions];
+}
+
+export function renameChatSession(sessions: ChatSession[], id: string, title: string, updatedAt = Date.now()) {
+  const normalizedTitle = title.trim().slice(0, 80);
+  return sessions.map(session => session.id === id
+    ? { ...session, title: normalizedTitle || session.title, updatedAt }
+    : session);
+}
+
+export function resolveActiveChatSession(sessions: ChatSession[], activeId: string) {
+  return sessions.find(session => session.id === activeId) ?? sessions[0] ?? createChatSession();
+}
+
+export function deleteChatSession(sessions: ChatSession[], id: string, activeId: string) {
+  const remaining = sessions.filter(session => session.id !== id);
+  const nextSessions = remaining.length ? remaining : [createChatSession()];
+  const nextActiveId = activeId === id ? nextSessions[0]?.id ?? "" : activeId;
+  return { sessions: nextSessions, activeId: nextActiveId };
+}
+
+export function updateChatSessionMessages(sessions: ChatSession[], id: string, messages: Message[], updatedAt = Date.now()) {
+  return sessions.map(session => {
+    if (session.id !== id) return session;
+    const firstUserMessage = messages.find(message => message.role === "user")?.content;
+    return { ...session, messages, title: firstUserMessage ? firstUserMessage.slice(0, 54) : session.title, updatedAt };
+  });
+}
+
 export function ChatSessionsProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
-    const saved = loadSessions();
-    return saved.length ? saved : [createInitialSession()];
+    const saved = readPersistedChatSessions(localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY));
+    return saved.length ? saved : [createChatSession()];
   });
-  const [activeId, setActiveId] = useState(() => localStorage.getItem(ACTIVE_KEY) ?? "");
+  const [activeId, setActiveId] = useState(() => localStorage.getItem(CHAT_ACTIVE_SESSION_STORAGE_KEY) ?? "");
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+    localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
     if (!sessions.some(session => session.id === activeId)) setActiveId(sessions[0]?.id ?? "");
   }, [sessions, activeId]);
 
   useEffect(() => {
-    if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
+    if (activeId) localStorage.setItem(CHAT_ACTIVE_SESSION_STORAGE_KEY, activeId);
   }, [activeId]);
 
-  const activeSession = sessions.find(session => session.id === activeId) ?? sessions[0] ?? createInitialSession();
+  const activeSession = resolveActiveChatSession(sessions, activeId);
   const value = useMemo<ChatSessionsValue>(() => ({
     sessions: [...sessions].sort((a, b) => b.updatedAt - a.updatedAt),
     activeSession,
     createSession: () => {
-      const session = createInitialSession();
-      setSessions(current => [session, ...current]);
+      const session = createChatSession();
+      setSessions(current => prependChatSession(current, session));
       setActiveId(session.id);
     },
     selectSession: setActiveId,
-    renameSession: (id, title) => setSessions(current => current.map(session => session.id === id ? { ...session, title: title.trim().slice(0, 80) || session.title, updatedAt: Date.now() } : session)),
+    renameSession: (id, title) => setSessions(current => renameChatSession(current, id, title)),
     deleteSession: (id) => setSessions(current => {
-      if (current.length === 1) return [{ ...createInitialSession() }];
-      const next = current.filter(session => session.id !== id);
-      if (activeId === id) setActiveId(next[0]?.id ?? "");
-      return next;
+      const next = deleteChatSession(current, id, activeId);
+      if (next.activeId !== activeId) setActiveId(next.activeId);
+      return next.sessions;
     }),
-    updateMessages: (id, messages) => setSessions(current => current.map(session => {
-      if (session.id !== id) return session;
-      const firstUserMessage = messages.find(message => message.role === "user")?.content;
-      return { ...session, messages, title: firstUserMessage ? firstUserMessage.slice(0, 54) : session.title, updatedAt: Date.now() };
-    })),
+    updateMessages: (id, messages) => setSessions(current => updateChatSessionMessages(current, id, messages)),
   }), [sessions, activeId, activeSession]);
 
   return <ChatSessionsContext.Provider value={value}>{children}</ChatSessionsContext.Provider>;

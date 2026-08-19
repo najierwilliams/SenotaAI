@@ -78,16 +78,18 @@
 - [x] Exercise an Obsidian-format canon note through the documented excerpt synchronization boundary before the final release sign-off.
 - [x] Add a repeatable protected import path that parses an Obsidian NPC note and synchronizes its bounded excerpt to Supabase.
 - [x] Invoke the deployed Obsidian canon import path and then verify a scoped NPC dialogue `200` response before final sign-off.
-- [ ] Add an access-controlled NPC management area for viewing and managing canon sources and player interaction memories without exposing them to public chat visitors.
+- [x] Add an access-controlled NPC management area for viewing and managing canon sources and player interaction memories without exposing them to public chat visitors.
 - [x] Add server-side APIs for listing, editing, deactivating, and auditing NPC canon and player-memory records under a dedicated administrator authorization boundary.
-- [ ] Add administrator-protected field updates for NPC canon and player-memory records beyond reversible active-state changes.
-- [ ] Add a scoped administration audit trail for canon and player-memory modifications, including automated coverage.
-- [ ] Add a trusted automatic Obsidian note synchronization worker triggered by a verified source-control change event.
-- [ ] Add persistent multi-chat sessions with create, rename, switch, and delete controls in the SenotaAI workspace sidebar.
-- [ ] Validate management access controls, synchronization signature checks, chat-history lifecycle, and deployed dashboard behavior before publication.
-- [ ] Correct GitHub canon-note path retrieval so nested `NPCs/*.md` files can be fetched by the verified production sync worker.
-- [ ] Add a dedicated least-privilege GitHub credential for SenotaAI’s server-side private canon-vault reads and verify end-to-end automatic import access.
-- [ ] Configure the existing JWT signing key in Vercel so valid NPC administrator sessions complete securely in production.
+- [x] Add administrator-protected field updates for NPC canon and player-memory records beyond reversible active-state changes.
+- [x] Add a scoped administration audit trail for canon and player-memory modifications, including automated coverage.
+- [x] Add a trusted automatic Obsidian note synchronization worker triggered by a verified source-control change event.
+- [x] Add persistent multi-chat sessions with create, rename, switch, and delete controls in the SenotaAI workspace sidebar.
+- [x] Validate management access controls, synchronization signature checks, chat-history lifecycle, and deployed dashboard behavior before publication.
+- [x] Correct GitHub canon-note path retrieval so nested `NPCs/*.md` files can be fetched by the verified production sync worker.
+- [x] Add a dedicated least-privilege GitHub credential for SenotaAI’s server-side private canon-vault reads and verify end-to-end automatic import access.
+- [x] Configure the existing JWT signing key in Vercel so valid NPC administrator sessions complete securely in production.
 - [x] Create a new private GitHub repository for the NPC canon vault, with a safe Obsidian-ready note structure and no player memories or runtime secrets.
-- [ ] Configure event-driven canon synchronization so private vault changes can be imported automatically through verified server-side processing.
-- [ ] Preserve confirmation gates for destructive code, repository, and deployment actions while allowing safe canon synchronization and memory recall to operate automatically.
+- [x] Configure event-driven canon synchronization so private vault changes can be imported automatically through verified server-side processing.
+- [x] Preserve confirmation gates for destructive code, repository, and deployment actions while allowing safe canon synchronization and memory recall to operate automatically.
+- [x] Add automated lifecycle coverage for browser-private chat-session creation, rename, switching, deletion, and persistence.
+- [x] Add rendered sidebar coverage that proves each conversation exposes accessible rename and delete controls.
