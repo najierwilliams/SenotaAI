@@ -57,6 +57,9 @@ export type AIChatBoxProps = {
    * Click to send directly
    */
   suggestedPrompts?: string[];
+
+  /** Optional action for explicitly selecting one user request as the canon-draft source. */
+  onSelectMessageForCanon?: (message: Message) => void;
 };
 
 /**
@@ -119,6 +122,7 @@ export function AIChatBox({
   height = "600px",
   emptyStateMessage = "Start a conversation with AI",
   suggestedPrompts,
+  onSelectMessageForCanon,
 }: AIChatBoxProps) {
   const [input, setInput] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -269,6 +273,16 @@ export function AIChatBox({
                           {message.content}
                         </p>
                       )}
+                      {message.role === "user" && onSelectMessageForCanon ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectMessageForCanon(message)}
+                          className="mt-2 border-t border-primary-foreground/15 pt-2 text-[11px] font-medium text-primary-foreground/80 transition hover:text-primary-foreground"
+                          aria-label={`Use this request for NPC canon: ${message.content.slice(0, 80)}`}
+                        >
+                          Use selected request for NPC canon
+                        </button>
+                      ) : null}
                     </div>
 
                     {message.role === "user" && (

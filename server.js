@@ -1587,8 +1587,8 @@ function changedNpcCanonPaths(payload) {
 async function getGitHubFile(repository, path2, ref) {
   const token = canonReadToken();
   if (!token) throw new Error("GitHub token is not configured for canon synchronization.");
-  const encodedPath = path2.split("/").map((segment) => encodeURIComponent(segment)).join("/");
-  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`, {
+  const encodedPath2 = path2.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodedPath2}?ref=${encodeURIComponent(ref)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "SenotaAI-canon-sync" }
   });
   if (!response.ok) throw new Error(`Unable to fetch changed canon note (${response.status}).`);
@@ -1749,6 +1749,7 @@ var systemRouter = router({
 
 // server/routers/agent.ts
 import { parse as parseCookie } from "cookie";
+import { TRPCError as TRPCError4 } from "@trpc/server";
 import { z as z2 } from "zod";
 
 // server/_core/heartbeat.ts
@@ -1938,6 +1939,148 @@ async function deactivateWorkspaceMemory(workspaceId, clientMemoryId) {
   return true;
 }
 
+// server/npcMemory/canonDrafts.ts
+var DEFAULT_CANON_REPOSITORY2 = "najierwilliams/SenotaAI-NPC-Canon";
+var CANON_BRANCH = "main";
+var sensitiveInputPattern = /\b(?:api[_ -]?key|access[_ -]?token|secret|password|private[_ -]?key)\b\s*[:=]|\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|vcp_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})\b|-----BEGIN [A-Z ]*PRIVATE KEY-----/i;
+function canonRepository2() {
+  return process.env.GITHUB_CANON_REPOSITORY?.trim() || DEFAULT_CANON_REPOSITORY2;
+}
+function canonWriteToken() {
+  return process.env.NPC_CANON_WRITE_TOKEN?.trim() ?? "";
+}
+function isNpcCanonPublishingConfigured() {
+  return Boolean(canonWriteToken());
+}
+function canonicalNpcPath(npcId) {
+  const normalized = npcId.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{1,78}$/.test(normalized)) {
+    throw new Error("NPC ID must use lowercase letters, numbers, and hyphens (2\u201379 characters).");
+  }
+  return `NPCs/${normalized}.md`;
+}
+function splitRepository2(repository) {
+  const [owner, repo] = repository.split("/");
+  if (!owner || !repo || repository.split("/").length !== 2) throw new Error("Canon repository must use owner/repository format.");
+  return { owner, repo };
+}
+function encodedPath(path2) {
+  return path2.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+}
+async function githubRequest2(path2, init = {}) {
+  const token = canonWriteToken();
+  if (!token) throw new Error("Canon publishing is not configured. Add the dedicated vault write token first.");
+  const response = await fetch(`https://api.github.com${path2}`, {
+    ...init,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...init.headers ?? {}
+    },
+    signal: AbortSignal.timeout(6e4)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || `GitHub canon-vault request failed (${response.status}).`);
+  return payload;
+}
+async function readCanonNote(path2) {
+  const { owner, repo } = splitRepository2(canonRepository2());
+  try {
+    const response = await githubRequest2(`/repos/${owner}/${repo}/contents/${encodedPath(path2)}?ref=${CANON_BRANCH}`);
+    if (response.encoding !== "base64" || !response.content) throw new Error("The existing NPC note was not returned as a text file.");
+    return {
+      sha: response.sha,
+      content: Buffer.from(response.content.replace(/\s/g, ""), "base64").toString("utf8")
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not Found")) return null;
+    throw error;
+  }
+}
+function normalizeDraftOutput(content) {
+  const withoutFence = content.trim().replace(/^```(?:markdown|md)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const summaryMatch = withoutFence.match(/^<!--\s*SenotaAI draft summary:\s*([\s\S]*?)-->\s*/i);
+  const summary = summaryMatch?.[1]?.trim().slice(0, 800) || "Review the proposed canon note before publishing it.";
+  return { summary, noteContent: withoutFence.replace(/^<!--\s*SenotaAI draft summary:\s*[\s\S]*?-->\s*/i, "").trim() };
+}
+function validateDraftInput(npcId, displayName, request2) {
+  if (!displayName.trim() || displayName.trim().length > 120) throw new Error("Display name is required and must be 120 characters or fewer.");
+  if (!request2.trim() || request2.trim().length > 12e3) throw new Error("Describe the canon change in 1\u201312,000 characters.");
+  if (sensitiveInputPattern.test(request2)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
+  return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request2.trim() };
+}
+async function createNpcCanonDraft(input) {
+  const draftInput = validateDraftInput(input.npcId, input.displayName, input.request);
+  const path2 = canonicalNpcPath(draftInput.npcId);
+  const existing = await readCanonNote(path2);
+  const existingContent = existing?.content.slice(0, 24e3) || "No existing note. Create the NPC note from the supplied request.";
+  const response = await chatWithOllama({
+    messages: [
+      {
+        role: "system",
+        content: `You create careful, private Obsidian NPC canon drafts. Return ONLY a short HTML comment followed by one valid Markdown note. The first line must be <!-- SenotaAI draft summary: concise statement of exactly what will be added or changed -->. Then write YAML frontmatter with npc_id: ${draftInput.npcId} and display_name: ${draftInput.displayName}, followed by meaningful canon sections including ## Runtime excerpt. Preserve valid existing canon unless the requested change explicitly revises it. Do not invent uncertain facts, add player-specific memories, include secrets, or use Markdown code fences.`
+      },
+      {
+        role: "user",
+        content: `NPC ID: ${draftInput.npcId}
+Display name: ${draftInput.displayName}
+
+Requested canon change:
+${draftInput.request}
+
+Existing canon note:
+${existingContent}`
+      }
+    ]
+  });
+  const generated = normalizeDraftOutput(response.content);
+  const parsed = parseObsidianNpcNote(generated.noteContent, path2);
+  if (parsed.npcId !== draftInput.npcId || parsed.displayName !== draftInput.displayName) {
+    throw new Error("The generated draft did not preserve the requested NPC ID and display name. Please try again.");
+  }
+  return {
+    npcId: parsed.npcId,
+    displayName: parsed.displayName,
+    path: path2,
+    noteContent: generated.noteContent,
+    summary: generated.summary,
+    sourceSha: existing?.sha ?? null,
+    excerptLength: parsed.canonExcerpt.length
+  };
+}
+async function publishNpcCanonDraft(input) {
+  const path2 = canonicalNpcPath(input.npcId);
+  const parsed = parseObsidianNpcNote(input.noteContent, path2);
+  if (parsed.npcId !== input.npcId.trim().toLowerCase() || parsed.displayName !== input.displayName.trim()) {
+    throw new Error("The approved note must retain the requested NPC ID and display name.");
+  }
+  const current = await readCanonNote(path2);
+  if ((current?.sha ?? null) !== input.sourceSha) {
+    throw new Error("This NPC note changed in the vault while you were reviewing it. Generate a fresh draft before publishing.");
+  }
+  const { owner, repo } = splitRepository2(canonRepository2());
+  const result = await githubRequest2(`/repos/${owner}/${repo}/contents/${encodedPath(path2)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: `canon: update ${parsed.displayName}`,
+      content: Buffer.from(input.noteContent, "utf8").toString("base64"),
+      branch: CANON_BRANCH,
+      ...current?.sha ? { sha: current.sha } : {}
+    })
+  });
+  await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit"]);
+  return {
+    ok: true,
+    npcId: parsed.npcId,
+    path: result.content?.path || path2,
+    commitSha: result.commit?.sha || null,
+    excerptLength: parsed.canonExcerpt.length,
+    sync: "The signed GitHub webhook will import this note into Supabase automatically."
+  };
+}
+
 // server/routers/agent.ts
 var executionModeSchema = z2.enum(["confirm", "auto"]);
 var cronSchema = z2.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -1954,6 +2097,13 @@ var chatMemorySchema = z2.object({
 function currentSessionToken(cookieHeader) {
   return parseCookie(cookieHeader ?? "")[COOKIE_NAME] ?? "";
 }
+var npcAdminProcedure = publicProcedure.use(async ({ ctx, next }) => {
+  const token = parseCookie(ctx.req.headers.cookie ?? "")[NPC_ADMIN_COOKIE];
+  if (!await isValidNpcAdminSession(token)) {
+    throw new TRPCError4({ code: "UNAUTHORIZED", message: "Unlock NPC management at /npc before drafting or publishing canon." });
+  }
+  return next();
+});
 var agentRouter = router({
   chat: publicProcedure.input(z2.object({
     model: z2.string().trim().min(1).max(128).optional(),
@@ -1996,6 +2146,25 @@ Use these notes only when they help answer the user. Never reveal them unless th
     npcMemoryConfigured: isNpcMemoryCloudReady(),
     schedulerReady: process.env.NODE_ENV === "production"
   })),
+  canon: router({
+    draft: npcAdminProcedure.input(z2.object({
+      npcId: z2.string().trim().min(2).max(79),
+      displayName: z2.string().trim().min(1).max(120),
+      request: z2.string().trim().min(1).max(12e3)
+    })).mutation(async ({ input }) => {
+      if (!isNpcCanonPublishingConfigured()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
+      return createNpcCanonDraft(input);
+    }),
+    publish: npcAdminProcedure.input(z2.object({
+      npcId: z2.string().trim().min(2).max(79),
+      displayName: z2.string().trim().min(1).max(120),
+      noteContent: z2.string().trim().min(12).max(1e5),
+      sourceSha: z2.string().min(1).nullable()
+    })).mutation(async ({ input }) => {
+      if (!isNpcCanonPublishingConfigured()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
+      return publishNpcCanonDraft(input);
+    })
+  }),
   settings: router({
     get: protectedProcedure.query(({ ctx }) => getOrCreateAgentSettings(ctx.user.id)),
     update: protectedProcedure.input(z2.object({

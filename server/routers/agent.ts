@@ -1,4 +1,5 @@
 import { parse as parseCookie } from "cookie";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { createHeartbeatJob, updateHeartbeatJob } from "../_core/heartbeat";
@@ -24,6 +25,8 @@ import { decideApprovalAndQueue } from "../agent/approvalWorkflow";
 import { chatWithOllama } from "../agent/ollama";
 import { deactivateWorkspaceMemory, listWorkspaceMemories, syncWorkspaceMemory } from "../workspaceMemoryDb";
 import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
+import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
+import { createNpcCanonDraft, isNpcCanonPublishingConfigured, publishNpcCanonDraft } from "../npcMemory/canonDrafts";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
 const cronSchema = z.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -42,6 +45,14 @@ const chatMemorySchema = z.object({
 function currentSessionToken(cookieHeader: string | undefined) {
   return parseCookie(cookieHeader ?? "")[COOKIE_NAME] ?? "";
 }
+
+const npcAdminProcedure = publicProcedure.use(async ({ ctx, next }) => {
+  const token = parseCookie(ctx.req.headers.cookie ?? "")[NPC_ADMIN_COOKIE];
+  if (!await isValidNpcAdminSession(token)) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Unlock NPC management at /npc before drafting or publishing canon." });
+  }
+  return next();
+});
 
 export const agentRouter = router({
   chat: publicProcedure
@@ -87,6 +98,26 @@ export const agentRouter = router({
     npcMemoryConfigured: isNpcMemoryCloudReady(),
     schedulerReady: process.env.NODE_ENV === "production",
   })),
+
+  canon: router({
+    draft: npcAdminProcedure.input(z.object({
+      npcId: z.string().trim().min(2).max(79),
+      displayName: z.string().trim().min(1).max(120),
+      request: z.string().trim().min(1).max(12_000),
+    })).mutation(async ({ input }) => {
+      if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
+      return createNpcCanonDraft(input);
+    }),
+    publish: npcAdminProcedure.input(z.object({
+      npcId: z.string().trim().min(2).max(79),
+      displayName: z.string().trim().min(1).max(120),
+      noteContent: z.string().trim().min(12).max(100_000),
+      sourceSha: z.string().min(1).nullable(),
+    })).mutation(async ({ input }) => {
+      if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
+      return publishNpcCanonDraft(input);
+    }),
+  }),
 
   settings: router({
     get: protectedProcedure.query(({ ctx }) => getOrCreateAgentSettings(ctx.user.id)),

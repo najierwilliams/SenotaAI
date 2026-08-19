@@ -1,6 +1,7 @@
 import { AIChatBox } from "@/components/AIChatBox";
 import { useChatSessions } from "@/contexts/ChatSessionsContext";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
   addWorkspaceMemory,
@@ -13,7 +14,7 @@ import {
   type MemoryCategory,
   type WorkspaceMemory,
 } from "@/lib/workspaceMemory";
-import { BrainCircuit, BrainCog, Github, Plus, Rocket, Search, Sparkles, Trash2 } from "lucide-react";
+import { BookOpenCheck, BrainCircuit, BrainCog, FilePenLine, Github, Plus, Rocket, Search, Send, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 const suggestedPrompts = [
@@ -21,6 +22,20 @@ const suggestedPrompts = [
   "Review this coding task and propose the safest execution plan.",
   "Help me debug an error in my project.",
 ];
+
+type CanonDraft = {
+  npcId: string;
+  displayName: string;
+  path: string;
+  noteContent: string;
+  summary: string;
+  sourceSha: string | null;
+  excerptLength: number;
+};
+
+export function canonRequestFromSelectedMessage(selectedRequest: string | undefined, existingDraftRequest: string, latestUserMessage: string) {
+  return selectedRequest ?? (existingDraftRequest || latestUserMessage);
+}
 
 export default function Home() {
   const { activeSession, updateMessages } = useChatSessions();
@@ -32,11 +47,21 @@ export default function Home() {
   const [memorySearch, setMemorySearch] = useState("");
   const [memoryError, setMemoryError] = useState<string | null>(null);
   const [isAddingMemory, setIsAddingMemory] = useState(false);
+  const [isCanonDialogOpen, setIsCanonDialogOpen] = useState(false);
+  const [canonNpcId, setCanonNpcId] = useState("");
+  const [canonDisplayName, setCanonDisplayName] = useState("");
+  const [canonRequest, setCanonRequest] = useState("");
+  const [canonDraft, setCanonDraft] = useState<CanonDraft | null>(null);
+  const [canonDraftError, setCanonDraftError] = useState<string | null>(null);
+  const [canonPublishedMessage, setCanonPublishedMessage] = useState<string | null>(null);
+  const [isNpcAdminUnlocked, setIsNpcAdminUnlocked] = useState(false);
   const chat = trpc.agent.chat.useMutation();
   const { data: connections } = trpc.agent.connections.useQuery(undefined, { retry: false });
   const cloudMemory = trpc.agent.workspaceMemory.list.useQuery({ workspaceId }, { retry: false });
   const syncMemory = trpc.agent.workspaceMemory.sync.useMutation();
   const removeCloudMemory = trpc.agent.workspaceMemory.remove.useMutation();
+  const createCanonDraft = trpc.agent.canon.draft.useMutation();
+  const publishCanonDraft = trpc.agent.canon.publish.useMutation();
 
   useEffect(() => {
     if (!cloudMemory.data?.available) return;
@@ -49,6 +74,13 @@ export default function Home() {
       return next;
     });
   }, [cloudMemory.data]);
+
+  useEffect(() => {
+    fetch("/api/npc/admin/status", { credentials: "include" })
+      .then((response) => response.json().catch(() => ({})))
+      .then((status) => setIsNpcAdminUnlocked(Boolean(status.authenticated)))
+      .catch(() => setIsNpcAdminUnlocked(false));
+  }, []);
 
   const shownMemories = useMemo(() => {
     const query = memorySearch.trim();
@@ -100,6 +132,37 @@ export default function Home() {
     removeCloudMemory.mutate({ workspaceId, memoryId });
   };
 
+  const openCanonDraft = (selectedRequest?: string) => {
+    const latestUserMessage = [...activeSession.messages].reverse().find((message) => message.role === "user")?.content ?? "";
+    setCanonRequest(canonRequestFromSelectedMessage(selectedRequest, canonRequest, latestUserMessage));
+    setCanonDraft(null);
+    setCanonDraftError(null);
+    setCanonPublishedMessage(null);
+    setIsCanonDialogOpen(true);
+  };
+
+  const generateCanonDraft = () => {
+    setCanonDraftError(null);
+    createCanonDraft.mutate({ npcId: canonNpcId, displayName: canonDisplayName, request: canonRequest }, {
+      onSuccess: (draft) => setCanonDraft(draft),
+      onError: (error) => setCanonDraftError(error.message),
+    });
+  };
+
+  const publishCanon = () => {
+    if (!canonDraft) return;
+    setCanonDraftError(null);
+    publishCanonDraft.mutate({
+      npcId: canonDraft.npcId,
+      displayName: canonDraft.displayName,
+      noteContent: canonDraft.noteContent,
+      sourceSha: canonDraft.sourceSha,
+    }, {
+      onSuccess: (result) => setCanonPublishedMessage(`Published ${result.path}. ${result.sync}`),
+      onError: (error) => setCanonDraftError(error.message),
+    });
+  };
+
   return (
     <div className="senota-page mx-auto flex w-full max-w-6xl flex-col gap-5">
       <section className="senota-hero-grid relative overflow-hidden rounded-[1.75rem] border border-cyan-300/15 bg-card/70 px-6 py-7 sm:px-8">
@@ -123,7 +186,12 @@ export default function Home() {
             placeholder="Ask SenotaAI to plan, code, or debug..."
             emptyStateMessage="Start a direct conversation with SenotaAI."
             suggestedPrompts={suggestedPrompts}
+            onSelectMessageForCanon={(message) => openCanonDraft(message.content)}
           />
+          <div className="mt-3 flex flex-col gap-2 rounded-xl border border-violet-300/15 bg-violet-300/[0.035] p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5"><div className="mt-0.5 grid size-8 place-items-center rounded-lg bg-violet-300/10 text-violet-200"><BookOpenCheck className="size-4" /></div><div><p className="text-sm font-medium text-violet-100">Turn a chat idea into NPC canon</p><p className="mt-0.5 text-xs leading-5 text-slate-500">SenotaAI drafts a private Obsidian note; you can edit, approve, or discard it before anything is published.</p></div></div>
+            <button onClick={() => openCanonDraft()} disabled={!isNpcAdminUnlocked} title={isNpcAdminUnlocked ? "Create a reviewable canon draft" : "Unlock NPC management first"} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-violet-300/25 bg-violet-300/10 px-3 py-2 text-xs font-semibold text-violet-100 transition hover:bg-violet-300/20 disabled:cursor-not-allowed disabled:opacity-45"><FilePenLine className="size-3.5" /> {isNpcAdminUnlocked ? "Draft NPC canon" : "Unlock NPC management first"}</button>
+          </div>
           {chat.error ? <p className="mt-3 rounded-xl border border-red-400/20 bg-red-400/5 px-4 py-3 text-sm text-red-200">{chat.error.message}</p> : null}
         </div>
         <aside className="space-y-3">
@@ -148,6 +216,28 @@ export default function Home() {
           <p className="rounded-xl border border-white/10 bg-white/[0.025] p-4 text-xs leading-5 text-slate-500">Saved context stays browser-owned. If a project database is configured, SenotaAI synchronizes the same workspace vault; passwords and API keys are blocked in both modes.</p>
         </aside>
       </section>
+      <Dialog open={isCanonDialogOpen} onOpenChange={setIsCanonDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto border-violet-300/20 bg-slate-950 text-slate-100 sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl text-white"><BookOpenCheck className="size-5 text-violet-200" /> Draft NPC canon for review</DialogTitle>
+            <DialogDescription className="leading-6 text-slate-400">Nothing is sent to Obsidian or GitHub while you are drafting. A publish occurs only after you review the summary and click the final confirmation button.</DialogDescription>
+          </DialogHeader>
+          {!canonDraft ? <div className="space-y-4 py-2">
+            <div className="grid gap-3 sm:grid-cols-2"><label className="space-y-1.5 text-xs font-medium text-slate-300">NPC ID<input value={canonNpcId} onChange={(event) => setCanonNpcId(event.target.value)} placeholder="mira-vale" className="w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/60" /></label><label className="space-y-1.5 text-xs font-medium text-slate-300">NPC display name<input value={canonDisplayName} onChange={(event) => setCanonDisplayName(event.target.value)} placeholder="Mira Vale" className="w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-violet-300/60" /></label></div>
+            <label className="block space-y-1.5 text-xs font-medium text-slate-300">What should be permanent NPC canon?<textarea value={canonRequest} onChange={(event) => setCanonRequest(event.target.value)} placeholder="Describe the lore, personality, relationship, place, or dialogue boundary you want added..." className="min-h-36 w-full resize-y rounded-lg border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none focus:border-violet-300/60" /></label>
+            <p className="rounded-lg border border-amber-300/15 bg-amber-300/[0.04] px-3 py-2 text-xs leading-5 text-amber-100/90">Only permanent NPC lore belongs here. Player histories, secrets, tokens, passwords, and raw conversation transcripts are blocked.</p>
+          </div> : <div className="space-y-4 py-2">
+            <div className="rounded-xl border border-violet-300/20 bg-violet-300/[0.06] p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200">SenotaAI’s summary of this proposed change</p><p className="mt-2 text-sm leading-6 text-slate-200">{canonDraft.summary}</p><p className="mt-3 text-xs text-slate-500">Target: <span className="font-mono text-violet-200">{canonDraft.path}</span> · Runtime excerpt: {canonDraft.excerptLength.toLocaleString()} characters</p></div>
+            <label className="block space-y-1.5 text-xs font-medium text-slate-300">Review and edit the complete Obsidian note<textarea value={canonDraft.noteContent} onChange={(event) => setCanonDraft((current) => current ? { ...current, noteContent: event.target.value } : current)} className="min-h-80 w-full resize-y rounded-lg border border-white/10 bg-black/25 p-3 font-mono text-xs leading-5 text-slate-200 outline-none focus:border-violet-300/60" /></label>
+          </div>}
+          {canonDraftError ? <p className="rounded-lg border border-red-300/20 bg-red-300/[0.06] px-3 py-2 text-sm text-red-200">{canonDraftError}</p> : null}
+          {canonPublishedMessage ? <p className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 text-sm leading-6 text-emerald-100">{canonPublishedMessage}</p> : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            {!canonPublishedMessage ? <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Discard</button> : <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Close</button>}
+            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!canonNpcId.trim() || !canonDisplayName.trim() || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : "Generate review draft"}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => setCanonDraft(null)} disabled={publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={publishCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{publishCanonDraft.isPending ? "Publishing…" : "Confirm and send to NPC canon"}</button></div> : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -96,3 +96,11 @@
 - [x] Set and verify the production NPC administrator password through protected configuration.
 - [x] Diagnose and fix the production dashboard report that the NPC administrator password is unconfigured.
 - [x] Correct the NPC management status handling so a normal unauthenticated response can still display a configured administrator password.
+- [x] Add a direct-chat control that creates a reviewable NPC canon draft from a selected SenotaAI request.
+- [x] Require explicit user review, edit, and confirmation before any canon draft is written to the private Obsidian GitHub vault.
+- [x] Add a server-side least-privilege publishing path that creates or updates NPC canon notes without exposing credentials to the public workspace.
+- [x] Document how to open the private GitHub canon vault as an Obsidian vault for reading and authoring NPC brain notes.
+- [ ] Validate the complete draft, approval, vault-write, webhook-sync, and Supabase-import path before publication.
+- [x] Add per-message canon selection controls and coverage proving only the selected chat message seeds the review draft.
+- [x] Add interaction coverage proving that a selected user message, and no non-selected message, populates the canon-draft request field.
+- [x] Add a browser-like test environment for the canon-draft click-and-dialog interaction coverage.
