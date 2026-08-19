@@ -203,6 +203,34 @@ export const agentNotifications = mysqlTable(
 export type AgentTask = typeof agentTasks.$inferSelect;
 export type AgentStep = typeof agentSteps.$inferSelect;
 export type AgentMemory = typeof agentMemories.$inferSelect;
+
+/**
+ * Optional cloud synchronization for the public no-login workspace memory vault.
+ * The browser keeps the workspace ID private in local storage; no account or secrets
+ * are stored in these records.
+ */
+export const workspaceMemories = mysqlTable(
+  "workspace_memories",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    workspaceId: varchar("workspace_id", { length: 96 }).notNull(),
+    clientMemoryId: varchar("client_memory_id", { length: 100 }).notNull(),
+    projectKey: varchar("project_key", { length: 128 }).notNull().default("senota-ai"),
+    source: varchar("source", { length: 32 }).notNull().default("device-sync"),
+    category: varchar("category", { length: 48 }).notNull(),
+    content: text("content").notNull(),
+    importance: int("importance").notNull().default(3),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    index("workspace_memories_scope_idx").on(table.workspaceId, table.projectKey, table.isActive),
+    index("workspace_memories_client_idx").on(table.workspaceId, table.clientMemoryId),
+  ],
+);
+
+export type WorkspaceMemoryRecord = typeof workspaceMemories.$inferSelect;
 export type AgentApproval = typeof agentApprovals.$inferSelect;
 export type AgentSchedule = typeof agentSchedules.$inferSelect;
 export type AgentSettings = typeof agentSettings.$inferSelect;

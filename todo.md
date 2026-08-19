@@ -48,6 +48,17 @@
 - [x] Repair Vercel SPA fallback routing so deployed `/api/*` requests reach the SenotaAI serverless function.
 - [x] Remove the password setup, login, logout, and session gate so the SenotaAI dashboard opens directly.
 - [x] Make direct dashboard startup and agent controls handle an unavailable database without blocking the workspace UI.
-- [ ] Verify direct public dashboard access and functional agent controls on the deployed Vercel site.
-- [ ] Publish the direct-access release through a verified GitHub or Vercel deployment path and confirm the public site has no login gate.
+- [x] Verify direct public dashboard access and functional agent controls on the deployed Vercel site.
+- [x] Publish the direct-access release through a verified GitHub or Vercel deployment path and confirm the public site has no login gate.
 - [x] Remove or gracefully redirect database-dependent routes in direct-chat mode so no public navigation path requires the unavailable database.
+- [x] Configure Ollama Cloud endpoint and API key in the Vercel production environment, then verify the deployed direct chat returns a live response.
+- [x] Configure the production GitHub and Vercel connector tokens so the direct workspace shows their actual readiness state.
+- [x] Send a message through the deployed browser chat interface and verify the assistant response renders in the page.
+- [x] Add project-scoped persistent memory storage with categories, importance, source, and timestamps. Superseded by the privacy-safe device-scoped memory vault used by the no-login workspace.
+- [x] Retrieve relevant approved memories in the direct Ollama chat context without exposing secrets.
+- [x] Add direct-workspace controls to save, review, search, and delete SenotaAI memories.
+- [ ] Test memory lifecycle behavior and deploy the verified memory-enabled workspace to GitHub and Vercel.
+- [x] Implement device-scoped browser memory with explicit saves, relevance-based recall, and secret-pattern blocking for the public no-login workspace.
+- [ ] Add project-scoped cloud-memory records with workspace identity, source metadata, and safe device-vault fallback when the production database is unavailable.
+- [x] Add project-scoped cloud-memory records with workspace identity, source metadata, and safe device-vault fallback when the production database is unavailable.
+- [ ] Publish the memory-enabled workspace and verify device-private memory behavior on the public Vercel site.
