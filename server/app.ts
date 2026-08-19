@@ -9,14 +9,22 @@ import {
 } from "./agent/db";
 import { executeScheduledRun } from "./agent/scheduledExecution";
 import { chatWithOllama } from "./agent/ollama";
-import { buildNpcDialogueContext, isNpcMemoryCloudReady, rememberPlayerNpcInteraction } from "./npcMemory/supabase";
+import { buildNpcDialogueContext, isNpcMemoryCloudReady, listNpcCanonSourcesForAdmin, listPlayerNpcMemoriesForAdmin, rememberPlayerNpcInteraction, updateNpcCanonForAdmin, updatePlayerNpcMemoryForAdmin } from "./npcMemory/supabase";
+import { listNpcAdminAudits, recordNpcAdminAudit } from "./npcMemory/adminAudit";
 import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
+import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
+import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
+import { getSessionCookieOptions } from "./_core/cookies";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
 import { registerOAuthRoutes } from "./_core/oauth";
 import { sdk } from "./_core/sdk";
 import { registerStorageProxy } from "./_core/storageProxy";
+
+function readCookie(header: string | undefined, name: string) {
+  return header?.split(";").map(item => item.trim()).find(item => item.startsWith(`${name}=`))?.slice(name.length + 1);
+}
 
 /**
  * Builds the production API application without importing local Vite helpers.
@@ -24,10 +32,93 @@ import { registerStorageProxy } from "./_core/storageProxy";
  */
 export function createApp() {
   const app = express();
-  app.use(express.json({ limit: "50mb" }));
+  app.use(express.json({ limit: "50mb", verify: (req, _res, buffer) => { (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer); } }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  app.post("/api/npc/admin/session", async (req, res) => {
+    if (!isNpcAdminConfigured()) return res.status(503).json({ error: "npc-admin-not-configured" });
+    const password = req.body?.password;
+    if (typeof password !== "string" || !isValidNpcAdminPassword(password)) return res.status(401).json({ error: "invalid-administrator-password" });
+    res.cookie(NPC_ADMIN_COOKIE, await createNpcAdminSession(), { ...getSessionCookieOptions(req), maxAge: 8 * 60 * 60 * 1000 });
+    return res.status(200).json({ ok: true });
+  });
+
+  const requireNpcAdmin = async (req: express.Request, res: express.Response) => {
+    const token = readCookie(req.header("cookie"), NPC_ADMIN_COOKIE);
+    if (await isValidNpcAdminSession(token)) return true;
+    res.status(401).json({ error: "npc-administrator-session-required" });
+    return false;
+  };
+
+  app.get("/api/npc/admin/status", async (req, res) => {
+    const token = readCookie(req.header("cookie"), NPC_ADMIN_COOKIE);
+    return res.status(await isValidNpcAdminSession(token) ? 200 : 401).json({ configured: isNpcAdminConfigured(), authenticated: await isValidNpcAdminSession(token) });
+  });
+
+  app.get("/api/npc/admin/canon", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      return res.json({ canon: await listNpcCanonSourcesForAdmin() });
+    } catch (error) {
+      return res.status(503).json({ error: error instanceof Error ? error.message : "NPC canon is unavailable." });
+    }
+  });
+
+  app.patch("/api/npc/admin/canon/:npcId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const patch = req.body ?? {};
+      await updateNpcCanonForAdmin(req.params.npcId, patch);
+      await recordNpcAdminAudit("update", "canon", req.params.npcId, Object.keys(patch));
+      return res.json({ ok: true });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update NPC canon." });
+    }
+  });
+
+  app.get("/api/npc/admin/memories", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const npcId = typeof req.query.npcId === "string" ? req.query.npcId : undefined;
+      const playerId = typeof req.query.playerId === "string" ? req.query.playerId : undefined;
+      const includeInactive = req.query.includeInactive === "true";
+      return res.json({ memories: await listPlayerNpcMemoriesForAdmin({ npcId, playerId, includeInactive }) });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "NPC memories are unavailable." });
+    }
+  });
+
+  app.patch("/api/npc/admin/memories/:memoryId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const patch = req.body ?? {};
+      await updatePlayerNpcMemoryForAdmin(req.params.memoryId, patch);
+      await recordNpcAdminAudit("update", "memory", req.params.memoryId, Object.keys(patch));
+      return res.json({ ok: true });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update NPC memory." });
+    }
+  });
+
+  app.get("/api/npc/admin/audit", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    const audits = await listNpcAdminAudits();
+    return res.json({ audits: audits ?? [], available: audits !== null });
+  });
+
+  app.post("/api/npc/canon/github-webhook", async (req, res) => {
+    const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody;
+    if (!isGitHubCanonWebhookConfigured() || !rawBody || !verifyGitHubCanonSignature(rawBody, req.header("x-hub-signature-256"))) return res.status(401).json({ error: "invalid-github-webhook-signature" });
+    if (req.header("x-github-event") === "ping") return res.status(200).json({ ok: true, configured: true });
+    if (req.header("x-github-event") !== "push") return res.status(202).json({ ok: true, skipped: "unsupported-event" });
+    try {
+      return res.status(202).json(await processGitHubCanonPush(req.body));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "GitHub canon synchronization failed." });
+    }
+  });
 
   app.post("/api/npc/canon/sync", async (req, res) => {
     if (!isAuthorizedNpcGameRequest(req.header("x-senota-game-key"))) return res.status(401).json({ error: "unauthorized-game-backend" });

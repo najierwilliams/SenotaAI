@@ -12,12 +12,14 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bot, MessageSquare, PanelLeft } from "lucide-react";
+import { Bot, Database, MessageSquare, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useChatSessions } from "@/contexts/ChatSessionsContext";
 
 const menuItems = [
   { icon: MessageSquare, label: "AI chat", path: "/" },
+  { icon: Database, label: "NPC management", path: "/npc" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -68,6 +70,7 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
+  const { sessions, activeSession, createSession, selectSession, renameSession, deleteSession } = useChatSessions();
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -148,6 +151,19 @@ function DashboardLayoutContent({
                 );
               })}
             </SidebarMenu>
+            <div className="mt-4 px-3 group-data-[collapsible=icon]:hidden">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Conversations</p>
+                <button onClick={createSession} className="grid size-6 place-items-center rounded-md text-cyan-300 transition hover:bg-cyan-300/10" aria-label="New conversation"><Plus className="size-3.5" /></button>
+              </div>
+              <div className="space-y-1">
+                {sessions.slice(0, 12).map(session => <div key={session.id} className={`group flex items-center gap-1 rounded-lg ${activeSession.id === session.id ? "bg-cyan-300/10" : "hover:bg-white/5"}`}>
+                  <button onClick={() => { selectSession(session.id); setLocation("/"); }} className={`min-w-0 flex-1 truncate px-2.5 py-2 text-left text-xs transition ${activeSession.id === session.id ? "text-cyan-100" : "text-slate-400"}`} title={session.title}>{session.title}</button>
+                  <button onClick={() => { const next = window.prompt("Rename conversation", session.title); if (next !== null) renameSession(session.id, next); }} className="grid size-6 place-items-center rounded text-slate-600 opacity-100 transition hover:text-cyan-200 sm:opacity-0 sm:group-hover:opacity-100" aria-label={`Rename ${session.title}`}><Pencil className="size-3" /></button>
+                  <button onClick={() => deleteSession(session.id)} className="mr-1 grid size-6 place-items-center rounded text-slate-600 opacity-100 transition hover:text-red-300 sm:opacity-0 sm:group-hover:opacity-100" aria-label={`Delete ${session.title}`}><Trash2 className="size-3" /></button>
+                </div>)}
+              </div>
+            </div>
           </SidebarContent>
 
           <SidebarFooter className="p-3">

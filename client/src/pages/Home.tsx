@@ -1,4 +1,5 @@
-import { AIChatBox, type Message } from "@/components/AIChatBox";
+import { AIChatBox } from "@/components/AIChatBox";
+import { useChatSessions } from "@/contexts/ChatSessionsContext";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import {
@@ -15,8 +16,6 @@ import {
 import { BrainCircuit, BrainCog, Github, Plus, Rocket, Search, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-type DirectMessage = { role: "user" | "assistant"; content: string };
-
 const suggestedPrompts = [
   "Plan a production-ready React app for my idea.",
   "Review this coding task and propose the safest execution plan.",
@@ -24,7 +23,7 @@ const suggestedPrompts = [
 ];
 
 export default function Home() {
-  const [messages, setMessages] = useState<DirectMessage[]>([]);
+  const { activeSession, updateMessages } = useChatSessions();
   const [workspaceId] = useState(() => getWorkspaceId());
   const [memories, setMemories] = useState<WorkspaceMemory[]>(() => loadWorkspaceMemories());
   const [memoryDraft, setMemoryDraft] = useState("");
@@ -58,12 +57,16 @@ export default function Home() {
   }, [memories, memorySearch]);
 
   const sendMessage = (content: string) => {
-    const nextMessages = [...messages, { role: "user" as const, content }];
-    setMessages(nextMessages);
+    const sessionId = activeSession.id;
+    const nextMessages: Array<{ role: "user" | "assistant"; content: string }> = [
+      ...activeSession.messages.filter((message): message is { role: "user" | "assistant"; content: string } => message.role !== "system"),
+      { role: "user", content },
+    ];
+    updateMessages(sessionId, nextMessages);
     const recalledMemory = findRelevantMemories(memories, content);
     chat.mutate({ messages: nextMessages, memory: recalledMemory }, {
       onSuccess: response => {
-        setMessages(current => [...current, {
+        updateMessages(sessionId, [...nextMessages, {
           role: "assistant",
           content: response.content || "I completed the reasoning pass but did not receive a displayable response. Please try again.",
         }]);
@@ -113,7 +116,7 @@ export default function Home() {
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_250px]">
         <div className="min-w-0">
           <AIChatBox
-            messages={messages}
+            messages={activeSession.messages}
             onSendMessage={sendMessage}
             isLoading={chat.isPending}
             height="min(66vh, 680px)"

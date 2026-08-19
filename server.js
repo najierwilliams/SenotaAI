@@ -28,7 +28,7 @@ var init_env = __esm({
 
 // drizzle/schema.ts
 import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
-var users, ownerAccess, taskStatuses, executionModes, stepStatuses, approvalStatuses, scheduleStatuses, notificationStatuses, agentTasks, agentSteps, agentMemories, agentApprovals, agentSchedules, agentSettings, agentNotifications, workspaceMemories;
+var users, ownerAccess, taskStatuses, executionModes, stepStatuses, approvalStatuses, scheduleStatuses, notificationStatuses, agentTasks, agentSteps, agentMemories, agentApprovals, agentSchedules, agentSettings, agentNotifications, workspaceMemories, npcAdminAudits;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
     "use strict";
@@ -222,6 +222,18 @@ var init_schema = __esm({
         index("workspace_memories_scope_idx").on(table.workspaceId, table.projectKey, table.isActive),
         index("workspace_memories_client_idx").on(table.workspaceId, table.clientMemoryId)
       ]
+    );
+    npcAdminAudits = mysqlTable(
+      "npc_admin_audits",
+      {
+        id: int("id").autoincrement().primaryKey(),
+        action: varchar("action", { length: 64 }).notNull(),
+        recordType: varchar("record_type", { length: 32 }).notNull(),
+        recordId: varchar("record_id", { length: 128 }).notNull(),
+        fields: json("fields"),
+        createdAt: bigint("created_at", { mode: "number" }).notNull()
+      },
+      (table) => [index("npc_admin_audits_created_idx").on(table.createdAt), index("npc_admin_audits_record_idx").on(table.recordType, table.recordId)]
     );
   }
 });
@@ -1303,6 +1315,80 @@ async function request(path2, init) {
 function isNpcMemoryCloudReady() {
   return Boolean(config());
 }
+async function listNpcCanonSourcesForAdmin(limit = 100) {
+  const params = new URLSearchParams({
+    select: "npc_id,display_name,obsidian_path,canon_hash,canon_excerpt,is_active,updated_at",
+    order: "updated_at.desc",
+    limit: String(Math.min(Math.max(limit, 1), 200))
+  });
+  const records = await request(`npc_canon_sources?${params.toString()}`);
+  return (records ?? []).map((record) => ({
+    npcId: String(record.npc_id),
+    displayName: String(record.display_name),
+    obsidianPath: String(record.obsidian_path),
+    canonHash: record.canon_hash ? String(record.canon_hash) : null,
+    canonExcerpt: String(record.canon_excerpt ?? ""),
+    isActive: Boolean(record.is_active),
+    updatedAt: String(record.updated_at)
+  }));
+}
+async function listPlayerNpcMemoriesForAdmin(input = {}) {
+  if (input.npcId) assertIdentifier(input.npcId, "NPC ID");
+  if (input.playerId) assertUuid(input.playerId, "Player ID");
+  const params = new URLSearchParams({
+    select: "id,player_id,npc_id,memory_kind,summary,importance,source,occurred_at,expires_at,is_active",
+    order: "occurred_at.desc",
+    limit: String(Math.min(Math.max(input.limit ?? 100, 1), 200))
+  });
+  if (input.npcId) params.set("npc_id", `eq.${input.npcId}`);
+  if (input.playerId) params.set("player_id", `eq.${input.playerId}`);
+  if (!input.includeInactive) params.set("is_active", "eq.true");
+  const records = await request(`player_npc_memory?${params.toString()}`);
+  return (records ?? []).map((record) => ({
+    id: String(record.id),
+    playerId: String(record.player_id),
+    npcId: String(record.npc_id),
+    memoryKind: record.memory_kind,
+    summary: String(record.summary),
+    importance: Number(record.importance),
+    source: String(record.source),
+    occurredAt: String(record.occurred_at),
+    expiresAt: record.expires_at ? String(record.expires_at) : null,
+    isActive: Boolean(record.is_active)
+  }));
+}
+async function updateNpcCanonForAdmin(npcId, patch) {
+  assertIdentifier(npcId, "NPC ID");
+  const update = { updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+  if (patch.displayName !== void 0) {
+    if (!patch.displayName.trim()) throw new Error("NPC display name is required.");
+    update.display_name = patch.displayName.trim().slice(0, 240);
+  }
+  if (patch.obsidianPath !== void 0) {
+    if (!patch.obsidianPath.trim()) throw new Error("Obsidian path is required.");
+    update.obsidian_path = patch.obsidianPath.trim().slice(0, 500);
+  }
+  if (patch.canonExcerpt !== void 0) update.canon_excerpt = patch.canonExcerpt.trim().slice(0, 12e3);
+  if (patch.isActive !== void 0) update.is_active = patch.isActive;
+  if (Object.keys(update).length === 1) throw new Error("At least one canon field must be updated.");
+  const params = new URLSearchParams({ npc_id: `eq.${npcId}` });
+  await request(`npc_canon_sources?${params.toString()}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(update) });
+}
+async function updatePlayerNpcMemoryForAdmin(memoryId, patch) {
+  assertUuid(memoryId, "Memory ID");
+  const update = {};
+  if (patch.summary !== void 0) {
+    const summary = patch.summary.trim();
+    if (summary.length < 4 || summary.length > 2e3) throw new Error("Interaction summaries must contain 4 to 2,000 characters.");
+    update.summary = summary;
+  }
+  if (patch.importance !== void 0) update.importance = Math.min(Math.max(Math.round(patch.importance), 1), 5);
+  if (patch.expiresAt !== void 0) update.expires_at = patch.expiresAt;
+  if (patch.isActive !== void 0) update.is_active = patch.isActive;
+  if (!Object.keys(update).length) throw new Error("At least one memory field must be updated.");
+  const params = new URLSearchParams({ id: `eq.${memoryId}` });
+  await request(`player_npc_memory?${params.toString()}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(update) });
+}
 async function upsertNpcCanonSource(source) {
   assertIdentifier(source.npcId, "NPC ID");
   if (!source.displayName.trim() || !source.obsidianPath.trim()) throw new Error("NPC name and Obsidian path are required.");
@@ -1401,6 +1487,22 @@ async function rememberPlayerNpcInteraction(input) {
   return records?.[0] ?? null;
 }
 
+// server/npcMemory/adminAudit.ts
+init_schema();
+init_db();
+import { desc as desc2 } from "drizzle-orm";
+async function recordNpcAdminAudit(action, recordType, recordId, fields) {
+  const db = await getDb();
+  if (!db) return null;
+  await db.insert(npcAdminAudits).values({ action, recordType, recordId, fields, createdAt: Date.now() });
+  return true;
+}
+async function listNpcAdminAudits(limit = 100) {
+  const db = await getDb();
+  if (!db) return null;
+  return db.select().from(npcAdminAudits).orderBy(desc2(npcAdminAudits.createdAt)).limit(Math.min(Math.max(limit, 1), 200));
+}
+
 // server/npcMemory/gameAuth.ts
 import { timingSafeEqual } from "node:crypto";
 function isAuthorizedNpcGameRequest(providedKey) {
@@ -1452,6 +1554,110 @@ async function syncObsidianNpcCanon(noteContent, obsidianPath) {
   const parsed = parseObsidianNpcNote(noteContent, obsidianPath);
   await upsertNpcCanonSource(parsed);
   return { npcId: parsed.npcId, displayName: parsed.displayName, canonHash: parsed.canonHash, excerptLength: parsed.canonExcerpt.length };
+}
+
+// server/npcMemory/githubCanonSync.ts
+import { createHmac, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+var DEFAULT_CANON_REPOSITORY = "najierwilliams/SenotaAI-NPC-Canon";
+function webhookSecret() {
+  return process.env.GITHUB_WEBHOOK_SECRET?.trim() ?? "";
+}
+function canonRepository() {
+  return process.env.GITHUB_CANON_REPOSITORY?.trim() || DEFAULT_CANON_REPOSITORY;
+}
+function isGitHubCanonWebhookConfigured() {
+  return webhookSecret().length >= 16 && Boolean(process.env.GITHUB_TOKEN);
+}
+function verifyGitHubCanonSignature(rawBody, signature) {
+  const secret = webhookSecret();
+  if (!secret || !signature?.startsWith("sha256=")) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  const provided = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  return provided.length === expectedBuffer.length && timingSafeEqual2(provided, expectedBuffer);
+}
+function changedNpcCanonPaths(payload) {
+  if (payload.repository?.full_name !== canonRepository() || payload.ref !== "refs/heads/main") return [];
+  const changedPaths = (payload.commits ?? []).flatMap((commit) => [...commit.added ?? [], ...commit.modified ?? []]).filter((path2) => /^NPCs\/(?!_template\.md$)[^/]+\.md$/i.test(path2));
+  return Array.from(new Set(changedPaths)).slice(0, 25);
+}
+async function getGitHubFile(repository, path2, ref) {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) throw new Error("GitHub token is not configured for canon synchronization.");
+  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodeURIComponent(path2)}?ref=${encodeURIComponent(ref)}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "SenotaAI-canon-sync" }
+  });
+  if (!response.ok) throw new Error(`Unable to fetch changed canon note (${response.status}).`);
+  const file = await response.json();
+  if (file.encoding !== "base64" || !file.content) throw new Error("Changed canon note was not returned as Base64 content.");
+  return Buffer.from(file.content.replace(/\s/g, ""), "base64").toString("utf8");
+}
+async function processGitHubCanonPush(payload) {
+  const paths = changedNpcCanonPaths(payload);
+  const ref = payload.after;
+  if (!paths.length || !ref) return { imported: [], skipped: true, reason: "no-eligible-npc-canon-changes" };
+  const repository = canonRepository();
+  const imported = [];
+  for (const path2 of paths) {
+    const noteContent = await getGitHubFile(repository, path2, ref);
+    const result = await syncObsidianNpcCanon(noteContent, path2);
+    await recordNpcAdminAudit("github-sync", "canon", result.npcId, ["canonHash", "canonExcerpt", "obsidianPath"]);
+    imported.push({ npcId: result.npcId, displayName: result.displayName, path: path2 });
+  }
+  return { imported, skipped: false };
+}
+
+// server/npcMemory/adminAuth.ts
+import { timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { SignJWT, jwtVerify } from "jose";
+var NPC_ADMIN_COOKIE = "senota_npc_admin";
+var encoder = new TextEncoder();
+function adminPassword() {
+  return process.env.NPC_ADMIN_PASSWORD?.trim() ?? "";
+}
+function sessionKey() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET is required for NPC administration sessions.");
+  return encoder.encode(secret);
+}
+function isNpcAdminConfigured() {
+  return adminPassword().length >= 16;
+}
+function isValidNpcAdminPassword(candidate) {
+  const expected = adminPassword();
+  if (!expected || !candidate) return false;
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length && timingSafeEqual3(candidateBuffer, expectedBuffer);
+}
+async function createNpcAdminSession() {
+  return new SignJWT({ scope: "npc-admin" }).setProtectedHeader({ alg: "HS256" }).setIssuedAt().setExpirationTime("8h").sign(sessionKey());
+}
+async function isValidNpcAdminSession(token) {
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify(token, sessionKey());
+    return payload.scope === "npc-admin";
+  } catch {
+    return false;
+  }
+}
+
+// server/_core/cookies.ts
+function isSecureRequest(req) {
+  if (req.protocol === "https") return true;
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  if (!forwardedProto) return false;
+  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
+  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+}
+function getSessionCookieOptions(req) {
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "none",
+    secure: isSecureRequest(req)
+  };
 }
 
 // server/_core/systemRouter.ts
@@ -1670,7 +1876,7 @@ async function decideApprovalAndQueue(input) {
 // server/workspaceMemoryDb.ts
 init_schema();
 init_db();
-import { and as and2, desc as desc2, eq as eq3 } from "drizzle-orm";
+import { and as and2, desc as desc3, eq as eq3 } from "drizzle-orm";
 var WORKSPACE_PROJECT_KEY = "senota-ai";
 async function optionalDb() {
   return getDb();
@@ -1682,7 +1888,7 @@ async function listWorkspaceMemories(workspaceId) {
     eq3(workspaceMemories.workspaceId, workspaceId),
     eq3(workspaceMemories.projectKey, WORKSPACE_PROJECT_KEY),
     eq3(workspaceMemories.isActive, true)
-  )).orderBy(desc2(workspaceMemories.importance), desc2(workspaceMemories.updatedAt)).limit(60);
+  )).orderBy(desc3(workspaceMemories.importance), desc3(workspaceMemories.updatedAt)).limit(60);
 }
 async function syncWorkspaceMemory(input) {
   const db = await optionalDb();
@@ -1959,7 +2165,7 @@ init_db();
 init_env();
 import axios from "axios";
 import { parse as parseCookieHeader } from "cookie";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
 var isNonEmptyString2 = (value) => typeof value === "string" && value.length > 0;
 var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
 var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
@@ -2084,7 +2290,7 @@ var SDKServer = class {
     const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
     const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
     const secretKey = this.getSessionSecret();
-    return new SignJWT({
+    return new SignJWT2({
       openId: payload.openId,
       appId: payload.appId,
       name: payload.name
@@ -2097,7 +2303,7 @@ var SDKServer = class {
     }
     try {
       const secretKey = this.getSessionSecret();
-      const { payload } = await jwtVerify(cookieValue, secretKey, {
+      const { payload } = await jwtVerify2(cookieValue, secretKey, {
         algorithms: ["HS256"]
       });
       const { openId, appId, name } = payload;
@@ -2223,25 +2429,6 @@ async function createContext(opts) {
 // server/_core/oauth.ts
 init_db();
 import { parse as parseCookieHeader2 } from "cookie";
-
-// server/_core/cookies.ts
-function isSecureRequest(req) {
-  if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
-}
-function getSessionCookieOptions(req) {
-  return {
-    httpOnly: true,
-    path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req)
-  };
-}
-
-// server/_core/oauth.ts
 function getQueryParam(req, key) {
   const value = req.query[key];
   return typeof value === "string" ? value : void 0;
@@ -2332,12 +2519,91 @@ function registerStorageProxy(app2) {
 }
 
 // server/app.ts
+function readCookie(header, name) {
+  return header?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1);
+}
 function createApp() {
   const app2 = express();
-  app2.use(express.json({ limit: "50mb" }));
+  app2.use(express.json({ limit: "50mb", verify: (req, _res, buffer) => {
+    req.rawBody = Buffer.from(buffer);
+  } }));
   app2.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app2);
   registerOAuthRoutes(app2);
+  app2.post("/api/npc/admin/session", async (req, res) => {
+    if (!isNpcAdminConfigured()) return res.status(503).json({ error: "npc-admin-not-configured" });
+    const password = req.body?.password;
+    if (typeof password !== "string" || !isValidNpcAdminPassword(password)) return res.status(401).json({ error: "invalid-administrator-password" });
+    res.cookie(NPC_ADMIN_COOKIE, await createNpcAdminSession(), { ...getSessionCookieOptions(req), maxAge: 8 * 60 * 60 * 1e3 });
+    return res.status(200).json({ ok: true });
+  });
+  const requireNpcAdmin = async (req, res) => {
+    const token = readCookie(req.header("cookie"), NPC_ADMIN_COOKIE);
+    if (await isValidNpcAdminSession(token)) return true;
+    res.status(401).json({ error: "npc-administrator-session-required" });
+    return false;
+  };
+  app2.get("/api/npc/admin/status", async (req, res) => {
+    const token = readCookie(req.header("cookie"), NPC_ADMIN_COOKIE);
+    return res.status(await isValidNpcAdminSession(token) ? 200 : 401).json({ configured: isNpcAdminConfigured(), authenticated: await isValidNpcAdminSession(token) });
+  });
+  app2.get("/api/npc/admin/canon", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      return res.json({ canon: await listNpcCanonSourcesForAdmin() });
+    } catch (error) {
+      return res.status(503).json({ error: error instanceof Error ? error.message : "NPC canon is unavailable." });
+    }
+  });
+  app2.patch("/api/npc/admin/canon/:npcId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const patch = req.body ?? {};
+      await updateNpcCanonForAdmin(req.params.npcId, patch);
+      await recordNpcAdminAudit("update", "canon", req.params.npcId, Object.keys(patch));
+      return res.json({ ok: true });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update NPC canon." });
+    }
+  });
+  app2.get("/api/npc/admin/memories", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const npcId = typeof req.query.npcId === "string" ? req.query.npcId : void 0;
+      const playerId = typeof req.query.playerId === "string" ? req.query.playerId : void 0;
+      const includeInactive = req.query.includeInactive === "true";
+      return res.json({ memories: await listPlayerNpcMemoriesForAdmin({ npcId, playerId, includeInactive }) });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "NPC memories are unavailable." });
+    }
+  });
+  app2.patch("/api/npc/admin/memories/:memoryId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const patch = req.body ?? {};
+      await updatePlayerNpcMemoryForAdmin(req.params.memoryId, patch);
+      await recordNpcAdminAudit("update", "memory", req.params.memoryId, Object.keys(patch));
+      return res.json({ ok: true });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update NPC memory." });
+    }
+  });
+  app2.get("/api/npc/admin/audit", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    const audits = await listNpcAdminAudits();
+    return res.json({ audits: audits ?? [], available: audits !== null });
+  });
+  app2.post("/api/npc/canon/github-webhook", async (req, res) => {
+    const rawBody = req.rawBody;
+    if (!isGitHubCanonWebhookConfigured() || !rawBody || !verifyGitHubCanonSignature(rawBody, req.header("x-hub-signature-256"))) return res.status(401).json({ error: "invalid-github-webhook-signature" });
+    if (req.header("x-github-event") === "ping") return res.status(200).json({ ok: true, configured: true });
+    if (req.header("x-github-event") !== "push") return res.status(202).json({ ok: true, skipped: "unsupported-event" });
+    try {
+      return res.status(202).json(await processGitHubCanonPush(req.body));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "GitHub canon synchronization failed." });
+    }
+  });
   app2.post("/api/npc/canon/sync", async (req, res) => {
     if (!isAuthorizedNpcGameRequest(req.header("x-senota-game-key"))) return res.status(401).json({ error: "unauthorized-game-backend" });
     try {

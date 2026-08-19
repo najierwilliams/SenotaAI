@@ -231,6 +231,22 @@ export const workspaceMemories = mysqlTable(
 );
 
 export type WorkspaceMemoryRecord = typeof workspaceMemories.$inferSelect;
+
+/** Metadata-only audit trail for secured NPC canon and player-memory administration. */
+export const npcAdminAudits = mysqlTable(
+  "npc_admin_audits",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    action: varchar("action", { length: 64 }).notNull(),
+    recordType: varchar("record_type", { length: 32 }).notNull(),
+    recordId: varchar("record_id", { length: 128 }).notNull(),
+    fields: json("fields"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (table) => [index("npc_admin_audits_created_idx").on(table.createdAt), index("npc_admin_audits_record_idx").on(table.recordType, table.recordId)],
+);
+
+export type NpcAdminAudit = typeof npcAdminAudits.$inferSelect;
 export type AgentApproval = typeof agentApprovals.$inferSelect;
 export type AgentSchedule = typeof agentSchedules.$inferSelect;
 export type AgentSettings = typeof agentSettings.$inferSelect;

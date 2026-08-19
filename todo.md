@@ -78,3 +78,13 @@
 - [x] Exercise an Obsidian-format canon note through the documented excerpt synchronization boundary before the final release sign-off.
 - [x] Add a repeatable protected import path that parses an Obsidian NPC note and synchronizes its bounded excerpt to Supabase.
 - [x] Invoke the deployed Obsidian canon import path and then verify a scoped NPC dialogue `200` response before final sign-off.
+- [ ] Add an access-controlled NPC management area for viewing and managing canon sources and player interaction memories without exposing them to public chat visitors.
+- [x] Add server-side APIs for listing, editing, deactivating, and auditing NPC canon and player-memory records under a dedicated administrator authorization boundary.
+- [ ] Add administrator-protected field updates for NPC canon and player-memory records beyond reversible active-state changes.
+- [ ] Add a scoped administration audit trail for canon and player-memory modifications, including automated coverage.
+- [ ] Add a trusted automatic Obsidian note synchronization worker triggered by a verified source-control change event.
+- [ ] Add persistent multi-chat sessions with create, rename, switch, and delete controls in the SenotaAI workspace sidebar.
+- [ ] Validate management access controls, synchronization signature checks, chat-history lifecycle, and deployed dashboard behavior before publication.
+- [x] Create a new private GitHub repository for the NPC canon vault, with a safe Obsidian-ready note structure and no player memories or runtime secrets.
+- [ ] Configure event-driven canon synchronization so private vault changes can be imported automatically through verified server-side processing.
+- [ ] Preserve confirmation gates for destructive code, repository, and deployment actions while allowing safe canon synchronization and memory recall to operate automatically.
