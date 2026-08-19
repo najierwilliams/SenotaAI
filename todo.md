@@ -100,13 +100,13 @@
 - [x] Require explicit user review, edit, and confirmation before any canon draft is written to the private Obsidian GitHub vault.
 - [x] Add a server-side least-privilege publishing path that creates or updates NPC canon notes without exposing credentials to the public workspace.
 - [x] Document how to open the private GitHub canon vault as an Obsidian vault for reading and authoring NPC brain notes.
-- [ ] Validate the complete draft, approval, vault-write, webhook-sync, and Supabase-import path before publication.
+- [x] Validate the complete draft, approval, vault-write, webhook-sync, and Supabase-import path before publication.
 - [x] Add per-message canon selection controls and coverage proving only the selected chat message seeds the review draft.
 - [x] Add interaction coverage proving that a selected user message, and no non-selected message, populates the canon-draft request field.
 - [x] Add a browser-like test environment for the canon-draft click-and-dialog interaction coverage.
 - [x] Fix canon-draft generation and confirmation validation when a review note lacks a meaningful Runtime excerpt or canon body.
 - [x] Add regression coverage that blocks invalid edited notes before private-vault publishing and guides the user to repair them.
-- [ ] Run a live protected Luna dialogue using the approved Obsidian canon and report how the runtime uses it.
+- [x] Run a live protected Luna dialogue using the approved Obsidian canon and report how the runtime uses it.
 - [x] Add an administrator-unlocked dedicated Luna chat workspace that keeps Luna dialogue separate from general SenotaAI chat.
 - [x] Add a server-side Luna dialogue bridge that preserves the NPC game key, uses a stable browser preview-player identity, and scopes interaction memory to Luna.
-- [ ] Validate that the Luna workspace uses the synced Obsidian canon excerpt and retains only its preview player’s interaction context.
+- [x] Validate that the Luna workspace uses the synced Obsidian canon excerpt and retains only its preview player’s interaction context.
