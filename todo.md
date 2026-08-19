@@ -87,6 +87,7 @@
 - [ ] Validate management access controls, synchronization signature checks, chat-history lifecycle, and deployed dashboard behavior before publication.
 - [ ] Correct GitHub canon-note path retrieval so nested `NPCs/*.md` files can be fetched by the verified production sync worker.
 - [ ] Add a dedicated least-privilege GitHub credential for SenotaAI’s server-side private canon-vault reads and verify end-to-end automatic import access.
+- [ ] Configure the existing JWT signing key in Vercel so valid NPC administrator sessions complete securely in production.
 - [x] Create a new private GitHub repository for the NPC canon vault, with a safe Obsidian-ready note structure and no player memories or runtime secrets.
 - [ ] Configure event-driven canon synchronization so private vault changes can be imported automatically through verified server-side processing.
 - [ ] Preserve confirmation gates for destructive code, repository, and deployment actions while allowing safe canon synchronization and memory recall to operate automatically.
