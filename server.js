@@ -1300,7 +1300,7 @@ function assertUuid(value, label) {
 async function request(path2, init) {
   const current = config();
   if (!current) throw new Error("Supabase NPC memory is not configured.");
-  const response = await fetch(`${current.url}/rest/v1/${path2}`, {
+  const execute = () => fetch(`${current.url}/rest/v1/${path2}`, {
     ...init,
     headers: {
       apikey: current.key,
@@ -1309,6 +1309,8 @@ async function request(path2, init) {
       ...init?.headers ?? {}
     }
   });
+  let response = await execute();
+  if (response.status === 401 && (!init?.method || init.method.toUpperCase() === "GET")) response = await execute();
   if (!response.ok) throw new Error(`Supabase NPC memory request failed (${response.status}).`);
   return response.status === 204 ? null : response.json();
 }

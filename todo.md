@@ -113,3 +113,7 @@
 - [x] Add shared live temporal context to SenotaAI and NPC dialogue using America/New_York as the default time zone.
 - [x] Accept and validate an optional IANA player time zone for future game and Luna dialogue requests without trusting malformed client values.
 - [x] Test daylight-aware Eastern time and a supplied player time zone, then deploy the verified temporal-context feature.
+- [x] Revalidate the authenticated production NPC management page: the user confirmed Luna is visible and the prior 401 state is gone.
+- [x] Investigate the recovered NPC management 401: no persistent server defect was reproducible on the active canonical release, no matching Vercel runtime errors were recorded, and the original transient deployment/session cause cannot be reconstructed after recovery.
+- [x] Add explicit regression coverage for administrator canon and memory loading after login.
+- [ ] Retry one safe read-only Supabase NPC request after a transient 401 and cover the behavior without retrying writes.

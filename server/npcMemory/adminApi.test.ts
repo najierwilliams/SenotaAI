@@ -23,6 +23,7 @@ describe("NPC administration API", () => {
 
   it("keeps canon and player-memory records behind the administrator session", async () => {
     listNpcCanonSourcesForAdmin.mockResolvedValue([{ npcId: "mira-baker", displayName: "Mira Vale", isActive: true }]);
+    listPlayerNpcMemoriesForAdmin.mockResolvedValue([{ id: "memory-1", npcId: "mira-baker", playerId: "player-1", summary: "Met in the market.", isActive: true }]);
     const app = createApp();
     const server = app.listen(0);
     const address = server.address();
@@ -34,6 +35,10 @@ describe("NPC administration API", () => {
       const cookie = login.headers.get("set-cookie")?.split(";")[0];
       const response = await fetch(`${baseUrl}/api/npc/admin/canon`, { headers: { Cookie: cookie ?? "" } });
       expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ canon: [{ npcId: "mira-baker", displayName: "Mira Vale", isActive: true }] });
+      const memoriesResponse = await fetch(`${baseUrl}/api/npc/admin/memories`, { headers: { Cookie: cookie ?? "" } });
+      expect(memoriesResponse.status).toBe(200);
+      await expect(memoriesResponse.json()).resolves.toEqual({ memories: [{ id: "memory-1", npcId: "mira-baker", playerId: "player-1", summary: "Met in the market.", isActive: true }] });
       await fetch(`${baseUrl}/api/npc/admin/canon/mira-baker`, { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie ?? "" }, body: JSON.stringify({ canonExcerpt: "Updated canon excerpt", isActive: false }) });
       expect(updateNpcCanonForAdmin).toHaveBeenCalledWith("mira-baker", { canonExcerpt: "Updated canon excerpt", isActive: false });
       expect(recordNpcAdminAudit).toHaveBeenCalledWith("update", "canon", "mira-baker", ["canonExcerpt", "isActive"]);

@@ -66,7 +66,7 @@ function assertUuid(value: string, label: string) {
 async function request(path: string, init?: RequestInit) {
   const current = config();
   if (!current) throw new Error("Supabase NPC memory is not configured.");
-  const response = await fetch(`${current.url}/rest/v1/${path}`, {
+  const execute = () => fetch(`${current.url}/rest/v1/${path}`, {
     ...init,
     headers: {
       apikey: current.key,
@@ -75,6 +75,9 @@ async function request(path: string, init?: RequestInit) {
       ...(init?.headers ?? {}),
     },
   });
+  let response = await execute();
+  // Reads are idempotent. A single retry protects an admin refresh from a transient upstream authorization edge without replaying writes.
+  if (response.status === 401 && (!init?.method || init.method.toUpperCase() === "GET")) response = await execute();
   if (!response.ok) throw new Error(`Supabase NPC memory request failed (${response.status}).`);
   return response.status === 204 ? null : response.json();
 }
