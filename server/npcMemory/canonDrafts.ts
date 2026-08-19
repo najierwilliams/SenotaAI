@@ -41,10 +41,10 @@ async function githubRequest<T>(path: string, init: RequestInit = {}) {
   return payload as T;
 }
 
-async function readCanonNote(path: string) {
+async function readCanonNote(path: string, ref = CANON_BRANCH) {
   const { owner, repo } = splitRepository(canonRepository());
   try {
-    const response = await githubRequest<{ content?: string; encoding?: string; sha: string }>(`/repos/${owner}/${repo}/contents/${encodedPath(path)}?ref=${CANON_BRANCH}`);
+    const response = await githubRequest<{ content?: string; encoding?: string; sha: string }>(`/repos/${owner}/${repo}/contents/${encodedPath(path)}?ref=${encodeURIComponent(ref)}`);
     if (response.encoding !== "base64" || !response.content) throw new Error("The existing NPC note was not returned as a text file.");
     return { sha: response.sha, content: Buffer.from(response.content.replace(/\s/g, ""), "base64").toString("utf8") };
   } catch (error) {
@@ -230,6 +230,8 @@ export async function publishNpcCanonDraft(input: { npcId: string; displayName: 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: `canon: update ${parsed.displayName}`, content: Buffer.from(resolvedNoteContent, "utf8").toString("base64"), branch: CANON_BRANCH, ...(current?.sha ? { sha: current.sha } : {}) }),
   });
+  const committed = result.commit?.sha ? await readCanonNote(path, result.commit.sha) : null;
+  if (!committed || committed.content !== resolvedNoteContent) throw new Error("GitHub did not preserve the reviewed canon content exactly. No publish success was recorded; reopen the draft and try again.");
   await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit", ...(input.conflictOverride ? ["conflictOverride"] : []), ...(replacement ? ["conflictClaimReplacement"] : [])]);
   return { ok: true, npcId: parsed.npcId, path: result.content?.path || path, commitSha: result.commit?.sha || null, excerptLength: resolvedParsed.canonExcerpt.length, conflicts, replacedClaims: replacement?.removedClaims ?? [], sync: "The signed GitHub webhook will import this note into Supabase automatically." };
 }

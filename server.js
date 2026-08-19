@@ -2017,10 +2017,10 @@ async function githubRequest2(path2, init = {}) {
   if (!response.ok) throw new Error(payload.message || `GitHub canon-vault request failed (${response.status}).`);
   return payload;
 }
-async function readCanonNote(path2) {
+async function readCanonNote(path2, ref = CANON_BRANCH) {
   const { owner, repo } = splitRepository2(canonRepository2());
   try {
-    const response = await githubRequest2(`/repos/${owner}/${repo}/contents/${encodedPath(path2)}?ref=${CANON_BRANCH}`);
+    const response = await githubRequest2(`/repos/${owner}/${repo}/contents/${encodedPath(path2)}?ref=${encodeURIComponent(ref)}`);
     if (response.encoding !== "base64" || !response.content) throw new Error("The existing NPC note was not returned as a text file.");
     return { sha: response.sha, content: Buffer.from(response.content.replace(/\s/g, ""), "base64").toString("utf8") };
   } catch (error) {
@@ -2227,6 +2227,8 @@ async function publishNpcCanonDraft(input) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message: `canon: update ${parsed.displayName}`, content: Buffer.from(resolvedNoteContent, "utf8").toString("base64"), branch: CANON_BRANCH, ...current?.sha ? { sha: current.sha } : {} })
   });
+  const committed = result.commit?.sha ? await readCanonNote(path2, result.commit.sha) : null;
+  if (!committed || committed.content !== resolvedNoteContent) throw new Error("GitHub did not preserve the reviewed canon content exactly. No publish success was recorded; reopen the draft and try again.");
   await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit", ...input.conflictOverride ? ["conflictOverride"] : [], ...replacement ? ["conflictClaimReplacement"] : []]);
   return { ok: true, npcId: parsed.npcId, path: result.content?.path || path2, commitSha: result.commit?.sha || null, excerptLength: resolvedParsed.canonExcerpt.length, conflicts, replacedClaims: replacement?.removedClaims ?? [], sync: "The signed GitHub webhook will import this note into Supabase automatically." };
 }

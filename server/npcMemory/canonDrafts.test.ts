@@ -111,9 +111,11 @@ describe("reviewable NPC canon drafts", () => {
     const existingNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Personality\n- Luna is observant.\n- Luna has a body.\n- Luna protects the town archive.\n\n## Runtime excerpt\nLuna is observant and protects the town archive.";
     const proposedNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Runtime excerpt\nLuna does not have a body and communicates through light.";
     const fetchMock = vi.mocked(fetch);
+    const expectedReplacement = applyApprovedCanonConflictReplacement(existingNote, proposedNote, [{ severity: "blocking", existingClaim: "Luna has a body.", replacementAnchor: "- Luna has a body.", proposedClaim: "Luna does not have a body.", rationale: "Direct body-state contradiction." }]);
     fetchMock
       .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(existingNote).toString("base64"), sha: "current-sha" }) as never)
-      .mockResolvedValueOnce(response(true, { commit: { sha: "replacement-sha" }, content: { path: "NPCs/luna001.md" } }) as never);
+      .mockResolvedValueOnce(response(true, { commit: { sha: "replacement-sha" }, content: { path: "NPCs/luna001.md" } }) as never)
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(expectedReplacement.noteContent).toString("base64"), sha: "replacement-content-sha" }) as never);
     chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [{ severity: "blocking", existingClaim: "Luna has a body.", proposedClaim: "Luna does not have a body.", rationale: "Direct body-state contradiction." }] }) });
 
     await publishNpcCanonDraft({ npcId: "luna001", displayName: "Luna", noteContent: proposedNote, sourceSha: "current-sha", conflictOverride: true });
@@ -137,17 +139,31 @@ describe("reviewable NPC canon drafts", () => {
 
   it("publishes only the reviewed note after checking the source version", async () => {
     const fetchMock = vi.mocked(fetch);
+    const reviewedNote = draftNote.replace(/^<!--[\s\S]*?-->\n/, "");
     fetchMock
       .mockResolvedValueOnce(response(false, { message: "Not Found" }) as never)
-      .mockResolvedValueOnce(response(true, { commit: { sha: "commit-sha" }, content: { path: "NPCs/mira-vale.md" } }) as never);
+      .mockResolvedValueOnce(response(true, { commit: { sha: "commit-sha" }, content: { path: "NPCs/mira-vale.md" } }) as never)
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(reviewedNote).toString("base64"), sha: "committed-content-sha" }) as never);
 
-    const result = await publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: draftNote.replace(/^<!--[\s\S]*?-->\n/, ""), sourceSha: null });
+    const result = await publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: reviewedNote, sourceSha: null });
 
     expect(result).toMatchObject({ ok: true, npcId: "mira-vale", commitSha: "commit-sha" });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const [, writeRequest] = fetchMock.mock.calls[1] ?? [];
     expect(writeRequest).toMatchObject({ method: "PUT" });
     expect(recordNpcAdminAudit).toHaveBeenCalledWith("website-canon-publish", "canon", "mira-vale", expect.any(Array));
+  });
+
+  it("does not report publish success when GitHub returns content that differs from the reviewed note", async () => {
+    const fetchMock = vi.mocked(fetch);
+    const reviewedNote = draftNote.replace(/^<!--[\s\S]*?-->\n/, "");
+    fetchMock
+      .mockResolvedValueOnce(response(false, { message: "Not Found" }) as never)
+      .mockResolvedValueOnce(response(true, { commit: { sha: "commit-sha" }, content: { path: "NPCs/mira-vale.md" } }) as never)
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from("---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n## Runtime excerpt\nStale content.").toString("base64"), sha: "mismatch-sha" }) as never);
+
+    await expect(publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: reviewedNote, sourceSha: null })).rejects.toThrow("did not preserve the reviewed canon content exactly");
+    expect(recordNpcAdminAudit).not.toHaveBeenCalled();
   });
 
   it("refuses to publish a stale reviewed draft", async () => {

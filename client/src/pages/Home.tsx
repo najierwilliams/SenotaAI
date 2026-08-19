@@ -15,7 +15,7 @@ import {
   type WorkspaceMemory,
 } from "@/lib/workspaceMemory";
 import { BookOpenCheck, BrainCircuit, BrainCog, Check, ChevronDown, FilePenLine, Github, Layers3, Plus, Rocket, Search, Send, Sparkles, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const suggestedPrompts = [
   "Plan a production-ready React app for my idea.",
@@ -57,6 +57,7 @@ export default function Home() {
   const [selectedCanonTargets, setSelectedCanonTargets] = useState<CanonTarget[]>([]);
   const [canonDrafts, setCanonDrafts] = useState<CanonDraft[]>([]);
   const [activeCanonDraftNpcId, setActiveCanonDraftNpcId] = useState<string | null>(null);
+  const latestCanonDrafts = useRef<CanonDraft[]>([]);
   const [canonDraftError, setCanonDraftError] = useState<string | null>(null);
   const [canonPublishedMessage, setCanonPublishedMessage] = useState<string | null>(null);
   const [canonConflictOverride, setCanonConflictOverride] = useState(false);
@@ -153,6 +154,7 @@ export default function Home() {
   const openCanonDraft = (selectedRequest?: string) => {
     const latestUserMessage = [...activeSession.messages].reverse().find((message) => message.role === "user")?.content ?? "";
     setCanonRequest(canonRequestFromSelectedMessage(selectedRequest, canonRequest, latestUserMessage));
+    latestCanonDrafts.current = [];
     setCanonDrafts([]);
     setActiveCanonDraftNpcId(null);
     setSelectedCanonTargets([]);
@@ -169,19 +171,20 @@ export default function Home() {
     if ((canonNpcId.trim() || canonDisplayName.trim()) && !(canonNpcId.trim() && canonDisplayName.trim())) { setCanonDraftError("A new NPC target needs both an ID and a display name."); return; }
     setCanonDraftError(null);
     createCanonDraft.mutate({ targets: draftTargets.map(({ npcId, displayName }) => ({ npcId, displayName })), request: canonRequest }, {
-      onSuccess: ({ drafts }) => { setCanonDrafts(drafts); setActiveCanonDraftNpcId(drafts[0]?.npcId ?? null); setCanonConflictOverride(false); },
+      onSuccess: ({ drafts }) => { latestCanonDrafts.current = drafts; setCanonDrafts(drafts); setActiveCanonDraftNpcId(drafts[0]?.npcId ?? null); setCanonConflictOverride(false); },
       onError: (error) => setCanonDraftError(error.message),
     });
   };
 
   const publishCanon = () => {
-    if (!canonDraft) return;
+    const latestDraft = latestCanonDrafts.current.find(draft => draft.npcId === activeCanonDraftNpcId) ?? latestCanonDrafts.current[0] ?? canonDraft;
+    if (!latestDraft) return;
     setCanonDraftError(null);
     const approvedDraft = {
-      npcId: canonDraft.npcId,
-      displayName: canonDraft.displayName,
-      noteContent: canonDraft.noteContent,
-      sourceSha: canonDraft.sourceSha,
+      npcId: latestDraft.npcId,
+      displayName: latestDraft.displayName,
+      noteContent: latestDraft.noteContent,
+      sourceSha: latestDraft.sourceSha,
       conflictOverride: canonConflictOverride,
     };
     validateCanonDraft.mutate(approvedDraft, {
@@ -260,7 +263,7 @@ export default function Home() {
           </div> : <div className="space-y-4 py-2">
             {canonDrafts.length > 1 ? <div className="flex flex-wrap gap-1.5">{canonDrafts.map(draft => <button key={draft.npcId} onClick={() => { setActiveCanonDraftNpcId(draft.npcId); setCanonConflictOverride(false); setCanonPublishedMessage(null); }} className={`rounded-lg border px-2.5 py-1.5 text-xs ${canonDraft.npcId === draft.npcId ? "border-violet-300/35 bg-violet-300/15 text-violet-100" : "border-white/10 text-slate-400 hover:bg-white/5"}`}>{draft.displayName} <span className="font-mono opacity-70">{draft.npcId}</span></button>)}</div> : null}
             <div className="rounded-xl border border-violet-300/20 bg-violet-300/[0.06] p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200">SenotaAI’s summary of this proposed change</p><p className="mt-2 text-sm leading-6 text-slate-200">{canonDraft.summary}</p><p className="mt-3 text-xs text-slate-500">Target: <span className="font-mono text-violet-200">{canonDraft.path}</span> · Runtime excerpt: {canonDraft.excerptLength.toLocaleString()} characters</p></div>
-            <label className="block space-y-1.5 text-xs font-medium text-slate-300">Review and edit the complete Obsidian note<textarea value={canonDraft.noteContent} onChange={(event) => setCanonDrafts(current => current.map(draft => draft.npcId === canonDraft.npcId ? { ...draft, noteContent: event.target.value } : draft))} className="min-h-80 w-full resize-y rounded-lg border border-white/10 bg-black/25 p-3 font-mono text-xs leading-5 text-slate-200 outline-none focus:border-violet-300/60" /></label>
+            <label className="block space-y-1.5 text-xs font-medium text-slate-300">Review and edit the complete Obsidian note<textarea value={canonDraft.noteContent} onChange={(event) => { const nextDrafts = latestCanonDrafts.current.map(draft => draft.npcId === canonDraft.npcId ? { ...draft, noteContent: event.target.value } : draft); latestCanonDrafts.current = nextDrafts; setCanonDrafts(nextDrafts); }} className="min-h-80 w-full resize-y rounded-lg border border-white/10 bg-black/25 p-3 font-mono text-xs leading-5 text-slate-200 outline-none focus:border-violet-300/60" /></label>
             {canonDraft.conflicts?.length ? <div className="space-y-2 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-100">Canon conflict review</p><p className="text-xs leading-5 text-amber-100/80">SenotaAI found potential factual contradictions against the current private canon. Review them before publishing. An approved blocking revision removes only the exact conflicting existing claim, then adds the approved replacement; unrelated canon remains unchanged.</p>{canonDraft.conflicts.map((conflict, index) => <div key={`${conflict.existingClaim}-${index}`} className="rounded-lg border border-amber-300/15 bg-black/15 p-3 text-xs leading-5 text-slate-300"><p><span className={`font-semibold ${conflict.severity === "blocking" ? "text-red-200" : "text-amber-100"}`}>{conflict.severity === "blocking" ? "Blocking" : "Warning"}</span> · {conflict.rationale}</p><p className="mt-2 text-slate-400">Will remove: “{conflict.existingClaim}”</p><p className="text-slate-200">Will add: “{conflict.proposedClaim}”</p></div>)}{canonDraft.conflicts.some(conflict => conflict.severity === "blocking") ? <label className="flex items-start gap-2 rounded-lg border border-red-300/20 bg-red-300/[0.05] p-3 text-xs leading-5 text-red-100"><input type="checkbox" checked={canonConflictOverride} onChange={event => setCanonConflictOverride(event.target.checked)} className="mt-1" />I reviewed these contradictions and intentionally approve this precise claim replacement.</label> : null}</div> : <p className="rounded-lg border border-emerald-300/15 bg-emerald-300/[0.04] px-3 py-2 text-xs leading-5 text-emerald-100/90">No direct canon conflicts were found in this draft.</p>}
             <p className="rounded-lg border border-violet-300/15 bg-violet-300/[0.04] px-3 py-2 text-xs leading-5 text-violet-100/90">Before publishing, SenotaAI checks that the note keeps its frontmatter and has a meaningful <code>## Runtime excerpt</code> or canon body. If validation fails, no GitHub write is attempted.</p>
           </div>}
@@ -268,7 +271,7 @@ export default function Home() {
           {canonPublishedMessage ? <p className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 text-sm leading-6 text-emerald-100">{canonPublishedMessage}</p> : null}
           <DialogFooter className="gap-2 sm:gap-0">
             {!canonPublishedMessage ? <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Discard</button> : <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Close</button>}
-            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!draftTargets.length || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : `Generate ${draftTargets.length || ""} review draft${draftTargets.length === 1 ? "" : "s"}`}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => { setCanonDrafts([]); setActiveCanonDraftNpcId(null); }} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending || (canonDraft.conflicts?.some(conflict => conflict.severity === "blocking") && !canonConflictOverride)} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{validateCanonDraft.isPending ? "Checking note…" : publishCanonDraft.isPending ? "Publishing…" : canonDraft.conflicts?.some(conflict => conflict.severity === "blocking") && !canonConflictOverride ? "Review conflict override" : "Confirm and send to NPC canon"}</button></div> : null}
+            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!draftTargets.length || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : `Generate ${draftTargets.length || ""} review draft${draftTargets.length === 1 ? "" : "s"}`}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => { latestCanonDrafts.current = []; setCanonDrafts([]); setActiveCanonDraftNpcId(null); }} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending || (canonDraft.conflicts?.some(conflict => conflict.severity === "blocking") && !canonConflictOverride)} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{validateCanonDraft.isPending ? "Checking note…" : publishCanonDraft.isPending ? "Publishing…" : canonDraft.conflicts?.some(conflict => conflict.severity === "blocking") && !canonConflictOverride ? "Review conflict override" : "Confirm and send to NPC canon"}</button></div> : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -136,4 +136,28 @@ describe("selected chat request to canon draft interaction", () => {
     expect(validateDraftMutate).toHaveBeenCalledTimes(1);
     expect(publishDraftMutate).not.toHaveBeenCalled();
   });
+
+  it("publishes the latest edited review text rather than an earlier draft snapshot", async () => {
+    Object.assign(globalThis, { React });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ authenticated: true }) }));
+    const original = "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n## Runtime excerpt\nMira has a blue lantern.";
+    const edited = "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n## Runtime excerpt\nMira has a green lantern.\nMira protects the archive.";
+    createDraftMutate.mockImplementation((_input, options) => options.onSuccess?.({ drafts: [{
+      npcId: "mira-vale", displayName: "Mira Vale", path: "NPCs/mira-vale.md", sourceSha: "draft-sha", excerptLength: 30,
+      summary: "Creates a small Mira canon note.", noteContent: original, conflicts: [],
+    }] }));
+    validateDraftMutate.mockImplementation((_input, options) => options.onSuccess?.({ valid: true }));
+    render(<Home />);
+
+    fireEvent.click(screen.getByRole("button", { name: `Use selected request for NPC canon: ${selectedRequests[0]}` }));
+    fireEvent.change(screen.getByLabelText("NPC ID"), { target: { value: "mira-vale" } });
+    fireEvent.change(screen.getByLabelText("NPC display name"), { target: { value: "Mira Vale" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate 1 review draft" }));
+    await waitFor(() => expect(screen.getByLabelText("Review and edit the complete Obsidian note")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Review and edit the complete Obsidian note"), { target: { value: edited } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and send to NPC canon" }));
+
+    expect(validateDraftMutate).toHaveBeenCalledWith(expect.objectContaining({ noteContent: edited, sourceSha: "draft-sha" }), expect.any(Object));
+    expect(publishDraftMutate).toHaveBeenCalledWith(expect.objectContaining({ noteContent: edited, sourceSha: "draft-sha" }), expect.any(Object));
+  });
 });
