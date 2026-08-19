@@ -67,7 +67,7 @@
 - [x] Add scoped retrieval that combines NPC canon with only the current player’s interaction summaries.
 - [x] Expose a server-side NPC dialogue procedure that accepts a player and NPC scope, retrieves the bounded context, and never leaks another player’s memories.
 - [x] Exercise the NPC dialogue procedure end to end with isolated player-memory fixtures before publishing the game-memory integration.
-- [ ] Verify the Obsidian–SenotaAI–Supabase workflow and publish the integrated release to GitHub and Vercel.
+- [x] Verify the Obsidian–SenotaAI–Supabase workflow and publish the integrated release to GitHub and Vercel.
 - [x] Add an endpoint-level test that proves only the requested player’s NPC interaction summaries reach the Ollama prompt.
 - [x] Repair the Vercel SPA rewrite so compiled `/assets/*` files are served as JavaScript and CSS rather than rewritten to `index.html`.
 - [x] Publish the static-asset routing repair and confirm the latest Vercel production deployment is ready.
@@ -77,4 +77,4 @@
 - [x] Prove in production that two players receive only their own NPC memory context for the same test NPC.
 - [x] Exercise an Obsidian-format canon note through the documented excerpt synchronization boundary before the final release sign-off.
 - [x] Add a repeatable protected import path that parses an Obsidian NPC note and synchronizes its bounded excerpt to Supabase.
-- [ ] Invoke the deployed Obsidian canon import path and then verify a scoped NPC dialogue `200` response before final sign-off.
+- [x] Invoke the deployed Obsidian canon import path and then verify a scoped NPC dialogue `200` response before final sign-off.
