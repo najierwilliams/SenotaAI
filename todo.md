@@ -110,6 +110,6 @@
 - [x] Add an administrator-unlocked dedicated Luna chat workspace that keeps Luna dialogue separate from general SenotaAI chat.
 - [x] Add a server-side Luna dialogue bridge that preserves the NPC game key, uses a stable browser preview-player identity, and scopes interaction memory to Luna.
 - [x] Validate that the Luna workspace uses the synced Obsidian canon excerpt and retains only its preview player’s interaction context.
-- [ ] Add shared live temporal context to SenotaAI and NPC dialogue using America/New_York as the default time zone.
-- [ ] Accept and validate an optional IANA player time zone for future game and Luna dialogue requests without trusting malformed client values.
-- [ ] Test daylight-aware Eastern time and a supplied player time zone, then deploy the verified temporal-context feature.
+- [x] Add shared live temporal context to SenotaAI and NPC dialogue using America/New_York as the default time zone.
+- [x] Accept and validate an optional IANA player time zone for future game and Luna dialogue requests without trusting malformed client values.
+- [x] Test daylight-aware Eastern time and a supplied player time zone, then deploy the verified temporal-context feature.
