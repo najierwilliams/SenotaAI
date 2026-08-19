@@ -132,3 +132,4 @@
 - [ ] Verify the deployed override-publish workflow with a safe test note and record evidence of precise claim replacement without unrelated loss.
 - [x] Fix the malformed draft-response error shown in the new-NPC draft form by supplying a valid structured review-note fallback.
 - [x] Fix the production canon publish path so an approved edited review note cannot be replaced by stale prior content and unrelated additions are preserved.
+- [x] Deduplicate preserved and proposed canon claims during approved conflict replacement and prevent double Markdown bullet prefixes.

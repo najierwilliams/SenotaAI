@@ -128,6 +128,17 @@ describe("reviewable NPC canon drafts", () => {
     expect(writtenNote).toContain("Luna does not have a body.");
   });
 
+  it("deduplicates repeated existing and proposed bullet claims without double-prefixing the replacement", () => {
+    const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a blue lantern.\n- Luna protects a quiet archive.\n- Luna protects a quiet archive.";
+    const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a green lantern.\n- Luna protects a quiet archive.\n- Luna protects a quiet archive.";
+    const result = applyApprovedCanonConflictReplacement(existing, proposed, [{ severity: "blocking", existingClaim: "Luna has a blue lantern.", replacementAnchor: "- Luna has a blue lantern.", proposedClaim: "- Luna has a green lantern.", rationale: "Lantern color conflict." }]);
+
+    expect(result.noteContent).not.toContain("blue lantern");
+    expect(result.noteContent.match(/Luna protects a quiet archive\./g)).toHaveLength(1);
+    expect(result.noteContent.match(/Luna has a green lantern\./g)).toHaveLength(1);
+    expect(result.noteContent).not.toContain("- - Luna has a green lantern.");
+  });
+
   it("refuses a blocking conflict until the administrator explicitly overrides it", async () => {
     const existing = Buffer.from(draftNote.replace(/^<!--[\s\S]*?-->\n/, "")).toString("base64");
     const fetchMock = vi.mocked(fetch);

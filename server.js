@@ -2187,11 +2187,32 @@ function removeClaimFromExistingCanon(noteContent, claim) {
 }
 function extractApprovedAdditions(existingNote, proposedNote) {
   const existingLines = new Set(existingNote.split("\n").map(normalizeCanonLine).filter(Boolean));
-  return Array.from(new Set(proposedNote.split("\n").map((line) => line.trim()).filter((line) => {
+  const additions = proposedNote.split("\n").map((line) => line.trim()).filter((line) => {
     if (!line || line.startsWith("---") || /^<!--/.test(line) || /^#/.test(line) || /^\w[\w -]*:\s*\S/.test(line)) return false;
     const normalized = normalizeCanonLine(line);
     return normalized.length >= 4 && !existingLines.has(normalized);
-  }).map((line) => line.replace(/^[-*+]\s+/, "")))).slice(0, 24);
+  }).map((line) => line.replace(/^(?:[-*+]\s+)+/, "").trim());
+  return uniqueCanonStatements(additions).slice(0, 24);
+}
+function uniqueCanonStatements(values) {
+  const seen = /* @__PURE__ */ new Set();
+  return values.flatMap((value) => {
+    const statement = value.replace(/^(?:[-*+]\s+)+/, "").trim();
+    const key = normalizeCanonLine(statement);
+    if (!key || seen.has(key)) return [];
+    seen.add(key);
+    return [statement];
+  });
+}
+function deduplicateCanonBullets(noteContent) {
+  const seen = /* @__PURE__ */ new Set();
+  return noteContent.split("\n").filter((line) => {
+    if (!/^\s*[-*+]\s+/.test(line)) return true;
+    const key = normalizeCanonLine(line);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join("\n");
 }
 function applyApprovedCanonConflictReplacement(existingNote, proposedNote, conflicts) {
   let resolved = existingNote;
@@ -2203,7 +2224,11 @@ function applyApprovedCanonConflictReplacement(existingNote, proposedNote, confl
     resolved = outcome.noteContent;
     removedClaims.push(conflict.existingClaim);
   }
-  const additions = Array.from(/* @__PURE__ */ new Set([...extractApprovedAdditions(existingNote, proposedNote), ...conflicts.filter((item) => item.severity === "blocking").map((item) => item.proposedClaim.trim()).filter(Boolean)]));
+  resolved = deduplicateCanonBullets(resolved);
+  const additions = uniqueCanonStatements([
+    ...extractApprovedAdditions(existingNote, proposedNote),
+    ...conflicts.filter((item) => item.severity === "blocking").map((item) => item.proposedClaim.trim()).filter(Boolean)
+  ]);
   if (!additions.length) throw new Error("The approved revision did not contain a replacement statement to add.");
   return { noteContent: `${resolved.trimEnd()}
 
