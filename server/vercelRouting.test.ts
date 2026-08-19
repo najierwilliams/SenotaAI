@@ -17,7 +17,7 @@ describe("Vercel deployment routing", () => {
     });
     expect(config.rewrites).toEqual([
       {
-        source: "/:path((?!api(?:/|$)).*)",
+        source: "/:path((?!api(?:/|$)|assets(?:/|$)).*)",
         destination: "/index.html",
       },
     ]);

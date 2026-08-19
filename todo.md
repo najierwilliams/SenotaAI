@@ -69,3 +69,6 @@
 - [x] Exercise the NPC dialogue procedure end to end with isolated player-memory fixtures before publishing the game-memory integration.
 - [ ] Verify the Obsidian–SenotaAI–Supabase workflow and publish the integrated release to GitHub and Vercel.
 - [x] Add an endpoint-level test that proves only the requested player’s NPC interaction summaries reach the Ollama prompt.
+- [ ] Repair the Vercel SPA rewrite so compiled `/assets/*` files are served as JavaScript and CSS rather than rewritten to `index.html`.
+- [ ] Publish the static-asset routing repair and confirm the latest Vercel production deployment is ready.
+- [ ] Verify the live JavaScript and CSS MIME types and confirm the SenotaAI React workspace renders instead of a blank page.
