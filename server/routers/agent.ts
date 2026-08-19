@@ -26,7 +26,7 @@ import { chatWithOllama } from "../agent/ollama";
 import { deactivateWorkspaceMemory, listWorkspaceMemories, syncWorkspaceMemory } from "../workspaceMemoryDb";
 import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
-import { createNpcCanonDraft, isNpcCanonPublishingConfigured, publishNpcCanonDraft } from "../npcMemory/canonDrafts";
+import { createNpcCanonDraft, isNpcCanonPublishingConfigured, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
 const cronSchema = z.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -107,6 +107,14 @@ export const agentRouter = router({
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraft(input);
+    }),
+    validate: npcAdminProcedure.input(z.object({
+      npcId: z.string().trim().min(2).max(79),
+      displayName: z.string().trim().min(1).max(120),
+      noteContent: z.string().trim().min(12).max(100_000),
+    })).mutation(({ input }) => {
+      const parsed = validateNpcCanonDraft(input);
+      return { valid: true, npcId: parsed.npcId, displayName: parsed.displayName, excerptLength: parsed.canonExcerpt.length };
     }),
     publish: npcAdminProcedure.input(z.object({
       npcId: z.string().trim().min(2).max(79),

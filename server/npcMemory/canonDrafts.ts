@@ -111,10 +111,7 @@ export async function createNpcCanonDraft(input: { npcId: string; displayName: s
     ],
   });
   const generated = normalizeDraftOutput(response.content);
-  const parsed = parseObsidianNpcNote(generated.noteContent, path);
-  if (parsed.npcId !== draftInput.npcId || parsed.displayName !== draftInput.displayName) {
-    throw new Error("The generated draft did not preserve the requested NPC ID and display name. Please try again.");
-  }
+  const parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
   return {
     npcId: parsed.npcId,
     displayName: parsed.displayName,
@@ -126,12 +123,18 @@ export async function createNpcCanonDraft(input: { npcId: string; displayName: s
   };
 }
 
-export async function publishNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string; sourceSha: string | null }) {
+export function validateNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string }) {
   const path = canonicalNpcPath(input.npcId);
   const parsed = parseObsidianNpcNote(input.noteContent, path);
   if (parsed.npcId !== input.npcId.trim().toLowerCase() || parsed.displayName !== input.displayName.trim()) {
     throw new Error("The approved note must retain the requested NPC ID and display name.");
   }
+  return parsed;
+}
+
+export async function publishNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string; sourceSha: string | null }) {
+  const parsed = validateNpcCanonDraft(input);
+  const path = canonicalNpcPath(input.npcId);
   const current = await readCanonNote(path);
   if ((current?.sha ?? null) !== input.sourceSha) {
     throw new Error("This NPC note changed in the vault while you were reviewing it. Generate a fresh draft before publishing.");

@@ -2035,10 +2035,7 @@ ${existingContent}`
     ]
   });
   const generated = normalizeDraftOutput(response.content);
-  const parsed = parseObsidianNpcNote(generated.noteContent, path2);
-  if (parsed.npcId !== draftInput.npcId || parsed.displayName !== draftInput.displayName) {
-    throw new Error("The generated draft did not preserve the requested NPC ID and display name. Please try again.");
-  }
+  const parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
   return {
     npcId: parsed.npcId,
     displayName: parsed.displayName,
@@ -2049,12 +2046,17 @@ ${existingContent}`
     excerptLength: parsed.canonExcerpt.length
   };
 }
-async function publishNpcCanonDraft(input) {
+function validateNpcCanonDraft(input) {
   const path2 = canonicalNpcPath(input.npcId);
   const parsed = parseObsidianNpcNote(input.noteContent, path2);
   if (parsed.npcId !== input.npcId.trim().toLowerCase() || parsed.displayName !== input.displayName.trim()) {
     throw new Error("The approved note must retain the requested NPC ID and display name.");
   }
+  return parsed;
+}
+async function publishNpcCanonDraft(input) {
+  const parsed = validateNpcCanonDraft(input);
+  const path2 = canonicalNpcPath(input.npcId);
   const current = await readCanonNote(path2);
   if ((current?.sha ?? null) !== input.sourceSha) {
     throw new Error("This NPC note changed in the vault while you were reviewing it. Generate a fresh draft before publishing.");
@@ -2154,6 +2156,14 @@ Use these notes only when they help answer the user. Never reveal them unless th
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraft(input);
+    }),
+    validate: npcAdminProcedure.input(z2.object({
+      npcId: z2.string().trim().min(2).max(79),
+      displayName: z2.string().trim().min(1).max(120),
+      noteContent: z2.string().trim().min(12).max(1e5)
+    })).mutation(({ input }) => {
+      const parsed = validateNpcCanonDraft(input);
+      return { valid: true, npcId: parsed.npcId, displayName: parsed.displayName, excerptLength: parsed.canonExcerpt.length };
     }),
     publish: npcAdminProcedure.input(z2.object({
       npcId: z2.string().trim().min(2).max(79),

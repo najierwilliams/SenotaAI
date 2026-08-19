@@ -1,14 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { isValidNpcAdminSession, createNpcCanonDraft, publishNpcCanonDraft, isNpcCanonPublishingConfigured } = vi.hoisted(() => ({
+const { isValidNpcAdminSession, createNpcCanonDraft, publishNpcCanonDraft, validateNpcCanonDraft, isNpcCanonPublishingConfigured } = vi.hoisted(() => ({
   isValidNpcAdminSession: vi.fn(),
   createNpcCanonDraft: vi.fn(),
   publishNpcCanonDraft: vi.fn(),
+  validateNpcCanonDraft: vi.fn(),
   isNpcCanonPublishingConfigured: vi.fn(),
 }));
 
 vi.mock("../npcMemory/adminAuth", () => ({ NPC_ADMIN_COOKIE: "senota_npc_admin", isValidNpcAdminSession }));
-vi.mock("../npcMemory/canonDrafts", () => ({ createNpcCanonDraft, publishNpcCanonDraft, isNpcCanonPublishingConfigured }));
+vi.mock("../npcMemory/canonDrafts", () => ({ createNpcCanonDraft, publishNpcCanonDraft, validateNpcCanonDraft, isNpcCanonPublishingConfigured }));
 
 const { agentRouter } = await import("./agent");
 
@@ -31,6 +32,15 @@ describe("direct-chat canon drafting authorization", () => {
 
     await expect(caller("senota_npc_admin=session").canon.draft({ npcId: "mira-vale", displayName: "Mira Vale", request: "Add a relationship with the archivist." }))
       .resolves.toMatchObject({ path: "NPCs/mira-vale.md", summary: "Adds a relationship." });
+    expect(publishNpcCanonDraft).not.toHaveBeenCalled();
+  });
+
+  it("allows only an unlocked administrator to validate an edited note before publishing", async () => {
+    isValidNpcAdminSession.mockResolvedValue(true);
+    validateNpcCanonDraft.mockReturnValue({ npcId: "mira-vale", displayName: "Mira Vale", canonExcerpt: "Mira knows the archivist." });
+
+    await expect(caller("senota_npc_admin=session").canon.validate({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n## Runtime excerpt\nMira knows the archivist." }))
+      .resolves.toMatchObject({ valid: true, excerptLength: 25 });
     expect(publishNpcCanonDraft).not.toHaveBeenCalled();
   });
 });

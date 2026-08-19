@@ -23,6 +23,7 @@ vi.mock("@/lib/trpc", () => ({
       },
       canon: {
         draft: { useMutation: () => ({ mutate: noop, isPending: false }) },
+        validate: { useMutation: () => ({ mutate: noop, isPending: false }) },
         publish: { useMutation: () => ({ mutate: noop, isPending: false }) },
       },
     },

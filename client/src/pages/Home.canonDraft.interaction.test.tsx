@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { noop } = vi.hoisted(() => ({ noop: vi.fn() }));
+const { noop, createDraftMutate, validateDraftMutate, publishDraftMutate } = vi.hoisted(() => ({
+  noop: vi.fn(),
+  createDraftMutate: vi.fn(),
+  validateDraftMutate: vi.fn(),
+  publishDraftMutate: vi.fn(),
+}));
 const selectedRequests = [
   "Mira never reveals the archivist's name until trust is earned.",
   "Mira secretly hates cinnamon.",
@@ -41,8 +46,9 @@ vi.mock("@/lib/trpc", () => ({
         remove: { useMutation: () => ({ mutate: noop }) },
       },
       canon: {
-        draft: { useMutation: () => ({ mutate: noop, isPending: false }) },
-        publish: { useMutation: () => ({ mutate: noop, isPending: false }) },
+        draft: { useMutation: () => ({ mutate: createDraftMutate, isPending: false }) },
+        validate: { useMutation: () => ({ mutate: validateDraftMutate, isPending: false }) },
+        publish: { useMutation: () => ({ mutate: publishDraftMutate, isPending: false }) },
       },
     },
   },
@@ -59,7 +65,16 @@ vi.mock("@/lib/workspaceMemory", () => ({
 
 import Home from "./Home";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+beforeEach(() => {
+  createDraftMutate.mockReset();
+  validateDraftMutate.mockReset();
+  publishDraftMutate.mockReset();
+});
 
 describe("selected chat request to canon draft interaction", () => {
   it("opens the draft dialog with the exact selected request and not another message", async () => {
@@ -73,5 +88,29 @@ describe("selected chat request to canon draft interaction", () => {
     const draftRequest = screen.getByLabelText("What should be permanent NPC canon?") as HTMLTextAreaElement;
     expect(draftRequest.value).toBe(selectedRequests[0]);
     expect(draftRequest.value).not.toBe(selectedRequests[1]);
+  });
+
+  it("blocks an invalid edited note during preflight before a vault publish request", async () => {
+    Object.assign(globalThis, { React });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ authenticated: true }) }));
+    createDraftMutate.mockImplementation((_input, options) => options.onSuccess?.({
+      npcId: "mira-vale", displayName: "Mira Vale", path: "NPCs/mira-vale.md", sourceSha: null, excerptLength: 30,
+      summary: "Creates a small Mira canon note.",
+      noteContent: "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n## Runtime excerpt\nMira is a baker.",
+    }));
+    validateDraftMutate.mockImplementation((_input, options) => options.onError?.(new Error("Obsidian NPC note needs a meaningful Runtime excerpt or canon body.")));
+    render(<Home />);
+
+    fireEvent.click(screen.getByRole("button", { name: `Use selected request for NPC canon: ${selectedRequests[0]}` }));
+    fireEvent.change(screen.getByLabelText("NPC ID"), { target: { value: "mira-vale" } });
+    fireEvent.change(screen.getByLabelText("NPC display name"), { target: { value: "Mira Vale" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate review draft" }));
+    await waitFor(() => expect(screen.getByLabelText("Review and edit the complete Obsidian note")).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Review and edit the complete Obsidian note"), { target: { value: "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm and send to NPC canon" }));
+
+    await waitFor(() => expect(screen.getByText(/This note is not ready to publish/)).toBeTruthy());
+    expect(validateDraftMutate).toHaveBeenCalledTimes(1);
+    expect(publishDraftMutate).not.toHaveBeenCalled();
   });
 });

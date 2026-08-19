@@ -61,6 +61,7 @@ export default function Home() {
   const syncMemory = trpc.agent.workspaceMemory.sync.useMutation();
   const removeCloudMemory = trpc.agent.workspaceMemory.remove.useMutation();
   const createCanonDraft = trpc.agent.canon.draft.useMutation();
+  const validateCanonDraft = trpc.agent.canon.validate.useMutation();
   const publishCanonDraft = trpc.agent.canon.publish.useMutation();
 
   useEffect(() => {
@@ -152,14 +153,18 @@ export default function Home() {
   const publishCanon = () => {
     if (!canonDraft) return;
     setCanonDraftError(null);
-    publishCanonDraft.mutate({
+    const approvedDraft = {
       npcId: canonDraft.npcId,
       displayName: canonDraft.displayName,
       noteContent: canonDraft.noteContent,
       sourceSha: canonDraft.sourceSha,
-    }, {
-      onSuccess: (result) => setCanonPublishedMessage(`Published ${result.path}. ${result.sync}`),
-      onError: (error) => setCanonDraftError(error.message),
+    };
+    validateCanonDraft.mutate(approvedDraft, {
+      onSuccess: () => publishCanonDraft.mutate(approvedDraft, {
+        onSuccess: (result) => setCanonPublishedMessage(`Published ${result.path}. ${result.sync}`),
+        onError: (error) => setCanonDraftError(error.message),
+      }),
+      onError: (error) => setCanonDraftError(`This note is not ready to publish: ${error.message} Add a meaningful Runtime excerpt or canon section, then try confirmation again.`),
     });
   };
 
@@ -229,12 +234,13 @@ export default function Home() {
           </div> : <div className="space-y-4 py-2">
             <div className="rounded-xl border border-violet-300/20 bg-violet-300/[0.06] p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200">SenotaAI’s summary of this proposed change</p><p className="mt-2 text-sm leading-6 text-slate-200">{canonDraft.summary}</p><p className="mt-3 text-xs text-slate-500">Target: <span className="font-mono text-violet-200">{canonDraft.path}</span> · Runtime excerpt: {canonDraft.excerptLength.toLocaleString()} characters</p></div>
             <label className="block space-y-1.5 text-xs font-medium text-slate-300">Review and edit the complete Obsidian note<textarea value={canonDraft.noteContent} onChange={(event) => setCanonDraft((current) => current ? { ...current, noteContent: event.target.value } : current)} className="min-h-80 w-full resize-y rounded-lg border border-white/10 bg-black/25 p-3 font-mono text-xs leading-5 text-slate-200 outline-none focus:border-violet-300/60" /></label>
+            <p className="rounded-lg border border-violet-300/15 bg-violet-300/[0.04] px-3 py-2 text-xs leading-5 text-violet-100/90">Before publishing, SenotaAI checks that the note keeps its frontmatter and has a meaningful <code>## Runtime excerpt</code> or canon body. If validation fails, no GitHub write is attempted.</p>
           </div>}
           {canonDraftError ? <p className="rounded-lg border border-red-300/20 bg-red-300/[0.06] px-3 py-2 text-sm text-red-200">{canonDraftError}</p> : null}
           {canonPublishedMessage ? <p className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 text-sm leading-6 text-emerald-100">{canonPublishedMessage}</p> : null}
           <DialogFooter className="gap-2 sm:gap-0">
             {!canonPublishedMessage ? <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Discard</button> : <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Close</button>}
-            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!canonNpcId.trim() || !canonDisplayName.trim() || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : "Generate review draft"}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => setCanonDraft(null)} disabled={publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={publishCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{publishCanonDraft.isPending ? "Publishing…" : "Confirm and send to NPC canon"}</button></div> : null}
+            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!canonNpcId.trim() || !canonDisplayName.trim() || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : "Generate review draft"}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => setCanonDraft(null)} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{validateCanonDraft.isPending ? "Checking note…" : publishCanonDraft.isPending ? "Publishing…" : "Confirm and send to NPC canon"}</button></div> : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

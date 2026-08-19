@@ -104,3 +104,5 @@
 - [x] Add per-message canon selection controls and coverage proving only the selected chat message seeds the review draft.
 - [x] Add interaction coverage proving that a selected user message, and no non-selected message, populates the canon-draft request field.
 - [x] Add a browser-like test environment for the canon-draft click-and-dialog interaction coverage.
+- [x] Fix canon-draft generation and confirmation validation when a review note lacks a meaningful Runtime excerpt or canon body.
+- [x] Add regression coverage that blocks invalid edited notes before private-vault publishing and guides the user to repair them.

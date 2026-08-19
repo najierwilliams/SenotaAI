@@ -5,7 +5,7 @@ const recordNpcAdminAudit = vi.fn();
 vi.mock("../agent/ollama", () => ({ chatWithOllama }));
 vi.mock("./adminAudit", () => ({ recordNpcAdminAudit }));
 
-const { createNpcCanonDraft, publishNpcCanonDraft } = await import("./canonDrafts");
+const { createNpcCanonDraft, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
 
 const draftNote = `<!-- SenotaAI draft summary: Adds a cautious bond with the town archivist. -->
 ---
@@ -41,6 +41,14 @@ afterEach(() => {
 });
 
 describe("reviewable NPC canon drafts", () => {
+  it("rejects an incomplete edited note before a publish can be attempted", () => {
+    expect(() => validateNpcCanonDraft({
+      npcId: "mira-vale",
+      displayName: "Mira Vale",
+      noteContent: "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n# Mira Vale\n\n## Runtime excerpt\n",
+    })).toThrow("meaningful Runtime excerpt or canon body");
+  });
+
   it("generates a valid reviewable Obsidian note without publishing it", async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(response(false, { message: "Not Found" }) as never);
