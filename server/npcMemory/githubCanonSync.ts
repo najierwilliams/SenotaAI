@@ -15,8 +15,12 @@ function canonRepository() {
   return process.env.GITHUB_CANON_REPOSITORY?.trim() || DEFAULT_CANON_REPOSITORY;
 }
 
+function canonReadToken() {
+  return process.env.NPC_CANON_GITHUB_TOKEN?.trim() || process.env.GITHUB_TOKEN?.trim() || "";
+}
+
 export function isGitHubCanonWebhookConfigured() {
-  return webhookSecret().length >= 16 && Boolean(process.env.GITHUB_TOKEN);
+  return webhookSecret().length >= 16 && Boolean(canonReadToken());
 }
 
 export function verifyGitHubCanonSignature(rawBody: Buffer, signature: string | undefined) {
@@ -37,7 +41,7 @@ export function changedNpcCanonPaths(payload: GitHubPushPayload) {
 }
 
 async function getGitHubFile(repository: string, path: string, ref: string) {
-  const token = process.env.GITHUB_TOKEN;
+  const token = canonReadToken();
   if (!token) throw new Error("GitHub token is not configured for canon synchronization.");
   const encodedPath = path.split("/").map(segment => encodeURIComponent(segment)).join("/");
   const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`, {

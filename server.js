@@ -1565,8 +1565,11 @@ function webhookSecret() {
 function canonRepository() {
   return process.env.GITHUB_CANON_REPOSITORY?.trim() || DEFAULT_CANON_REPOSITORY;
 }
+function canonReadToken() {
+  return process.env.NPC_CANON_GITHUB_TOKEN?.trim() || process.env.GITHUB_TOKEN?.trim() || "";
+}
 function isGitHubCanonWebhookConfigured() {
-  return webhookSecret().length >= 16 && Boolean(process.env.GITHUB_TOKEN);
+  return webhookSecret().length >= 16 && Boolean(canonReadToken());
 }
 function verifyGitHubCanonSignature(rawBody, signature) {
   const secret = webhookSecret();
@@ -1582,9 +1585,10 @@ function changedNpcCanonPaths(payload) {
   return Array.from(new Set(changedPaths)).slice(0, 25);
 }
 async function getGitHubFile(repository, path2, ref) {
-  const token = process.env.GITHUB_TOKEN;
+  const token = canonReadToken();
   if (!token) throw new Error("GitHub token is not configured for canon synchronization.");
-  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodeURIComponent(path2)}?ref=${encodeURIComponent(ref)}`, {
+  const encodedPath = path2.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "SenotaAI-canon-sync" }
   });
   if (!response.ok) throw new Error(`Unable to fetch changed canon note (${response.status}).`);
