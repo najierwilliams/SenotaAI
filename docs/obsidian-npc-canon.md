@@ -42,3 +42,7 @@ Warm, practical, distrustful of thieves, and protective of her younger brother.
 | Current player message and selected relevant context | SenotaAI / game backend request |
 
 Never put player passwords, API keys, tokens, payment data, or raw full transcripts into either memory layer. Store concise, reviewed interaction summaries and give temporary observations an expiry date.
+
+## Trusted Import Path
+
+Use `POST /api/npc/canon/sync` from a **trusted server or private sync worker**, never from a Unity client. The request requires the `x-senota-game-key` header and accepts an Obsidian note’s raw Markdown as `noteContent` plus its vault-relative `obsidianPath`. SenotaAI requires `npc_id` and `display_name` frontmatter, computes a content hash, and writes only the bounded `## Runtime excerpt` section (or a bounded canon body if that section is absent) to Supabase. This is the repeatable boundary between the private Obsidian brain and the cloud runtime cache; player memories cannot be submitted through this route.

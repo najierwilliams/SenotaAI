@@ -69,6 +69,12 @@
 - [x] Exercise the NPC dialogue procedure end to end with isolated player-memory fixtures before publishing the game-memory integration.
 - [ ] Verify the Obsidian–SenotaAI–Supabase workflow and publish the integrated release to GitHub and Vercel.
 - [x] Add an endpoint-level test that proves only the requested player’s NPC interaction summaries reach the Ollama prompt.
-- [ ] Repair the Vercel SPA rewrite so compiled `/assets/*` files are served as JavaScript and CSS rather than rewritten to `index.html`.
-- [ ] Publish the static-asset routing repair and confirm the latest Vercel production deployment is ready.
-- [ ] Verify the live JavaScript and CSS MIME types and confirm the SenotaAI React workspace renders instead of a blank page.
+- [x] Repair the Vercel SPA rewrite so compiled `/assets/*` files are served as JavaScript and CSS rather than rewritten to `index.html`.
+- [x] Publish the static-asset routing repair and confirm the latest Vercel production deployment is ready.
+- [x] Verify the live JavaScript and CSS MIME types and confirm the SenotaAI React workspace renders instead of a blank page.
+- [x] Exercise the deployed NPC dialogue endpoint with an authorized valid payload and confirm a `200` response using synced canon plus player-scoped memory.
+- [x] Verify the production canon excerpt and player-memory fixture are present only within the intended NPC and player scope, then remove the temporary verification data.
+- [x] Prove in production that two players receive only their own NPC memory context for the same test NPC.
+- [x] Exercise an Obsidian-format canon note through the documented excerpt synchronization boundary before the final release sign-off.
+- [x] Add a repeatable protected import path that parses an Obsidian NPC note and synchronizes its bounded excerpt to Supabase.
+- [ ] Invoke the deployed Obsidian canon import path and then verify a scoped NPC dialogue `200` response before final sign-off.

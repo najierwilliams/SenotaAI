@@ -11,6 +11,7 @@ import { executeScheduledRun } from "./agent/scheduledExecution";
 import { chatWithOllama } from "./agent/ollama";
 import { buildNpcDialogueContext, isNpcMemoryCloudReady, rememberPlayerNpcInteraction } from "./npcMemory/supabase";
 import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
+import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
 import { registerOAuthRoutes } from "./_core/oauth";
@@ -27,6 +28,17 @@ export function createApp() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  app.post("/api/npc/canon/sync", async (req, res) => {
+    if (!isAuthorizedNpcGameRequest(req.header("x-senota-game-key"))) return res.status(401).json({ error: "unauthorized-game-backend" });
+    try {
+      const { noteContent, obsidianPath } = req.body ?? {};
+      if (typeof noteContent !== "string" || typeof obsidianPath !== "string") return res.status(400).json({ error: "noteContent and obsidianPath are required" });
+      return res.status(200).json(await syncObsidianNpcCanon(noteContent, obsidianPath));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Obsidian canon sync failed." });
+    }
+  });
 
   app.post("/api/npc/dialogue", async (req, res) => {
     if (!isAuthorizedNpcGameRequest(req.header("x-senota-game-key"))) return res.status(401).json({ error: "unauthorized-game-backend" });

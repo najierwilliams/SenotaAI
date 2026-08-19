@@ -1303,6 +1303,24 @@ async function request(path2, init) {
 function isNpcMemoryCloudReady() {
   return Boolean(config());
 }
+async function upsertNpcCanonSource(source) {
+  assertIdentifier(source.npcId, "NPC ID");
+  if (!source.displayName.trim() || !source.obsidianPath.trim()) throw new Error("NPC name and Obsidian path are required.");
+  const records = await request("npc_canon_sources?on_conflict=npc_id", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+    body: JSON.stringify({
+      npc_id: source.npcId,
+      display_name: source.displayName.trim(),
+      obsidian_path: source.obsidianPath.trim(),
+      canon_hash: source.canonHash ?? null,
+      canon_excerpt: source.canonExcerpt?.trim().slice(0, 12e3) ?? "",
+      is_active: true,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    })
+  });
+  return records?.[0] ?? null;
+}
 async function getNpcCanonSnapshot(npcId) {
   assertIdentifier(npcId, "NPC ID");
   const params = new URLSearchParams({
@@ -1391,6 +1409,49 @@ function isAuthorizedNpcGameRequest(providedKey) {
   const expected = Buffer.from(expectedKey);
   const provided = Buffer.from(providedKey);
   return expected.length === provided.length && timingSafeEqual(expected, provided);
+}
+
+// server/npcMemory/obsidianSync.ts
+import { createHash } from "node:crypto";
+function parseFrontmatter(noteContent) {
+  const match = noteContent.replace(/^\uFEFF/, "").match(/^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)([\s\S]*)$/);
+  if (!match) throw new Error("Obsidian NPC note must begin with YAML frontmatter delimited by ---.");
+  const fields = {};
+  for (const line of match[1].split("\n")) {
+    const separator = line.indexOf(":");
+    if (separator < 1) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim().replace(/^['"]|['"]$/g, "");
+    if (key && value) fields[key] = value;
+  }
+  return { fields, body: match[2].trim() };
+}
+function boundedExcerpt(body) {
+  const runtimeSection = body.match(/^##\s+Runtime excerpt\s*\n([\s\S]*?)(?=^##\s+|$)/im)?.[1];
+  const source = runtimeSection ?? body;
+  const normalized = source.replace(/^#{1,6}\s+.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
+  if (normalized.length < 12) throw new Error("Obsidian NPC note needs a meaningful Runtime excerpt or canon body.");
+  return normalized.slice(0, 12e3);
+}
+function parseObsidianNpcNote(noteContent, obsidianPath) {
+  if (typeof noteContent !== "string" || noteContent.length > 1e5) throw new Error("Obsidian NPC note must be a string up to 100,000 characters.");
+  if (!/^[A-Za-z0-9_./ -]{1,300}$/.test(obsidianPath) || obsidianPath.includes("..")) throw new Error("Obsidian path is invalid.");
+  const { fields, body } = parseFrontmatter(noteContent);
+  const npcId = fields.npc_id;
+  const displayName = fields.display_name;
+  if (!npcId || !displayName) throw new Error("Obsidian NPC note frontmatter requires npc_id and display_name.");
+  return {
+    npcId,
+    displayName,
+    obsidianPath,
+    canonHash: createHash("sha256").update(noteContent).digest("hex"),
+    canonExcerpt: boundedExcerpt(body)
+  };
+}
+async function syncObsidianNpcCanon(noteContent, obsidianPath) {
+  const parsed = parseObsidianNpcNote(noteContent, obsidianPath);
+  await upsertNpcCanonSource(parsed);
+  return { npcId: parsed.npcId, displayName: parsed.displayName, canonHash: parsed.canonHash, excerptLength: parsed.canonExcerpt.length };
 }
 
 // server/_core/systemRouter.ts
@@ -2277,6 +2338,16 @@ function createApp() {
   app2.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app2);
   registerOAuthRoutes(app2);
+  app2.post("/api/npc/canon/sync", async (req, res) => {
+    if (!isAuthorizedNpcGameRequest(req.header("x-senota-game-key"))) return res.status(401).json({ error: "unauthorized-game-backend" });
+    try {
+      const { noteContent, obsidianPath } = req.body ?? {};
+      if (typeof noteContent !== "string" || typeof obsidianPath !== "string") return res.status(400).json({ error: "noteContent and obsidianPath are required" });
+      return res.status(200).json(await syncObsidianNpcCanon(noteContent, obsidianPath));
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Obsidian canon sync failed." });
+    }
+  });
   app2.post("/api/npc/dialogue", async (req, res) => {
     if (!isAuthorizedNpcGameRequest(req.header("x-senota-game-key"))) return res.status(401).json({ error: "unauthorized-game-backend" });
     if (!isNpcMemoryCloudReady()) return res.status(503).json({ error: "npc-memory-not-configured" });
