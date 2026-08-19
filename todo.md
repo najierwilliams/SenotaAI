@@ -93,6 +93,6 @@
 - [x] Preserve confirmation gates for destructive code, repository, and deployment actions while allowing safe canon synchronization and memory recall to operate automatically.
 - [x] Add automated lifecycle coverage for browser-private chat-session creation, rename, switching, deletion, and persistence.
 - [x] Add rendered sidebar coverage that proves each conversation exposes accessible rename and delete controls.
-- [ ] Set and verify the production NPC administrator password through protected configuration.
-- [ ] Diagnose and fix the production dashboard report that the NPC administrator password is unconfigured.
+- [x] Set and verify the production NPC administrator password through protected configuration.
+- [x] Diagnose and fix the production dashboard report that the NPC administrator password is unconfigured.
 - [x] Correct the NPC management status handling so a normal unauthenticated response can still display a configured administrator password.
