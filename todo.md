@@ -123,3 +123,10 @@
 - [x] Validate the connected relationship, memory-governance, and canon-conflict workflows through protected administrator tests and deployed dashboard behavior.
 - [x] Validate the deployed canon-draft conflict workflow by generating a blocking conflict and confirming the review UI requires an explicit override before publishing.
 - [x] Capture production evidence for the deployed canon-draft request path after the blocking-conflict verification.
+- [x] Add protected canon-target discovery so the draft form offers existing NPC IDs and display names from the private canon vault.
+- [x] Support selecting one or multiple existing NPC targets while allowing typed ID/name pairs to create new canon targets that appear in future selections.
+- [x] Preserve unrelated canon when an administrator approves a blocking conflict by removing only the identified conflicting claim before adding the approved replacement.
+- [ ] Add automated coverage and production verification for multi-target selection, new-NPC discovery, and narrow conflict-claim replacement.
+- [x] Make conflict analysis return deterministic exact replacement anchors so approved blocking conflicts can reliably remove the intended live-note claim without depending on an LLM paraphrase.
+- [x] Add integration coverage for an override publish that removes only an anchored claim and preserves unrelated realistic canon structure.
+- [ ] Verify the deployed override-publish workflow with a safe test note and record evidence of precise claim replacement without unrelated loss.

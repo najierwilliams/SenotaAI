@@ -46,7 +46,8 @@ vi.mock("@/lib/trpc", () => ({
         remove: { useMutation: () => ({ mutate: noop }) },
       },
       canon: {
-        draft: { useMutation: () => ({ mutate: createDraftMutate, isPending: false }) },
+        targets: { useQuery: () => ({ data: { targets: [{ npcId: "mira-vale", displayName: "Mira Vale", path: "NPCs/mira-vale.md" }] }, isLoading: false, refetch: noop }) },
+        draftBatch: { useMutation: () => ({ mutate: createDraftMutate, isPending: false }) },
         validate: { useMutation: () => ({ mutate: validateDraftMutate, isPending: false }) },
         publish: { useMutation: () => ({ mutate: publishDraftMutate, isPending: false }) },
       },
@@ -90,21 +91,43 @@ describe("selected chat request to canon draft interaction", () => {
     expect(draftRequest.value).not.toBe(selectedRequests[1]);
   });
 
+  it("submits selected existing and typed new NPC targets together for batch drafting", async () => {
+    Object.assign(globalThis, { React });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ authenticated: true }) }));
+    render(<Home />);
+
+    fireEvent.click(screen.getByRole("button", { name: `Use selected request for NPC canon: ${selectedRequests[0]}` }));
+    await waitFor(() => expect(screen.getByLabelText("What should be permanent NPC canon?")).toBeTruthy());
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.change(screen.getByLabelText("NPC ID"), { target: { value: "orion-vale" } });
+    fireEvent.change(screen.getByLabelText("NPC display name"), { target: { value: "Orion Vale" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate 2 review drafts" }));
+
+    expect(createDraftMutate).toHaveBeenCalledWith({
+      targets: [
+        { npcId: "mira-vale", displayName: "Mira Vale" },
+        { npcId: "orion-vale", displayName: "Orion Vale" },
+      ],
+      request: selectedRequests[0],
+    }, expect.any(Object));
+  });
+
   it("blocks an invalid edited note during preflight before a vault publish request", async () => {
     Object.assign(globalThis, { React });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ authenticated: true }) }));
-    createDraftMutate.mockImplementation((_input, options) => options.onSuccess?.({
+    createDraftMutate.mockImplementation((_input, options) => options.onSuccess?.({ drafts: [{
       npcId: "mira-vale", displayName: "Mira Vale", path: "NPCs/mira-vale.md", sourceSha: null, excerptLength: 30,
       summary: "Creates a small Mira canon note.",
       noteContent: "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n\n## Runtime excerpt\nMira is a baker.",
-    }));
+      conflicts: [],
+    }] }));
     validateDraftMutate.mockImplementation((_input, options) => options.onError?.(new Error("Obsidian NPC note needs a meaningful Runtime excerpt or canon body.")));
     render(<Home />);
 
     fireEvent.click(screen.getByRole("button", { name: `Use selected request for NPC canon: ${selectedRequests[0]}` }));
     fireEvent.change(screen.getByLabelText("NPC ID"), { target: { value: "mira-vale" } });
     fireEvent.change(screen.getByLabelText("NPC display name"), { target: { value: "Mira Vale" } });
-    fireEvent.click(screen.getByRole("button", { name: "Generate review draft" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate 1 review draft" }));
     await waitFor(() => expect(screen.getByLabelText("Review and edit the complete Obsidian note")).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Review and edit the complete Obsidian note"), { target: { value: "---\nnpc_id: mira-vale\ndisplay_name: Mira Vale\n---\n" } });
     fireEvent.click(screen.getByRole("button", { name: "Confirm and send to NPC canon" }));

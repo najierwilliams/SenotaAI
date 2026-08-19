@@ -5,7 +5,7 @@ const recordNpcAdminAudit = vi.fn();
 vi.mock("../agent/ollama", () => ({ chatWithOllama }));
 vi.mock("./adminAudit", () => ({ recordNpcAdminAudit }));
 
-const { analyzeNpcCanonConflicts, createNpcCanonDraft, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
+const { analyzeNpcCanonConflicts, applyApprovedCanonConflictReplacement, createNpcCanonDraft, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
 
 const draftNote = `<!-- SenotaAI draft summary: Adds a cautious bond with the town archivist. -->
 ---
@@ -67,6 +67,53 @@ describe("reviewable NPC canon drafts", () => {
     await expect(analyzeNpcCanonConflicts("# Mira\nMira is a baker.", "# Mira\nMira has never baked.")).resolves.toMatchObject([{ severity: "blocking", existingClaim: "Mira is a baker." }]);
   });
 
+  it("lists validated private-vault NPC targets while omitting the vault template", async () => {
+    const lunaNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Runtime excerpt\nLuna exists in the world and can remember meaningful events.";
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(response(true, [{ type: "file", path: "NPCs/luna001.md" }, { type: "file", path: "NPCs/_template.md" }]) as never)
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(lunaNote).toString("base64"), sha: "luna-sha" }) as never);
+
+    await expect(listNpcCanonTargets()).resolves.toEqual([{ npcId: "luna001", displayName: "Luna", path: "NPCs/luna001.md" }]);
+  });
+
+  it("replaces only the approved conflicting claim while retaining unrelated canon", () => {
+    const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Personality\n- She is observant.\n- I have a body.\n- She keeps the archivist's confidence.\n\n## Runtime excerpt\nLuna exists and speaks with care.";
+    const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Runtime excerpt\nLuna does not have a body and communicates through light.";
+    const result = applyApprovedCanonConflictReplacement(existing, proposed, [{ severity: "blocking", existingClaim: "I have a body.", replacementAnchor: "- I have a body.", proposedClaim: "I do not have a body.", rationale: "Direct body-state contradiction." }]);
+
+    expect(result.removedClaims).toEqual(["I have a body."]);
+    expect(result.noteContent).not.toContain("I have a body.");
+    expect(result.noteContent).toContain("She keeps the archivist's confidence.");
+    expect(result.noteContent).toContain("I do not have a body.");
+    expect(() => validateNpcCanonDraft({ npcId: "luna001", displayName: "Luna", noteContent: result.noteContent })).not.toThrow();
+  });
+
+  it("refuses an approved automatic replacement when the conflict lacks a verified exact anchor", () => {
+    const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\nLuna has a body and safeguards the archive.";
+    const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\nLuna does not have a body.";
+    expect(() => applyApprovedCanonConflictReplacement(existing, proposed, [{ severity: "blocking", existingClaim: "Luna has a body.", replacementAnchor: null, proposedClaim: "Luna does not have a body.", rationale: "Direct contradiction." }])).toThrow("could not verify an exact existing canon line");
+  });
+
+  it("writes the claim-level replacement instead of overwriting unrelated existing canon", async () => {
+    const existingNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Personality\n- Luna is observant.\n- Luna has a body.\n- Luna protects the town archive.\n\n## Runtime excerpt\nLuna is observant and protects the town archive.";
+    const proposedNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Runtime excerpt\nLuna does not have a body and communicates through light.";
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(existingNote).toString("base64"), sha: "current-sha" }) as never)
+      .mockResolvedValueOnce(response(true, { commit: { sha: "replacement-sha" }, content: { path: "NPCs/luna001.md" } }) as never);
+    chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [{ severity: "blocking", existingClaim: "Luna has a body.", proposedClaim: "Luna does not have a body.", rationale: "Direct body-state contradiction." }] }) });
+
+    await publishNpcCanonDraft({ npcId: "luna001", displayName: "Luna", noteContent: proposedNote, sourceSha: "current-sha", conflictOverride: true });
+
+    const [, writeRequest] = fetchMock.mock.calls[1] ?? [];
+    const payload = JSON.parse(String(writeRequest?.body));
+    const writtenNote = Buffer.from(payload.content, "base64").toString("utf8");
+    expect(writtenNote).not.toContain("Luna has a body.");
+    expect(writtenNote).toContain("Luna protects the town archive.");
+    expect(writtenNote).toContain("Luna does not have a body.");
+  });
+
   it("refuses a blocking conflict until the administrator explicitly overrides it", async () => {
     const existing = Buffer.from(draftNote.replace(/^<!--[\s\S]*?-->\n/, "")).toString("base64");
     const fetchMock = vi.mocked(fetch);
@@ -82,7 +129,7 @@ describe("reviewable NPC canon drafts", () => {
       .mockResolvedValueOnce(response(false, { message: "Not Found" }) as never)
       .mockResolvedValueOnce(response(true, { commit: { sha: "commit-sha" }, content: { path: "NPCs/mira-vale.md" } }) as never);
 
-    const result = await publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: draftNote.replace(/^<!--[^\n]*-->\n/, ""), sourceSha: null });
+    const result = await publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: draftNote.replace(/^<!--[\s\S]*?-->\n/, ""), sourceSha: null });
 
     expect(result).toMatchObject({ ok: true, npcId: "mira-vale", commitSha: "commit-sha" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -92,11 +139,11 @@ describe("reviewable NPC canon drafts", () => {
   });
 
   it("refuses to publish a stale reviewed draft", async () => {
-    const existing = Buffer.from(draftNote.replace(/^<!--[^\n]*-->\n/, "")).toString("base64");
+    const existing = Buffer.from(draftNote.replace(/^<!--[\s\S]*?-->\n/, "")).toString("base64");
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValueOnce(response(true, { encoding: "base64", content: existing, sha: "new-sha" }) as never);
 
-    await expect(publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: draftNote.replace(/^<!--[^\n]*-->\n/, ""), sourceSha: "old-sha" }))
+    await expect(publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: draftNote.replace(/^<!--[\s\S]*?-->\n/, ""), sourceSha: "old-sha" }))
       .rejects.toThrow("changed in the vault");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

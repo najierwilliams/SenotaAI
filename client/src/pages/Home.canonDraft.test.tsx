@@ -22,7 +22,8 @@ vi.mock("@/lib/trpc", () => ({
         remove: { useMutation: () => ({ mutate: noop }) },
       },
       canon: {
-        draft: { useMutation: () => ({ mutate: noop, isPending: false }) },
+        targets: { useQuery: () => ({ data: { targets: [] }, isLoading: false, refetch: noop }) },
+        draftBatch: { useMutation: () => ({ mutate: noop, isPending: false }) },
         validate: { useMutation: () => ({ mutate: noop, isPending: false }) },
         publish: { useMutation: () => ({ mutate: noop, isPending: false }) },
       },

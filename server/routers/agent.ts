@@ -26,7 +26,7 @@ import { chatWithOllama } from "../agent/ollama";
 import { deactivateWorkspaceMemory, listWorkspaceMemories, syncWorkspaceMemory } from "../workspaceMemoryDb";
 import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
-import { createNpcCanonDraft, isNpcCanonPublishingConfigured, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
+import { createNpcCanonDraft, createNpcCanonDraftBatch, isNpcCanonPublishingConfigured, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
 import { runNpcPreviewDialogue } from "../npcMemory/previewDialogue";
 import { buildTemporalContext, resolveTimeZone } from "../temporalContext";
 
@@ -103,6 +103,10 @@ export const agentRouter = router({
   })),
 
   canon: router({
+    targets: npcAdminProcedure.query(async () => {
+      if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
+      return { targets: await listNpcCanonTargets() };
+    }),
     draft: npcAdminProcedure.input(z.object({
       npcId: z.string().trim().min(2).max(79),
       displayName: z.string().trim().min(1).max(120),
@@ -110,6 +114,13 @@ export const agentRouter = router({
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraft(input);
+    }),
+    draftBatch: npcAdminProcedure.input(z.object({
+      targets: z.array(z.object({ npcId: z.string().trim().min(2).max(79), displayName: z.string().trim().min(1).max(120) })).min(1).max(8),
+      request: z.string().trim().min(1).max(12_000),
+    })).mutation(async ({ input }) => {
+      if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
+      return createNpcCanonDraftBatch(input);
     }),
     validate: npcAdminProcedure.input(z.object({
       npcId: z.string().trim().min(2).max(79),
