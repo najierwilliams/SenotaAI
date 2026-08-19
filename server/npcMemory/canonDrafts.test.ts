@@ -5,7 +5,7 @@ const recordNpcAdminAudit = vi.fn();
 vi.mock("../agent/ollama", () => ({ chatWithOllama }));
 vi.mock("./adminAudit", () => ({ recordNpcAdminAudit }));
 
-const { createNpcCanonDraft, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
+const { analyzeNpcCanonConflicts, createNpcCanonDraft, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
 
 const draftNote = `<!-- SenotaAI draft summary: Adds a cautious bond with the town archivist. -->
 ---
@@ -60,6 +60,20 @@ describe("reviewable NPC canon drafts", () => {
     expect(draft.noteContent).toContain("## Runtime excerpt");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(chatWithOllama).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns structured direct lore conflicts", async () => {
+    chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [{ severity: "blocking", existingClaim: "Mira is a baker.", proposedClaim: "Mira has never baked.", rationale: "The occupation claims cannot both be true." }] }) });
+    await expect(analyzeNpcCanonConflicts("# Mira\nMira is a baker.", "# Mira\nMira has never baked.")).resolves.toMatchObject([{ severity: "blocking", existingClaim: "Mira is a baker." }]);
+  });
+
+  it("refuses a blocking conflict until the administrator explicitly overrides it", async () => {
+    const existing = Buffer.from(draftNote.replace(/^<!--[\s\S]*?-->\n/, "")).toString("base64");
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(response(true, { encoding: "base64", content: existing, sha: "current-sha" }) as never);
+    chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [{ severity: "blocking", existingClaim: "Mira is a baker.", proposedClaim: "Mira has never baked.", rationale: "Direct contradiction." }] }) });
+    await expect(publishNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", noteContent: draftNote.replace(/^<!--[\s\S]*?-->\n/, ""), sourceSha: "current-sha" })).rejects.toThrow("explicit override");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("publishes only the reviewed note after checking the source version", async () => {

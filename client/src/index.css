@@ -128,6 +128,8 @@
   .flex { min-height: 0; min-width: 0; }
   .senota-page { @apply mx-auto w-full max-w-7xl; }
   .senota-hero-grid { background-image: linear-gradient(135deg, oklch(0.28 0.06 210 / 24%), transparent 45%), linear-gradient(oklch(1 0 0 / 4%) 1px, transparent 1px), linear-gradient(90deg, oklch(1 0 0 / 4%) 1px, transparent 1px); background-size: auto, 28px 28px, 28px 28px; }
+  .field { @apply rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none transition focus:border-cyan-300/50; }
+  .icon-button { @apply grid size-8 place-items-center rounded-lg border border-white/10 p-1.5 text-slate-400 transition hover:border-cyan-300/25 hover:bg-cyan-300/10 hover:text-cyan-100 focus-visible:border-cyan-300/60; }
   .font-display { font-family: "Manrope", "Avenir Next", sans-serif; }
   @media (min-width: 640px) { .container { padding-left: 1.5rem; padding-right: 1.5rem; } }
   @media (min-width: 1024px) { .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; } }

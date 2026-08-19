@@ -44,10 +44,25 @@ export type PlayerNpcMemoryAdminRecord = PlayerNpcMemory & {
   importance: number;
   expiresAt: string | null;
   isActive: boolean;
+  isPinned: boolean;
+};
+
+export type PlayerNpcRelationship = {
+  playerId: string;
+  npcId: string;
+  relationshipScore: number;
+  trust: number;
+  affinity: number;
+  familiarity: number;
+  caution: number;
+  recentSummary: string | null;
+  lastInteractionAt: string | null;
+  updatedAt: string;
 };
 
 export type NpcCanonAdminUpdate = Partial<Pick<NpcCanonSource, "displayName" | "obsidianPath" | "canonExcerpt">> & { isActive?: boolean };
-export type PlayerNpcMemoryAdminUpdate = { summary?: string; importance?: number; expiresAt?: string | null; isActive?: boolean };
+export type PlayerNpcMemoryAdminUpdate = { summary?: string; importance?: number; expiresAt?: string | null; isActive?: boolean; isPinned?: boolean };
+export type PlayerNpcRelationshipUpdate = Partial<Pick<PlayerNpcRelationship, "relationshipScore" | "trust" | "affinity" | "familiarity" | "caution" | "recentSummary" | "lastInteractionAt">>;
 
 function config() {
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
@@ -110,7 +125,7 @@ export async function listPlayerNpcMemoriesForAdmin(input: { npcId?: string; pla
   if (input.npcId) assertIdentifier(input.npcId, "NPC ID");
   if (input.playerId) assertUuid(input.playerId, "Player ID");
   const params = new URLSearchParams({
-    select: "id,player_id,npc_id,memory_kind,summary,importance,source,occurred_at,expires_at,is_active",
+    select: "id,player_id,npc_id,memory_kind,summary,importance,source,occurred_at,expires_at,is_active,is_pinned",
     order: "occurred_at.desc",
     limit: String(Math.min(Math.max(input.limit ?? 100, 1), 200)),
   });
@@ -129,6 +144,27 @@ export async function listPlayerNpcMemoriesForAdmin(input: { npcId?: string; pla
     occurredAt: String(record.occurred_at),
     expiresAt: record.expires_at ? String(record.expires_at) : null,
     isActive: Boolean(record.is_active),
+    isPinned: Boolean(record.is_pinned),
+  }));
+}
+
+/** Relationship dimensions are always scoped to one NPC and one player. */
+export async function listPlayerNpcRelationshipsForAdmin(input: { npcId?: string; playerId?: string; limit?: number } = {}): Promise<PlayerNpcRelationship[]> {
+  if (input.npcId) assertIdentifier(input.npcId, "NPC ID");
+  if (input.playerId) assertUuid(input.playerId, "Player ID");
+  const params = new URLSearchParams({
+    select: "player_id,npc_id,relationship_score,trust,affinity,familiarity,caution,recent_summary,last_interaction_at,updated_at",
+    order: "updated_at.desc",
+    limit: String(Math.min(Math.max(input.limit ?? 100, 1), 200)),
+  });
+  if (input.npcId) params.set("npc_id", `eq.${input.npcId}`);
+  if (input.playerId) params.set("player_id", `eq.${input.playerId}`);
+  const records = await request(`player_npc_state?${params.toString()}`);
+  return (records ?? []).map((record: Record<string, unknown>) => ({
+    playerId: String(record.player_id), npcId: String(record.npc_id), relationshipScore: Number(record.relationship_score),
+    trust: Number(record.trust), affinity: Number(record.affinity), familiarity: Number(record.familiarity), caution: Number(record.caution),
+    recentSummary: record.recent_summary ? String(record.recent_summary) : null,
+    lastInteractionAt: record.last_interaction_at ? String(record.last_interaction_at) : null, updatedAt: String(record.updated_at),
   }));
 }
 
@@ -182,9 +218,23 @@ export async function updatePlayerNpcMemoryForAdmin(memoryId: string, patch: Pla
   if (patch.importance !== undefined) update.importance = Math.min(Math.max(Math.round(patch.importance), 1), 5);
   if (patch.expiresAt !== undefined) update.expires_at = patch.expiresAt;
   if (patch.isActive !== undefined) update.is_active = patch.isActive;
+  if (patch.isPinned !== undefined) update.is_pinned = patch.isPinned;
   if (!Object.keys(update).length) throw new Error("At least one memory field must be updated.");
   const params = new URLSearchParams({ id: `eq.${memoryId}` });
   await request(`player_npc_memory?${params.toString()}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify(update) });
+}
+
+export async function updatePlayerNpcRelationshipForAdmin(playerId: string, npcId: string, patch: PlayerNpcRelationshipUpdate) {
+  assertUuid(playerId, "Player ID");
+  assertIdentifier(npcId, "NPC ID");
+  const update: Record<string, unknown> = { player_id: playerId, npc_id: npcId, updated_at: new Date().toISOString() };
+  const scoreFields = ["relationshipScore", "trust", "affinity", "familiarity", "caution"] as const;
+  const dbFields = { relationshipScore: "relationship_score", trust: "trust", affinity: "affinity", familiarity: "familiarity", caution: "caution" } as const;
+  for (const field of scoreFields) if (patch[field] !== undefined) update[dbFields[field]] = Math.min(Math.max(Math.round(patch[field] as number), -100), 100);
+  if (patch.recentSummary !== undefined) update.recent_summary = patch.recentSummary?.trim().slice(0, 2_000) || null;
+  if (patch.lastInteractionAt !== undefined) update.last_interaction_at = patch.lastInteractionAt;
+  if (Object.keys(update).length === 3) throw new Error("At least one relationship field must be updated.");
+  await request("player_npc_state?on_conflict=player_id,npc_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(update) });
 }
 
 /** Registers a canon reference plus a limited runtime excerpt; it never writes player chats to Obsidian. */

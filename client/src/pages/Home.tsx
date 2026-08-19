@@ -31,6 +31,7 @@ type CanonDraft = {
   summary: string;
   sourceSha: string | null;
   excerptLength: number;
+  conflicts: Array<{ severity: "warning" | "blocking"; existingClaim: string; proposedClaim: string; rationale: string }>;
 };
 
 export function canonRequestFromSelectedMessage(selectedRequest: string | undefined, existingDraftRequest: string, latestUserMessage: string) {
@@ -54,6 +55,7 @@ export default function Home() {
   const [canonDraft, setCanonDraft] = useState<CanonDraft | null>(null);
   const [canonDraftError, setCanonDraftError] = useState<string | null>(null);
   const [canonPublishedMessage, setCanonPublishedMessage] = useState<string | null>(null);
+  const [canonConflictOverride, setCanonConflictOverride] = useState(false);
   const [isNpcAdminUnlocked, setIsNpcAdminUnlocked] = useState(false);
   const chat = trpc.agent.chat.useMutation();
   const { data: connections } = trpc.agent.connections.useQuery(undefined, { retry: false });
@@ -139,13 +141,14 @@ export default function Home() {
     setCanonDraft(null);
     setCanonDraftError(null);
     setCanonPublishedMessage(null);
+    setCanonConflictOverride(false);
     setIsCanonDialogOpen(true);
   };
 
   const generateCanonDraft = () => {
     setCanonDraftError(null);
     createCanonDraft.mutate({ npcId: canonNpcId, displayName: canonDisplayName, request: canonRequest }, {
-      onSuccess: (draft) => setCanonDraft(draft),
+      onSuccess: (draft) => { setCanonDraft(draft); setCanonConflictOverride(false); },
       onError: (error) => setCanonDraftError(error.message),
     });
   };
@@ -158,6 +161,7 @@ export default function Home() {
       displayName: canonDraft.displayName,
       noteContent: canonDraft.noteContent,
       sourceSha: canonDraft.sourceSha,
+      conflictOverride: canonConflictOverride,
     };
     validateCanonDraft.mutate(approvedDraft, {
       onSuccess: () => publishCanonDraft.mutate(approvedDraft, {
@@ -234,13 +238,14 @@ export default function Home() {
           </div> : <div className="space-y-4 py-2">
             <div className="rounded-xl border border-violet-300/20 bg-violet-300/[0.06] p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200">SenotaAI’s summary of this proposed change</p><p className="mt-2 text-sm leading-6 text-slate-200">{canonDraft.summary}</p><p className="mt-3 text-xs text-slate-500">Target: <span className="font-mono text-violet-200">{canonDraft.path}</span> · Runtime excerpt: {canonDraft.excerptLength.toLocaleString()} characters</p></div>
             <label className="block space-y-1.5 text-xs font-medium text-slate-300">Review and edit the complete Obsidian note<textarea value={canonDraft.noteContent} onChange={(event) => setCanonDraft((current) => current ? { ...current, noteContent: event.target.value } : current)} className="min-h-80 w-full resize-y rounded-lg border border-white/10 bg-black/25 p-3 font-mono text-xs leading-5 text-slate-200 outline-none focus:border-violet-300/60" /></label>
+            {canonDraft.conflicts?.length ? <div className="space-y-2 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] p-4"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-100">Canon conflict review</p><p className="text-xs leading-5 text-amber-100/80">SenotaAI found potential factual contradictions against the current private canon. Review them before publishing.</p>{canonDraft.conflicts.map((conflict, index) => <div key={`${conflict.existingClaim}-${index}`} className="rounded-lg border border-amber-300/15 bg-black/15 p-3 text-xs leading-5 text-slate-300"><p><span className={`font-semibold ${conflict.severity === "blocking" ? "text-red-200" : "text-amber-100"}`}>{conflict.severity === "blocking" ? "Blocking" : "Warning"}</span> · {conflict.rationale}</p><p className="mt-2 text-slate-400">Existing: “{conflict.existingClaim}”</p><p className="text-slate-200">Proposed: “{conflict.proposedClaim}”</p></div>)}{canonDraft.conflicts.some(conflict => conflict.severity === "blocking") ? <label className="flex items-start gap-2 rounded-lg border border-red-300/20 bg-red-300/[0.05] p-3 text-xs leading-5 text-red-100"><input type="checkbox" checked={canonConflictOverride} onChange={event => setCanonConflictOverride(event.target.checked)} className="mt-1" />I reviewed these contradictions and intentionally approve this canon revision.</label> : null}</div> : <p className="rounded-lg border border-emerald-300/15 bg-emerald-300/[0.04] px-3 py-2 text-xs leading-5 text-emerald-100/90">No direct canon conflicts were found in this draft.</p>}
             <p className="rounded-lg border border-violet-300/15 bg-violet-300/[0.04] px-3 py-2 text-xs leading-5 text-violet-100/90">Before publishing, SenotaAI checks that the note keeps its frontmatter and has a meaningful <code>## Runtime excerpt</code> or canon body. If validation fails, no GitHub write is attempted.</p>
           </div>}
           {canonDraftError ? <p className="rounded-lg border border-red-300/20 bg-red-300/[0.06] px-3 py-2 text-sm text-red-200">{canonDraftError}</p> : null}
           {canonPublishedMessage ? <p className="rounded-lg border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 text-sm leading-6 text-emerald-100">{canonPublishedMessage}</p> : null}
           <DialogFooter className="gap-2 sm:gap-0">
             {!canonPublishedMessage ? <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Discard</button> : <button onClick={() => setIsCanonDialogOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:bg-white/5">Close</button>}
-            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!canonNpcId.trim() || !canonDisplayName.trim() || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : "Generate review draft"}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => setCanonDraft(null)} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{validateCanonDraft.isPending ? "Checking note…" : publishCanonDraft.isPending ? "Publishing…" : "Confirm and send to NPC canon"}</button></div> : null}
+            {!canonDraft ? <button onClick={generateCanonDraft} disabled={!canonNpcId.trim() || !canonDisplayName.trim() || !canonRequest.trim() || createCanonDraft.isPending} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Sparkles className="size-4" />{createCanonDraft.isPending ? "Drafting…" : "Generate review draft"}</button> : !canonPublishedMessage ? <div className="flex gap-2"><button onClick={() => setCanonDraft(null)} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending} className="rounded-lg border border-violet-300/20 px-4 py-2 text-sm text-violet-100 transition hover:bg-violet-300/10">Revise request</button><button onClick={publishCanon} disabled={validateCanonDraft.isPending || publishCanonDraft.isPending || (canonDraft.conflicts?.some(conflict => conflict.severity === "blocking") && !canonConflictOverride)} className="inline-flex items-center gap-2 rounded-lg bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-violet-200 disabled:opacity-50"><Send className="size-4" />{validateCanonDraft.isPending ? "Checking note…" : publishCanonDraft.isPending ? "Publishing…" : canonDraft.conflicts?.some(conflict => conflict.severity === "blocking") && !canonConflictOverride ? "Review conflict override" : "Confirm and send to NPC canon"}</button></div> : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

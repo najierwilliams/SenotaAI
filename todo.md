@@ -117,3 +117,7 @@
 - [x] Resolve the recovered NPC management 401 with a concrete bounded retry for a single safe read-only Supabase 401; writes remain non-retried and fresh production canon/memory reads return `200`.
 - [x] Add explicit regression coverage for administrator canon and memory loading after login.
 - [x] Retry one safe read-only Supabase NPC request after a transient 401 and cover the behavior without retrying writes.
+- [x] Add a player–NPC relationship dashboard showing trusted relationship dimensions and recent interaction context per NPC and player.
+- [x] Add administrator memory governance controls for reviewing, pinning, editing, expiring, restoring, and deactivating player–NPC memory summaries.
+- [x] Add pre-publish lore-conflict detection that compares a reviewed canon draft to the existing NPC canon and requires an explicit informed override for detected conflicts.
+- [ ] Validate the connected relationship, memory-governance, and canon-conflict workflows through protected administrator tests and deployed dashboard behavior.

@@ -9,7 +9,7 @@ import {
 } from "./agent/db";
 import { executeScheduledRun } from "./agent/scheduledExecution";
 import { chatWithOllama } from "./agent/ollama";
-import { buildNpcDialogueContext, isNpcMemoryCloudReady, listNpcCanonSourcesForAdmin, listPlayerNpcMemoriesForAdmin, rememberPlayerNpcInteraction, updateNpcCanonForAdmin, updatePlayerNpcMemoryForAdmin } from "./npcMemory/supabase";
+import { buildNpcDialogueContext, isNpcMemoryCloudReady, listNpcCanonSourcesForAdmin, listPlayerNpcMemoriesForAdmin, listPlayerNpcRelationshipsForAdmin, rememberPlayerNpcInteraction, updateNpcCanonForAdmin, updatePlayerNpcMemoryForAdmin, updatePlayerNpcRelationshipForAdmin } from "./npcMemory/supabase";
 import { listNpcAdminAudits, recordNpcAdminAudit } from "./npcMemory/adminAudit";
 import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
@@ -100,6 +100,29 @@ export function createApp() {
       return res.json({ ok: true });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update NPC memory." });
+    }
+  });
+
+  app.get("/api/npc/admin/relationships", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const npcId = typeof req.query.npcId === "string" ? req.query.npcId : undefined;
+      const playerId = typeof req.query.playerId === "string" ? req.query.playerId : undefined;
+      return res.json({ relationships: await listPlayerNpcRelationshipsForAdmin({ npcId, playerId }) });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "NPC relationships are unavailable." });
+    }
+  });
+
+  app.patch("/api/npc/admin/relationships/:playerId/:npcId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const patch = req.body ?? {};
+      await updatePlayerNpcRelationshipForAdmin(req.params.playerId, req.params.npcId, patch);
+      await recordNpcAdminAudit("update", "relationship", `${req.params.playerId}:${req.params.npcId}`, Object.keys(patch));
+      return res.json({ ok: true });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update NPC relationship." });
     }
   });
 

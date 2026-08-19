@@ -124,6 +124,7 @@ export const agentRouter = router({
       displayName: z.string().trim().min(1).max(120),
       noteContent: z.string().trim().min(12).max(100_000),
       sourceSha: z.string().min(1).nullable(),
+      conflictOverride: z.boolean().optional(),
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return publishNpcCanonDraft(input);
