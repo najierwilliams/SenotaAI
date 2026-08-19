@@ -23,6 +23,7 @@ import { statusAfterApprovalDecision } from "../agent/state";
 import { decideApprovalAndQueue } from "../agent/approvalWorkflow";
 import { chatWithOllama } from "../agent/ollama";
 import { deactivateWorkspaceMemory, listWorkspaceMemories, syncWorkspaceMemory } from "../workspaceMemoryDb";
+import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
 const cronSchema = z.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -83,6 +84,7 @@ export const agentRouter = router({
     ollamaConfigured: Boolean(process.env.OLLAMA_BASE_URL),
     githubConfigured: Boolean(process.env.GITHUB_TOKEN),
     vercelConfigured: Boolean(process.env.VERCEL_TOKEN),
+    npcMemoryConfigured: isNpcMemoryCloudReady(),
     schedulerReady: process.env.NODE_ENV === "production",
   })),
 

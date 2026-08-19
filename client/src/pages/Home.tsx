@@ -128,6 +128,7 @@ export default function Home() {
           <Readiness label="Reasoning brain" active={Boolean(connections?.ollamaConfigured)} icon={BrainCircuit} />
           <Readiness label="GitHub workspace" active={Boolean(connections?.githubConfigured)} icon={Github} />
           <Readiness label="Vercel deploys" active={Boolean(connections?.vercelConfigured)} icon={Rocket} />
+          <Readiness label="NPC cloud memory" active={Boolean(connections?.npcMemoryConfigured)} icon={BrainCog} />
           <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.03] p-4">
             <div className="flex items-start justify-between gap-3">
               <div><p className="flex items-center gap-2 text-sm font-medium text-cyan-100"><BrainCog className="size-4" /> Memory vault</p><p className="mt-1 text-xs leading-5 text-slate-500">Browser-owned context, recalled for chat.</p></div>

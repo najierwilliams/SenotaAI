@@ -57,8 +57,15 @@
 - [x] Add project-scoped persistent memory storage with categories, importance, source, and timestamps. Superseded by the privacy-safe device-scoped memory vault used by the no-login workspace.
 - [x] Retrieve relevant approved memories in the direct Ollama chat context without exposing secrets.
 - [x] Add direct-workspace controls to save, review, search, and delete SenotaAI memories.
-- [ ] Test memory lifecycle behavior and deploy the verified memory-enabled workspace to GitHub and Vercel.
+- [x] Test memory lifecycle behavior and deploy the verified memory-enabled workspace to GitHub and Vercel.
 - [x] Implement device-scoped browser memory with explicit saves, relevance-based recall, and secret-pattern blocking for the public no-login workspace.
-- [ ] Add project-scoped cloud-memory records with workspace identity, source metadata, and safe device-vault fallback when the production database is unavailable.
 - [x] Add project-scoped cloud-memory records with workspace identity, source metadata, and safe device-vault fallback when the production database is unavailable.
-- [ ] Publish the memory-enabled workspace and verify device-private memory behavior on the public Vercel site.
+- [x] Add project-scoped cloud-memory records with workspace identity, source metadata, and safe device-vault fallback when the production database is unavailable.
+- [x] Publish the memory-enabled workspace and verify device-private memory behavior on the public Vercel site.
+- [x] Define an Obsidian NPC-canon format and private import boundary for SenotaAI.
+- [x] Connect a Supabase project for hosted player–NPC interaction memories with retention and privacy controls.
+- [x] Add scoped retrieval that combines NPC canon with only the current player’s interaction summaries.
+- [x] Expose a server-side NPC dialogue procedure that accepts a player and NPC scope, retrieves the bounded context, and never leaks another player’s memories.
+- [x] Exercise the NPC dialogue procedure end to end with isolated player-memory fixtures before publishing the game-memory integration.
+- [ ] Verify the Obsidian–SenotaAI–Supabase workflow and publish the integrated release to GitHub and Vercel.
+- [x] Add an endpoint-level test that proves only the requested player’s NPC interaction summaries reach the Ollama prompt.
