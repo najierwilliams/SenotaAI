@@ -13,7 +13,7 @@ describe("direct Ollama chat", () => {
     await expect(caller.chat({ messages: [{ role: "user", content: "Help me plan a web app." }] }))
       .resolves.toEqual({ content: "I can help you build that.", thinking: "" });
     expect(chatWithOllama).toHaveBeenCalledWith(expect.objectContaining({
-      messages: expect.arrayContaining([expect.objectContaining({ role: "system" }), expect.objectContaining({ role: "user" })]),
+      messages: expect.arrayContaining([expect.objectContaining({ role: "system", content: expect.stringContaining("America/New_York") }), expect.objectContaining({ role: "user" })]),
     }));
   });
 

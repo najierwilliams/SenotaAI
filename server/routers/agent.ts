@@ -28,6 +28,7 @@ import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
 import { createNpcCanonDraft, isNpcCanonPublishingConfigured, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
 import { runNpcPreviewDialogue } from "../npcMemory/previewDialogue";
+import { buildTemporalContext, resolveTimeZone } from "../temporalContext";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
 const cronSchema = z.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -64,6 +65,7 @@ export const agentRouter = router({
         content: z.string().trim().min(1).max(16_000),
       })).min(1).max(30),
       memory: z.array(chatMemorySchema).max(6).optional(),
+      timeZone: z.string().trim().max(100).optional().refine((value) => { try { resolveTimeZone(value); return true; } catch { return false; } }, "Use a valid IANA time zone such as America/New_York."),
     }))
     .mutation(async ({ input }) => {
       const memoryContext = input.memory?.length
@@ -74,7 +76,7 @@ export const agentRouter = router({
         messages: [
           {
             role: "system",
-            content: `You are SenotaAI, an autonomous software-agent assistant. Help the user plan, build, debug, and deploy software. Be clear about which actions need confirmation before execution.${memoryContext}`,
+            content: `You are SenotaAI, an autonomous software-agent assistant. Help the user plan, build, debug, and deploy software. Be clear about which actions need confirmation before execution.\n\n${buildTemporalContext(input.timeZone)}${memoryContext}`,
           },
           ...input.messages,
         ],
@@ -134,6 +136,7 @@ export const agentRouter = router({
       playerId: z.string().uuid(),
       message: z.string().trim().min(1).max(4_000),
       remember: z.boolean().optional(),
+      timeZone: z.string().trim().max(100).optional().refine((value) => { try { resolveTimeZone(value); return true; } catch { return false; } }, "Use a valid IANA time zone such as America/New_York."),
     })).mutation(async ({ input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
       return runNpcPreviewDialogue({ ...input, npcId: "luna001" });
