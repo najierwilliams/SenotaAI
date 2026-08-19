@@ -39,6 +39,7 @@ describe("GitHub canon synchronization webhook", () => {
       expect((await fetch(`${baseUrl}/api/npc/canon/github-webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-github-event": "push" }, body: payload })).status).toBe(401);
       const response = await fetch(`${baseUrl}/api/npc/canon/github-webhook`, { method: "POST", headers: { "Content-Type": "application/json", "x-github-event": "push", "x-hub-signature-256": signature }, body: payload });
       expect(response.status).toBe(202);
+      expect(fetch).toHaveBeenCalledWith(expect.stringContaining("/contents/NPCs/mira.md?ref=abc123"), expect.any(Object));
       expect(syncObsidianNpcCanon).toHaveBeenCalledWith(expect.stringContaining("npc_id: mira-baker"), "NPCs/mira.md");
       expect(recordNpcAdminAudit).toHaveBeenCalledWith("github-sync", "canon", "mira-baker", ["canonHash", "canonExcerpt", "obsidianPath"]);
     } finally {

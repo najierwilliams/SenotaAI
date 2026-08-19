@@ -39,7 +39,8 @@ export function changedNpcCanonPaths(payload: GitHubPushPayload) {
 async function getGitHubFile(repository: string, path: string, ref: string) {
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new Error("GitHub token is not configured for canon synchronization.");
-  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`, {
+  const encodedPath = path.split("/").map(segment => encodeURIComponent(segment)).join("/");
+  const response = await fetch(`https://api.github.com/repos/${repository}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "SenotaAI-canon-sync" },
   });
   if (!response.ok) throw new Error(`Unable to fetch changed canon note (${response.status}).`);
