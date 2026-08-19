@@ -13,6 +13,13 @@ async function request(path: string, init?: RequestInit) {
   return payload;
 }
 
+export async function getNpcAdminStatus() {
+  const response = await fetch("/api/npc/admin/status", { credentials: "include" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok && response.status !== 401) throw new Error(payload.error || "Unable to check NPC administrator status.");
+  return { authenticated: Boolean(payload.authenticated), configured: Boolean(payload.configured) };
+}
+
 export default function NpcAdmin() {
   const [authenticated, setAuthenticated] = useState(false);
   const [configured, setConfigured] = useState(false);
@@ -45,7 +52,7 @@ export default function NpcAdmin() {
   };
 
   useEffect(() => {
-    request("/api/npc/admin/status").then(status => { setAuthenticated(Boolean(status.authenticated)); setConfigured(Boolean(status.configured)); }).catch(() => setAuthenticated(false));
+    getNpcAdminStatus().then(status => { setAuthenticated(status.authenticated); setConfigured(status.configured); }).catch(() => setAuthenticated(false));
   }, []);
 
   useEffect(() => { if (authenticated) void load(); }, [authenticated]);
