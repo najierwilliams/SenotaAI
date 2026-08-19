@@ -120,4 +120,6 @@
 - [x] Add a player–NPC relationship dashboard showing trusted relationship dimensions and recent interaction context per NPC and player.
 - [x] Add administrator memory governance controls for reviewing, pinning, editing, expiring, restoring, and deactivating player–NPC memory summaries.
 - [x] Add pre-publish lore-conflict detection that compares a reviewed canon draft to the existing NPC canon and requires an explicit informed override for detected conflicts.
-- [ ] Validate the connected relationship, memory-governance, and canon-conflict workflows through protected administrator tests and deployed dashboard behavior.
+- [x] Validate the connected relationship, memory-governance, and canon-conflict workflows through protected administrator tests and deployed dashboard behavior.
+- [x] Validate the deployed canon-draft conflict workflow by generating a blocking conflict and confirming the review UI requires an explicit override before publishing.
+- [x] Capture production evidence for the deployed canon-draft request path after the blocking-conflict verification.
