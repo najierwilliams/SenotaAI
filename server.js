@@ -2050,6 +2050,30 @@ function normalizeDraftOutput(content) {
   const summary = summaryMatch?.[1]?.trim().slice(0, 800) || "Review the proposed canon note before publishing it.";
   return { summary, noteContent: withoutFence.replace(/^<!--\s*SenotaAI draft summary:\s*[\s\S]*?-->\s*/i, "").trim() };
 }
+function structuredFallbackDraft(input, existingNote) {
+  const existing = existingNote?.trim();
+  if (existing) return { summary: `Adds a reviewed update to ${input.displayName} while preserving the existing canon note.`, noteContent: `${existing}
+
+## SenotaAI proposed update
+${input.request}
+` };
+  return {
+    summary: `Creates a structured review draft for ${input.displayName}.`,
+    noteContent: `---
+npc_id: ${input.npcId}
+display_name: ${input.displayName}
+---
+
+# ${input.displayName}
+
+## Canon update
+${input.request}
+
+## Runtime excerpt
+${input.request}
+`
+  };
+}
 function normalizeCanonLine(value) {
   return value.replace(/^\s*[-*+]\s+/, "").replace(/\s+/g, " ").trim().toLowerCase();
 }
@@ -2112,8 +2136,14 @@ ${draftInput.request}
 Existing canon note:
 ${existingContent}` }
   ] });
-  const generated = normalizeDraftOutput(response.content);
-  const parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
+  let generated = normalizeDraftOutput(response.content);
+  let parsed;
+  try {
+    parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
+  } catch {
+    generated = structuredFallbackDraft(draftInput, existing?.content ?? null);
+    parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
+  }
   const conflicts = await analyzeNpcCanonConflicts(existing?.content ?? null, generated.noteContent);
   return { npcId: parsed.npcId, displayName: parsed.displayName, path: path2, noteContent: generated.noteContent, summary: generated.summary, sourceSha: existing?.sha ?? null, excerptLength: parsed.canonExcerpt.length, conflicts };
 }

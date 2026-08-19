@@ -62,6 +62,18 @@ describe("reviewable NPC canon drafts", () => {
     expect(chatWithOllama).toHaveBeenCalledTimes(1);
   });
 
+  it("falls back to a valid review note when the model omits required Obsidian frontmatter", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(response(false, { message: "Not Found" }) as never);
+    chatWithOllama.mockResolvedValueOnce({ content: "Senota Replacement Test has a blue lantern." });
+
+    const draft = await createNpcCanonDraft({ npcId: "senota-replacement-test", displayName: "Senota Replacement Test", request: "The test NPC has a blue lantern." });
+
+    expect(draft.summary).toContain("Creates a structured review draft");
+    expect(draft.noteContent).toContain("npc_id: senota-replacement-test");
+    expect(draft.noteContent).toContain("## Runtime excerpt");
+  });
+
   it("returns structured direct lore conflicts", async () => {
     chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [{ severity: "blocking", existingClaim: "Mira is a baker.", proposedClaim: "Mira has never baked.", rationale: "The occupation claims cannot both be true." }] }) });
     await expect(analyzeNpcCanonConflicts("# Mira\nMira is a baker.", "# Mira\nMira has never baked.")).resolves.toMatchObject([{ severity: "blocking", existingClaim: "Mira is a baker." }]);

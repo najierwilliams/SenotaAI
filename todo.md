@@ -130,3 +130,4 @@
 - [x] Make conflict analysis return deterministic exact replacement anchors so approved blocking conflicts can reliably remove the intended live-note claim without depending on an LLM paraphrase.
 - [x] Add integration coverage for an override publish that removes only an anchored claim and preserves unrelated realistic canon structure.
 - [ ] Verify the deployed override-publish workflow with a safe test note and record evidence of precise claim replacement without unrelated loss.
+- [x] Fix the malformed draft-response error shown in the new-NPC draft form by supplying a valid structured review-note fallback.

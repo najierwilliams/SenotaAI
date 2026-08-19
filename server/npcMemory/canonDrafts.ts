@@ -79,6 +79,15 @@ function normalizeDraftOutput(content: string) {
   return { summary, noteContent: withoutFence.replace(/^<!--\s*SenotaAI draft summary:\s*[\s\S]*?-->\s*/i, "").trim() };
 }
 
+function structuredFallbackDraft(input: { npcId: string; displayName: string; request: string }, existingNote: string | null) {
+  const existing = existingNote?.trim();
+  if (existing) return { summary: `Adds a reviewed update to ${input.displayName} while preserving the existing canon note.`, noteContent: `${existing}\n\n## SenotaAI proposed update\n${input.request}\n` };
+  return {
+    summary: `Creates a structured review draft for ${input.displayName}.`,
+    noteContent: `---\nnpc_id: ${input.npcId}\ndisplay_name: ${input.displayName}\n---\n\n# ${input.displayName}\n\n## Canon update\n${input.request}\n\n## Runtime excerpt\n${input.request}\n`,
+  };
+}
+
 function normalizeCanonLine(value: string) { return value.replace(/^\s*[-*+]\s+/, "").replace(/\s+/g, " ").trim().toLowerCase(); }
 
 function findExactReplacementAnchor(existingNote: string, candidate: string) {
@@ -131,8 +140,14 @@ export async function createNpcCanonDraft(input: { npcId: string; displayName: s
     { role: "system", content: `You create careful, private Obsidian NPC canon drafts. Return ONLY a short HTML comment followed by one valid Markdown note. The first line must be <!-- SenotaAI draft summary: concise statement of exactly what will be added or changed -->. Then write YAML frontmatter with npc_id: ${draftInput.npcId} and display_name: ${draftInput.displayName}, followed by meaningful canon sections including ## Runtime excerpt. Preserve valid existing canon unless the requested change explicitly revises it. Do not invent uncertain facts, add player-specific memories, include secrets, or use Markdown code fences.` },
     { role: "user", content: `NPC ID: ${draftInput.npcId}\nDisplay name: ${draftInput.displayName}\n\nRequested canon change:\n${draftInput.request}\n\nExisting canon note:\n${existingContent}` },
   ] });
-  const generated = normalizeDraftOutput(response.content);
-  const parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
+  let generated = normalizeDraftOutput(response.content);
+  let parsed;
+  try {
+    parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
+  } catch {
+    generated = structuredFallbackDraft(draftInput, existing?.content ?? null);
+    parsed = validateNpcCanonDraft({ npcId: draftInput.npcId, displayName: draftInput.displayName, noteContent: generated.noteContent });
+  }
   const conflicts = await analyzeNpcCanonConflicts(existing?.content ?? null, generated.noteContent);
   return { npcId: parsed.npcId, displayName: parsed.displayName, path, noteContent: generated.noteContent, summary: generated.summary, sourceSha: existing?.sha ?? null, excerptLength: parsed.canonExcerpt.length, conflicts };
 }
