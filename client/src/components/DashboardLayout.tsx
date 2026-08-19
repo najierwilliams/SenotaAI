@@ -12,13 +12,14 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bot, Database, MessageSquare, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bot, Database, MessageSquare, MoonStar, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useChatSessions } from "@/contexts/ChatSessionsContext";
 
 const menuItems = [
   { icon: MessageSquare, label: "AI chat", path: "/" },
+  { icon: MoonStar, label: "Chat with Luna", path: "/luna" },
   { icon: Database, label: "NPC management", path: "/npc" },
 ];
 

@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ChatSessionsProvider } from "./contexts/ChatSessionsContext";
 import Home from "./pages/Home";
+import LunaChat from "./pages/LunaChat";
 import NpcAdmin from "./pages/NpcAdmin";
 import DashboardLayout from "./components/DashboardLayout";
 
@@ -15,6 +16,7 @@ function Router() {
     <Switch>
       <Route path={"/"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/npc"}><DashboardLayout><NpcAdmin /></DashboardLayout></Route>
+      <Route path={"/luna"}><DashboardLayout><LunaChat /></DashboardLayout></Route>
       <Route path={"/new"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/history"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/memory"}><DashboardLayout><Home /></DashboardLayout></Route>

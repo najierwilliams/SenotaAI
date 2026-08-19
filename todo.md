@@ -106,3 +106,7 @@
 - [x] Add a browser-like test environment for the canon-draft click-and-dialog interaction coverage.
 - [x] Fix canon-draft generation and confirmation validation when a review note lacks a meaningful Runtime excerpt or canon body.
 - [x] Add regression coverage that blocks invalid edited notes before private-vault publishing and guides the user to repair them.
+- [ ] Run a live protected Luna dialogue using the approved Obsidian canon and report how the runtime uses it.
+- [x] Add an administrator-unlocked dedicated Luna chat workspace that keeps Luna dialogue separate from general SenotaAI chat.
+- [x] Add a server-side Luna dialogue bridge that preserves the NPC game key, uses a stable browser preview-player identity, and scopes interaction memory to Luna.
+- [ ] Validate that the Luna workspace uses the synced Obsidian canon excerpt and retains only its preview player’s interaction context.

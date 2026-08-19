@@ -27,6 +27,7 @@ import { deactivateWorkspaceMemory, listWorkspaceMemories, syncWorkspaceMemory }
 import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
 import { createNpcCanonDraft, isNpcCanonPublishingConfigured, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
+import { runNpcPreviewDialogue } from "../npcMemory/previewDialogue";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
 const cronSchema = z.string().trim().refine(isValidSixFieldCron, "Cron expressions must have six UTC fields: sec min hour day month weekday.");
@@ -124,6 +125,18 @@ export const agentRouter = router({
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return publishNpcCanonDraft(input);
+    }),
+  }),
+
+  luna: router({
+    status: npcAdminProcedure.query(() => ({ npcId: "luna001", ready: isNpcMemoryCloudReady() })),
+    chat: npcAdminProcedure.input(z.object({
+      playerId: z.string().uuid(),
+      message: z.string().trim().min(1).max(4_000),
+      remember: z.boolean().optional(),
+    })).mutation(async ({ input }) => {
+      if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
+      return runNpcPreviewDialogue({ ...input, npcId: "luna001" });
     }),
   }),
 
