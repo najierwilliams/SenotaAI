@@ -167,6 +167,32 @@ export const agentSchedules = mysqlTable(
   ],
 );
 
+/** Platform-cron configuration for review-only NPC cognitive reflection sessions. */
+export const npcReflectionSchedules = mysqlTable(
+  "npc_reflection_schedules",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    npcId: varchar("npc_id", { length: 128 }).notNull().unique(),
+    status: mysqlEnum("status", scheduleStatuses).notNull().default("active"),
+    timeZone: varchar("time_zone", { length: 64 }).notNull().default("America/New_York"),
+    dailyTarget: int("daily_target").notNull().default(6),
+    runsToday: int("runs_today").notNull().default(0),
+    dayKey: varchar("day_key", { length: 10 }),
+    scheduleCronTaskUid: varchar("schedule_cron_task_uid", { length: 65 }).unique(),
+    nextEligibleAt: bigint("next_eligible_at", { mode: "number" }),
+    lastRunAt: bigint("last_run_at", { mode: "number" }),
+    lastReflectionId: varchar("last_reflection_id", { length: 64 }),
+    lastError: text("last_error"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    index("npc_reflection_schedules_status_idx").on(table.status),
+  ],
+);
+
+export type NpcReflectionSchedule = typeof npcReflectionSchedules.$inferSelect;
+
 /** Per-user dashboard preferences; secrets remain server environment variables. */
 export const agentSettings = mysqlTable("agent_settings", {
   id: int("id").autoincrement().primaryKey(),

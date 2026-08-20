@@ -1,4 +1,5 @@
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { timingSafeEqual } from "crypto";
 import express from "express";
 import { runAutonomousTask } from "./agent/engine";
 import {
@@ -16,6 +17,7 @@ import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
 import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, addCognitiveObservation, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveObservations, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveConsolidation, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
+import { getNpcReflectionSchedule, runNpcReflectionSchedule } from "./npcMemory/reflectionScheduler";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -28,6 +30,15 @@ import { buildTemporalContext, resolveTimeZone } from "./temporalContext";
 
 function readCookie(header: string | undefined, name: string) {
   return header?.split(";").map(item => item.trim()).find(item => item.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+function isTrustedReflectionSchedulerRequest(req: express.Request) {
+  const expected = process.env.GITHUB_WEBHOOK_SECRET;
+  const supplied = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!expected || !supplied) return false;
+  const expectedBytes = Buffer.from(expected);
+  const suppliedBytes = Buffer.from(supplied);
+  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
 }
 
 /**
@@ -148,10 +159,10 @@ export function createApp() {
   app.get("/api/npc/admin/cognitive/:npcId", async (req, res) => {
     if (!await requireNpcAdmin(req, res)) return;
     try {
-      const [state, memories, beliefs, goals, relationships, reflections, observations] = await Promise.all([
-        getNpcCognitiveState(req.params.npcId), listCognitiveMemories(req.params.npcId), listCognitiveBeliefs(req.params.npcId), listCognitiveGoals(req.params.npcId), listCognitiveRelationships(req.params.npcId), listCognitiveReflections(req.params.npcId), listCognitiveObservations(req.params.npcId),
+      const [state, memories, beliefs, goals, relationships, reflections, observations, reflectionSchedule] = await Promise.all([
+        getNpcCognitiveState(req.params.npcId), listCognitiveMemories(req.params.npcId), listCognitiveBeliefs(req.params.npcId), listCognitiveGoals(req.params.npcId), listCognitiveRelationships(req.params.npcId), listCognitiveReflections(req.params.npcId), listCognitiveObservations(req.params.npcId), getNpcReflectionSchedule(req.params.npcId),
       ]);
-      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections, observations });
+      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections, observations, reflectionSchedule });
     } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to load cognitive state." }); }
   });
 
@@ -332,6 +343,25 @@ export function createApp() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
+    }
+  });
+
+  app.post("/api/scheduled/npc-reflection", async (req, res) => {
+    try {
+      const trustedScheduler = isTrustedReflectionSchedulerRequest(req);
+      const cronUser = trustedScheduler ? null : await sdk.authenticateRequest(req).catch(() => null);
+      const taskUid = trustedScheduler
+        ? "github-actions-luna001"
+        : cronUser?.isCron && cronUser.taskUid
+          ? cronUser.taskUid
+          : null;
+      if (!taskUid) return res.status(403).json({ error: "scheduled-trigger-only" });
+      const result = await runNpcReflectionSchedule(taskUid);
+      if ("reflectionId" in result && typeof result.reflectionId === "string") await recordNpcAdminAudit("scheduled-review-proposal", "cognitive-reflection", result.reflectionId, ["review-only", "administrator-approval-required"]);
+      return res.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
     }
   });
 

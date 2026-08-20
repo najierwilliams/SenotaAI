@@ -16,6 +16,10 @@ const listNpcAdminAudits = vi.fn();
 const recordNpcAdminAudit = vi.fn();
 vi.mock("./adminAudit", () => ({ listNpcAdminAudits, recordNpcAdminAudit }));
 
+const getNpcReflectionSchedule = vi.fn();
+const runNpcReflectionSchedule = vi.fn();
+vi.mock("./reflectionScheduler", () => ({ getNpcReflectionSchedule, runNpcReflectionSchedule }));
+
 const { createApp } = await import("../app");
 
 describe("NPC administration API", () => {
@@ -44,6 +48,23 @@ describe("NPC administration API", () => {
       await fetch(`${baseUrl}/api/npc/admin/canon/mira-baker`, { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie ?? "" }, body: JSON.stringify({ canonExcerpt: "Updated canon excerpt", isActive: false }) });
       expect(updateNpcCanonForAdmin).toHaveBeenCalledWith("mira-baker", { canonExcerpt: "Updated canon excerpt", isActive: false });
       expect(recordNpcAdminAudit).toHaveBeenCalledWith("update", "canon", "mira-baker", ["canonExcerpt", "isActive"]);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+
+  it("accepts Luna’s automatic reflection callback only from the configured scheduler", async () => {
+    process.env.GITHUB_WEBHOOK_SECRET = "scheduler-secret";
+    runNpcReflectionSchedule.mockResolvedValue({ ok: true, skipped: "waiting-for-varied-interval" });
+    const app = createApp();
+    const server = app.listen(0);
+    const address = server.address();
+    const baseUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`;
+    try {
+      expect((await fetch(`${baseUrl}/api/scheduled/npc-reflection`, { method: "POST" })).status).toBe(403);
+      const response = await fetch(`${baseUrl}/api/scheduled/npc-reflection`, { method: "POST", headers: { Authorization: "Bearer scheduler-secret" } });
+      expect(response.status).toBe(200);
+      expect(runNpcReflectionSchedule).toHaveBeenCalledWith("github-actions-luna001");
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
