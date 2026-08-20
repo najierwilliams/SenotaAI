@@ -174,3 +174,4 @@
 - [x] Add opt-in browser-private Luna chat history with manual Save chat, reopen, and Delete controls; do not automatically save every Luna conversation.
 - [ ] Add frequent randomized Luna reflection sessions that create administrator-reviewable proposals only and never apply cognitive-state changes automatically.
 - [ ] Move Luna’s reflection-schedule bookkeeping to the production Supabase store so the live Vercel workflow can run without relying on an unavailable MySQL connection.
+- [ ] Repair the scheduled reflection prompt so it can create a bounded review card without triggering the consciousness-claim safeguard itself.

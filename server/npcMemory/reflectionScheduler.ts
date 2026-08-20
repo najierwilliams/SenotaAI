@@ -1,4 +1,4 @@
-import { listCognitiveReflections, proposeCognitiveReflection } from "./cognitiveState";
+import { listCognitiveReflections, proposeCognitiveDevelopment } from "./cognitiveState";
 
 const DAY_START_HOUR = 9;
 const DAY_END_HOUR = 22;
@@ -99,7 +99,7 @@ export async function getNpcReflectionScheduleByCronTaskUid(taskUid: string) {
   return rows?.[0] ? mapSchedule(rows[0]) : null;
 }
 
-export async function runNpcReflectionSchedule(taskUid: string, options: { now?: number; random?: () => number; pendingReviewCount?: (npcId: string) => Promise<number>; propose?: (npcId: string, experience: string) => ReturnType<typeof proposeCognitiveReflection> } = {}) {
+export async function runNpcReflectionSchedule(taskUid: string, options: { now?: number; random?: () => number; pendingReviewCount?: (npcId: string) => Promise<number>; propose?: (npcId: string) => ReturnType<typeof proposeCognitiveDevelopment> } = {}) {
   const now = options.now ?? Date.now();
   const random = options.random ?? Math.random;
   const schedule = await getNpcReflectionScheduleByCronTaskUid(taskUid);
@@ -128,10 +128,9 @@ export async function runNpcReflectionSchedule(taskUid: string, options: { now?:
   }, { status: "eq.active", next_eligible_at: `lte.${new Date(now).toISOString()}` });
   if (!claimed?.[0]) return { ok: true, skipped: "already-claimed" } as const;
 
-  const experience = "Scheduled administrator-approved reflection session. Review only Luna’s current approved cognitive state and identify at most one small, evidence-based refinement candidate for self-model clarity, memory continuity, goal clarity, or reflection. This is a review proposal only: do not claim subjective experience, sentience, consciousness, or unrestricted free will, and do not apply any change.";
   try {
-    const propose = options.propose ?? proposeCognitiveReflection;
-    const reflection = await propose(schedule.npcId, experience);
+    const propose = options.propose ?? proposeCognitiveDevelopment;
+    const reflection = await propose(schedule.npcId);
     await patchSchedule(schedule.npcId, { last_reflection_id: reflection.id, last_error: null });
     return { ok: true, reflectionId: reflection.id, nextEligibleAt, reviewOnly: true } as const;
   } catch (error) {
