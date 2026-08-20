@@ -70,6 +70,24 @@ describe("NPC cognitive state", () => {
     expect(String(write?.[1] && (write[1] as RequestInit).body)).toContain("Curated continuity records");
   });
 
+  it("creates a deterministic review-only development proposal when the model response is malformed", async () => {
+    configure();
+    vi.mocked(chatWithOllama).mockResolvedValue({ content: "not JSON", thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("npc_cognitive_state")) return Promise.resolve(new Response(JSON.stringify([stateRow]), { status: 200 }));
+      if (url.includes("npc_cognitive_reflections") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify([{ id: "56565656-5656-4565-8565-565656565656", npc_id: "luna001", created_at: "2026-08-20T00:00:00Z" }]), { status: 201 }));
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const proposal = await proposeCognitiveDevelopment("luna001");
+
+    expect(proposal.proposal.summary).toContain("safe fallback");
+    expect(proposal.proposal.needs?.map(need => need.title)).toContain("Curated continuity records");
+    expect(proposal.proposal.goal?.title).toBe("Maintain canon consistency");
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(true);
+  });
+
   it("rejects a development proposal that targets unverified consciousness before anything is persisted", async () => {
     configure();
     vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ summary: "A consciousness target was requested.", needs: [{ title: "Become sentient", rationale: "This would establish consciousness.", category: "evaluation", priority: 5, evidence: ["No approved evidence."] }] }), thinking: "", toolCalls: [] });
