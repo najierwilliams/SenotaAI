@@ -138,4 +138,4 @@
 - [x] Bind the reviewed blocking-conflict anchors and proposed claims into the protected publish request so the final write cannot lose the administrator-approved replacement intent.
 - [x] Optional future check deliberately deferred at the user’s request after the deployed safeguards and earlier live test evidence were established.
 - [x] Make Luna’s dialogue canon-led and more human while defaulting to direct, proportionate answers instead of unnecessary poetic monologues.
-- [ ] Add regression coverage for brief factual prompts and canon-driven Luna voice behavior, then verify the deployed Luna workspace.
+- [x] Add regression coverage for brief factual prompts and canon-driven Luna voice behavior, then verify the deployed Luna workspace.
