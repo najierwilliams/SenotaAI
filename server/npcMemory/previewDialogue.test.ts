@@ -24,7 +24,11 @@ describe("administrator NPC preview dialogue", () => {
     const result = await runNpcPreviewDialogue({ playerId: "e3f8edc7-6a3a-437d-9d8e-afd23e6fbc50", npcId: "luna001", message: "What do you remember about our first meeting?" });
 
     expect(result).toMatchObject({ npcId: "luna001", displayName: "Luna", memoriesUsed: 1, memorySaved: true });
-    expect(chatWithOllama).toHaveBeenCalledWith(expect.objectContaining({ messages: expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining("NPC canon for Luna") })]) }));
+    expect(chatWithOllama).toHaveBeenCalledWith(expect.objectContaining({ messages: expect.arrayContaining([
+      expect.objectContaining({ content: expect.stringContaining("NPC canon for Luna") }),
+      expect.objectContaining({ content: expect.stringContaining("a short question deserves a short answer") }),
+      expect.objectContaining({ content: expect.stringContaining("Do not open with atmospheric imagery") }),
+    ]) }));
     expect(rememberPlayerNpcInteraction).toHaveBeenCalledWith(expect.objectContaining({ npcId: "luna001", memoryKind: "summary", summary: expect.stringContaining("Preview conversation") }));
   });
 

@@ -25,9 +25,19 @@ function parseFrontmatter(noteContent: string): { fields: ObsidianFrontmatter; b
   return { fields, body: match[2].trim() };
 }
 
+function findSection(body: string, sectionName: string) {
+  return body.match(new RegExp(`^##\\s+${sectionName}\\s*\\n([\\s\\S]*?)(?=^##\\s+|$)`, "im"))?.[1]?.trim() ?? "";
+}
+
 function boundedExcerpt(body: string) {
-  const runtimeSection = body.match(/^##\s+Runtime excerpt\s*\n([\s\S]*?)(?=^##\s+|$)/im)?.[1];
-  const source = runtimeSection ?? body;
+  const runtimeSection = findSection(body, "Runtime excerpt");
+  const voiceTone = findSection(body, "Voice Tone");
+  const conversationalStyle = findSection(body, "Conversational Style");
+  const source = [
+    runtimeSection || body,
+    voiceTone && `Voice tone directives:\n${voiceTone}`,
+    conversationalStyle && `Conversational style directives:\n${conversationalStyle}`,
+  ].filter(Boolean).join("\n\n");
   const normalized = source
     .replace(/^#{1,6}\s+.*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")

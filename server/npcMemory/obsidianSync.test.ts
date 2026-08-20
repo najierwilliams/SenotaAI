@@ -26,6 +26,21 @@ describe("Obsidian NPC canon sync", () => {
     expect(parsed.canonHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("includes explicit voice and conversational-style directives in the synchronized dialogue excerpt", () => {
+    const styledNote = `${note}
+
+## Voice Tone
+- Grounded and warm; avoid theatrics.
+
+## Conversational Style
+- Answer a simple question directly in one short sentence.`;
+    const parsed = parseObsidianNpcNote(styledNote, "NPCs/Mira.md");
+    expect(parsed.canonExcerpt).toContain("Voice tone directives:");
+    expect(parsed.canonExcerpt).toContain("Grounded and warm");
+    expect(parsed.canonExcerpt).toContain("Conversational style directives:");
+    expect(parsed.canonExcerpt).toContain("one short sentence");
+  });
+
   it("rejects unsafe paths and missing required NPC identity", () => {
     expect(() => parseObsidianNpcNote(note, "../private/Mira.md")).toThrow("Obsidian path is invalid");
     expect(() => parseObsidianNpcNote("---\ndisplay_name: Mira\n---\nCanon", "NPCs/Mira.md")).toThrow("npc_id");
