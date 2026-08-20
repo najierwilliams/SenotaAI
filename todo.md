@@ -139,3 +139,4 @@
 - [x] Optional future check deliberately deferred at the user’s request after the deployed safeguards and earlier live test evidence were established.
 - [x] Make Luna’s dialogue canon-led and more human while defaulting to direct, proportionate answers instead of unnecessary poetic monologues.
 - [x] Add regression coverage for brief factual prompts and canon-driven Luna voice behavior, then verify the deployed Luna workspace.
+- [x] Make Luna honor explicit requested output formats, including required numeric values, while preserving her concise human conversational tone.

@@ -15,7 +15,7 @@ export async function runNpcPreviewDialogue(input: { playerId: string; npcId: st
     messages: [
       {
         role: "system",
-        content: buildNpcDialogueSystemPrompt(context, input.timeZone),
+        content: buildNpcDialogueSystemPrompt(context, input.timeZone, input.message),
       },
       { role: "user", content: input.message.trim() },
     ],

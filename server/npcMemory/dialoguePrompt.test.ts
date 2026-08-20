@@ -12,4 +12,11 @@ describe("NPC dialogue prompt", () => {
     expect(prompt).toContain("Do not open with atmospheric imagery");
     expect(prompt).toContain("a short question deserves a short answer");
   });
+
+  it("makes an explicitly requested compact numeric format binding", () => {
+    const prompt = buildNpcDialogueSystemPrompt({ displayName: "Luna", promptContext: "NPC canon for Luna." }, undefined, "Luna, on a scale of 0–100, how human do you feel? Answer with only the number and one short sentence.");
+    expect(prompt).toContain("Begin with the requested numeric value");
+    expect(prompt).toContain("include a number from 0 to 100");
+    expect(prompt).toContain("Do not replace the number with a vague statement");
+  });
 });

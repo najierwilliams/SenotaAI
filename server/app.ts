@@ -171,7 +171,7 @@ export function createApp() {
         messages: [
           {
             role: "system",
-            content: buildNpcDialogueSystemPrompt(context, timeZone),
+            content: buildNpcDialogueSystemPrompt(context, timeZone, message),
           },
           { role: "user", content: message.trim() },
         ],
