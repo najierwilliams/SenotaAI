@@ -15,11 +15,8 @@ jobs:
     timeout-minutes: 3
     steps:
       - name: Request a review-only Luna reflection session
-        env:
-          OIDC_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          OIDC_REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
         run: |
-          token="$(curl --fail --silent --show-error -H "Authorization: Bearer $OIDC_REQUEST_TOKEN" "${OIDC_REQUEST_URL}&audience=senota-reflection" | jq --raw-output '.value')"
+          token="$(curl --fail --silent --show-error -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=senota-reflection" | jq --raw-output '.value')"
           test -n "$token"
           curl --fail-with-body --retry 2 --retry-delay 5 \
             --request POST "https://senota-ai.vercel.app/api/scheduled/npc-reflection" \
