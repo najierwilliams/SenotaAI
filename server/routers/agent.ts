@@ -1,7 +1,7 @@
 import { parse as parseCookie } from "cookie";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, MAX_NPC_CANON_REQUEST_CHARS } from "@shared/const";
 import { createHeartbeatJob, updateHeartbeatJob } from "../_core/heartbeat";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import {
@@ -111,14 +111,14 @@ export const agentRouter = router({
     draft: npcAdminProcedure.input(z.object({
       npcId: z.string().trim().min(2).max(79),
       displayName: z.string().trim().min(1).max(120),
-      request: z.string().trim().min(1).max(12_000),
+      request: z.string().trim().min(1).max(MAX_NPC_CANON_REQUEST_CHARS),
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraft(input);
     }),
     draftBatch: npcAdminProcedure.input(z.object({
       targets: z.array(z.object({ npcId: z.string().trim().min(2).max(79), displayName: z.string().trim().min(1).max(120) })).min(1).max(8),
-      request: z.string().trim().min(1).max(12_000),
+      request: z.string().trim().min(1).max(MAX_NPC_CANON_REQUEST_CHARS),
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraftBatch(input);

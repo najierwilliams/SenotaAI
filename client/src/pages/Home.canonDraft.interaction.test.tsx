@@ -2,6 +2,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_NPC_CANON_REQUEST_CHARS } from "@shared/const";
 
 const { noop, createDraftMutate, validateDraftMutate, publishDraftMutate } = vi.hoisted(() => ({
   noop: vi.fn(),
@@ -89,6 +90,19 @@ describe("selected chat request to canon draft interaction", () => {
     const draftRequest = screen.getByLabelText("What should be permanent NPC canon?") as HTMLTextAreaElement;
     expect(draftRequest.value).toBe(selectedRequests[0]);
     expect(draftRequest.value).not.toBe(selectedRequests[1]);
+  });
+
+  it("offers the documented high-capacity canon request limit with an accurate counter", async () => {
+    Object.assign(globalThis, { React });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ authenticated: true }) }));
+    render(<Home />);
+
+    fireEvent.click(screen.getByRole("button", { name: `Use selected request for NPC canon: ${selectedRequests[0]}` }));
+    const draftRequest = await screen.findByLabelText("What should be permanent NPC canon?") as HTMLTextAreaElement;
+    expect(draftRequest.maxLength).toBe(MAX_NPC_CANON_REQUEST_CHARS);
+    fireEvent.change(draftRequest, { target: { value: "a".repeat(MAX_NPC_CANON_REQUEST_CHARS) } });
+    expect(screen.getByText(`60,000 / 60,000 characters`)).toBeTruthy();
+    expect(screen.getByText(/Detailed canon requests up to 60,000 characters are supported/)).toBeTruthy();
   });
 
   it("submits selected existing and typed new NPC targets together for batch drafting", async () => {

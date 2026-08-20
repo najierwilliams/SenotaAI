@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MAX_NPC_CANON_REQUEST_CHARS } from "@shared/const";
 
 const chatWithOllama = vi.fn();
 const recordNpcAdminAudit = vi.fn();
@@ -60,6 +61,20 @@ describe("reviewable NPC canon drafts", () => {
     expect(draft.noteContent).toContain("## Runtime excerpt");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(chatWithOllama).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a detailed canon request at the documented high-capacity limit", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(response(false, { message: "Not Found" }) as never);
+    chatWithOllama.mockResolvedValueOnce({ content: draftNote });
+
+    await expect(createNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", request: "a".repeat(MAX_NPC_CANON_REQUEST_CHARS) })).resolves.toMatchObject({ npcId: "mira-vale" });
+    expect(chatWithOllama).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a canon request that exceeds the documented high-capacity limit", async () => {
+    await expect(createNpcCanonDraft({ npcId: "mira-vale", displayName: "Mira Vale", request: "a".repeat(MAX_NPC_CANON_REQUEST_CHARS + 1) })).rejects.toThrow("1–60,000 characters");
+    expect(chatWithOllama).not.toHaveBeenCalled();
   });
 
   it("falls back to a valid review note when the model omits required Obsidian frontmatter", async () => {

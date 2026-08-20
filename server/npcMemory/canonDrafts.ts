@@ -1,4 +1,5 @@
 import { chatWithOllama } from "../agent/ollama";
+import { MAX_NPC_CANON_REQUEST_CHARS } from "@shared/const";
 import { recordNpcAdminAudit } from "./adminAudit";
 import { parseObsidianNpcNote } from "./obsidianSync";
 
@@ -126,7 +127,7 @@ export async function analyzeNpcCanonConflicts(existingNote: string | null, prop
 
 function validateDraftInput(npcId: string, displayName: string, request: string) {
   if (!displayName.trim() || displayName.trim().length > 120) throw new Error("Display name is required and must be 120 characters or fewer.");
-  if (!request.trim() || request.trim().length > 12_000) throw new Error("Describe the canon change in 1–12,000 characters.");
+  if (!request.trim() || request.trim().length > MAX_NPC_CANON_REQUEST_CHARS) throw new Error(`Describe the canon change in 1–${MAX_NPC_CANON_REQUEST_CHARS.toLocaleString()} characters.`);
   if (sensitiveInputPattern.test(request)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
   return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request.trim() };
 }

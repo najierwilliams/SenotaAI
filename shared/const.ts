@@ -3,6 +3,10 @@ export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const AXIOS_TIMEOUT_MS = 30_000;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
+/** Large enough for detailed NPC design documents while staying below the reviewed-note publication ceiling. */
+export const MAX_NPC_CANON_REQUEST_CHARS = 60_000;
+/** The protected dialogue runtime deliberately uses a bounded excerpt, not the entire vault note. */
+export const MAX_NPC_RUNTIME_EXCERPT_CHARS = 12_000;
 
 // One-time nonce cookie that binds an OAuth login to the browser that started
 // it. The `__Host-` prefix forces the cookie host-only (Secure, Path=/, no

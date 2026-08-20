@@ -1798,6 +1798,7 @@ var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
 var AXIOS_TIMEOUT_MS = 3e4;
 var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
+var MAX_NPC_CANON_REQUEST_CHARS = 6e4;
 var OAUTH_STATE_COOKIE = "__Host-oauth_state";
 var decodeOAuthState = (state) => {
   let decoded;
@@ -2201,7 +2202,7 @@ ${proposedNote.slice(0, 24e3)}` }
 }
 function validateDraftInput(npcId, displayName, request2) {
   if (!displayName.trim() || displayName.trim().length > 120) throw new Error("Display name is required and must be 120 characters or fewer.");
-  if (!request2.trim() || request2.trim().length > 12e3) throw new Error("Describe the canon change in 1\u201312,000 characters.");
+  if (!request2.trim() || request2.trim().length > MAX_NPC_CANON_REQUEST_CHARS) throw new Error(`Describe the canon change in 1\u2013${MAX_NPC_CANON_REQUEST_CHARS.toLocaleString()} characters.`);
   if (sensitiveInputPattern.test(request2)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
   return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request2.trim() };
 }
@@ -2525,14 +2526,14 @@ ${buildTemporalContext(input.timeZone)}${memoryContext}`
     draft: npcAdminProcedure.input(z2.object({
       npcId: z2.string().trim().min(2).max(79),
       displayName: z2.string().trim().min(1).max(120),
-      request: z2.string().trim().min(1).max(12e3)
+      request: z2.string().trim().min(1).max(MAX_NPC_CANON_REQUEST_CHARS)
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraft(input);
     }),
     draftBatch: npcAdminProcedure.input(z2.object({
       targets: z2.array(z2.object({ npcId: z2.string().trim().min(2).max(79), displayName: z2.string().trim().min(1).max(120) })).min(1).max(8),
-      request: z2.string().trim().min(1).max(12e3)
+      request: z2.string().trim().min(1).max(MAX_NPC_CANON_REQUEST_CHARS)
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return createNpcCanonDraftBatch(input);
