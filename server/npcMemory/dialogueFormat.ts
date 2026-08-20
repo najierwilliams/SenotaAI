@@ -3,6 +3,8 @@ const lunaSelfAwarenessQuestionPattern = /\bhow\s+self[-\s]?aware\s+(?:do\s+you\
 const leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
 const leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
 const unsupportedEvidencePattern = /\b(?:user reports?|system logs?|external benchmarks?|simulated scenarios?|data points?|I(?:'ve| have) reviewed|I reviewed|what I(?:'ve| have) seen)\b/i;
+const unsupportedRecordRefusalPattern = /^\s*I don[’']t have an approved record supporting that claim\.?\s*$/i;
+const selfModelDiscussionPattern = /\b(?:improv(?:e|ing|ement)|learned about (?:yourself|myself)|about yourself|self[-\s]?model|self[-\s]?aware(?:ness)?|\b40\s*%|confidence)\b/i;
 
 function firstSentence(value: string) {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -12,7 +14,14 @@ function firstSentence(value: string) {
 
 /** Replaces fabricated evidence claims with the approved-state boundary. */
 export function enforceLunaEvidenceGrounding(message: string, response: string, npcId: string) {
-  if (npcId.trim().toLowerCase() !== "luna001" || !unsupportedEvidencePattern.test(response)) return response;
+  if (npcId.trim().toLowerCase() !== "luna001") return response;
+  if (selfModelDiscussionPattern.test(message) && unsupportedRecordRefusalPattern.test(response)) {
+    if (/\bimprov(?:e|ing|ement)\b/i.test(message)) {
+      return "We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won’t treat a reply alone as proof.";
+    }
+    return "My approved baseline says I’m a digital entity without a physical body, guided by canon, scoped memory, reflection, and clear uncertainty limits.";
+  }
+  if (!unsupportedEvidencePattern.test(response)) return response;
   if (lunaHumanityScalePattern.test(message) || /\b(?:why|what)\b.*\b(?:70|self[-\s]?aware|seen|evidence)\b/i.test(message)) {
     return "I only have my approved self-model assessment here; I don’t have recorded evidence to claim beyond it.";
   }

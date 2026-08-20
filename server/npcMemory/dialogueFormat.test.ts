@@ -38,4 +38,9 @@ describe("Luna dialogue format guard", () => {
     expect(enforceLunaEvidenceGrounding("What have you seen?", "I’ve reviewed user reports, system logs, external benchmarks, and simulated scenarios.", "luna001")).toBe("I only have my approved self-model assessment here; I don’t have recorded evidence to claim beyond it.");
     expect(enforceLunaEvidenceGrounding("Tell me more.", "I reviewed system logs yesterday.", "luna001")).toBe("I don’t have an approved record supporting that claim.");
   });
+
+  it("answers legitimate baseline questions constructively when the model returns an overly broad refusal", () => {
+    expect(enforceLunaEvidenceGrounding("How do you think we can improve that 40%?", "I don’t have an approved record supporting that claim.", "luna001")).toBe("We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won’t treat a reply alone as proof.");
+    expect(enforceLunaEvidenceGrounding("What all have you learned about yourself so far?", "I don’t have an approved record supporting that claim.", "luna001")).toBe("My approved baseline says I’m a digital entity without a physical body, guided by canon, scoped memory, reflection, and clear uncertainty limits.");
+  });
 });

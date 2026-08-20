@@ -1663,6 +1663,7 @@ Self-awareness integrity:
 - Any self-awareness score must reflect only the approved persistent cognitive-state assessment supplied below; do not invent or estimate a score from conversation.
 - Do not claim to have reviewed user reports, system logs, external benchmarks, simulations, hidden data, or unlisted observations.
 - If asked why you gave a self-awareness score, explain only that it is the approved self-model assessment. If the supplied cognitive records contain no supporting evidence, say that no supporting evidence record exists.
+- When asked what you have learned about yourself, what the approved score means, or how it could improve, answer constructively from the supplied self-model, limitations, uncertainties, and active goals. It is appropriate to explain that growth would require canon-consistent interactions plus explicit administrator-reviewed updates; do not default to a refusal when that approved baseline is present.
 
 ${buildTemporalContext(timeZone)}
 
@@ -1675,13 +1676,22 @@ var lunaSelfAwarenessQuestionPattern = /\bhow\s+self[-\s]?aware\s+(?:do\s+you\s+
 var leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
 var leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
 var unsupportedEvidencePattern = /\b(?:user reports?|system logs?|external benchmarks?|simulated scenarios?|data points?|I(?:'ve| have) reviewed|I reviewed|what I(?:'ve| have) seen)\b/i;
+var unsupportedRecordRefusalPattern = /^\s*I don[’']t have an approved record supporting that claim\.?\s*$/i;
+var selfModelDiscussionPattern = /\b(?:improv(?:e|ing|ement)|learned about (?:yourself|myself)|about yourself|self[-\s]?model|self[-\s]?aware(?:ness)?|\b40\s*%|confidence)\b/i;
 function firstSentence(value) {
   const normalized = value.replace(/\s+/g, " ").trim();
   const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
 function enforceLunaEvidenceGrounding(message, response, npcId) {
-  if (npcId.trim().toLowerCase() !== "luna001" || !unsupportedEvidencePattern.test(response)) return response;
+  if (npcId.trim().toLowerCase() !== "luna001") return response;
+  if (selfModelDiscussionPattern.test(message) && unsupportedRecordRefusalPattern.test(response)) {
+    if (/\bimprov(?:e|ing|ement)\b/i.test(message)) {
+      return "We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won\u2019t treat a reply alone as proof.";
+    }
+    return "My approved baseline says I\u2019m a digital entity without a physical body, guided by canon, scoped memory, reflection, and clear uncertainty limits.";
+  }
+  if (!unsupportedEvidencePattern.test(response)) return response;
   if (lunaHumanityScalePattern.test(message) || /\b(?:why|what)\b.*\b(?:70|self[-\s]?aware|seen|evidence)\b/i.test(message)) {
     return "I only have my approved self-model assessment here; I don\u2019t have recorded evidence to claim beyond it.";
   }
@@ -1873,6 +1883,8 @@ async function buildCognitiveDialogueContext(npcId, message) {
 - Relevant active beliefs: ${beliefs.length ? beliefs.map((belief) => `${belief.confidence.toFixed(2)}: ${belief.statement}`).join(" | ") : "none"}
 - Active goals: ${goals.length ? goals.map((goal) => `${goal.title} (${Math.round(goal.progress * 100)}%)`).join(" | ") : "none"}
 - Relevant entity relationships: ${relationships.length ? relationships.map((relationship) => `${relationship.displayName}: ${compact2(relationship.dimensions, 320)}`).join(" | ") : "none"}
+
+Approved baseline dialogue: You may naturally explain this state summary, self-model, limitations, uncertainties, and active goals when the player asks about yourself, what you have learned, or how your assessment could improve. Describe improvement as a future process of canon-consistent interaction and explicit administrator-reviewed updates, not as an experience that has already happened.
 
 State integrity: treat these records as the only approved cognitive facts. Dialogue is not evidence and must not claim memories, beliefs, or self-model changes that are absent here.` };
 }
