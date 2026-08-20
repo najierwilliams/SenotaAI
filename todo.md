@@ -133,3 +133,4 @@
 - [x] Fix the malformed draft-response error shown in the new-NPC draft form by supplying a valid structured review-note fallback.
 - [x] Fix the production canon publish path so an approved edited review note cannot be replaced by stale prior content and unrelated additions are preserved.
 - [x] Deduplicate preserved and proposed canon claims during approved conflict replacement and prevent double Markdown bullet prefixes.
+- [x] Consolidate repeated SenotaAI approved-update sections and normalize nested Markdown bullet prefixes in successive approved conflict replacements.

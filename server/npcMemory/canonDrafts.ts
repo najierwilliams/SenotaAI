@@ -212,13 +212,28 @@ function uniqueCanonStatements(values: string[]) {
 
 function deduplicateCanonBullets(noteContent: string) {
   const seen = new Set<string>();
-  return noteContent.split("\n").filter(line => {
-    if (!/^\s*[-*+]\s+/.test(line)) return true;
-    const key = normalizeCanonLine(line);
-    if (!key || seen.has(key)) return false;
+  return noteContent.split("\n").flatMap(line => {
+    if (!/^\s*[-*+]\s+/.test(line)) return [line];
+    const canonical = `- ${line.replace(/^\s*(?:[-*+]\s+)+/, "").trim()}`;
+    const key = normalizeCanonLine(canonical);
+    if (!key || seen.has(key)) return [];
     seen.add(key);
-    return true;
+    return [canonical];
   }).join("\n");
+}
+
+function separateApprovedUpdateSections(noteContent: string) {
+  const retained: string[] = [];
+  const approved: string[] = [];
+  let inApprovedSection = false;
+  for (const line of noteContent.split("\n")) {
+    if (/^##\s+SenotaAI approved updates\s*$/i.test(line.trim())) { inApprovedSection = true; continue; }
+    if (inApprovedSection && /^#{1,2}\s+/.test(line)) inApprovedSection = false;
+    if (!inApprovedSection) { retained.push(line); continue; }
+    const statement = line.replace(/^\s*(?:[-*+]\s+)+/, "").trim();
+    if (statement) approved.push(statement);
+  }
+  return { retainedNote: retained.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd(), approvedStatements: uniqueCanonStatements(approved) };
 }
 
 /** Removes only exact blocking claims and appends approved novel statements; no unrelated canon paragraph is replaced. */
@@ -232,13 +247,15 @@ export function applyApprovedCanonConflictReplacement(existingNote: string, prop
     resolved = outcome.noteContent;
     removedClaims.push(conflict.existingClaim);
   }
-  resolved = deduplicateCanonBullets(resolved);
+  const separated = separateApprovedUpdateSections(deduplicateCanonBullets(resolved));
+  const removedClaimKeys = new Set(conflicts.filter(item => item.severity === "blocking").flatMap(item => [item.existingClaim, item.replacementAnchor ?? ""]).map(normalizeCanonLine));
   const additions = uniqueCanonStatements([
+    ...separated.approvedStatements.filter(statement => !removedClaimKeys.has(normalizeCanonLine(statement))),
     ...extractApprovedAdditions(existingNote, proposedNote),
     ...conflicts.filter(item => item.severity === "blocking").map(item => item.proposedClaim.trim()).filter(Boolean),
   ]);
   if (!additions.length) throw new Error("The approved revision did not contain a replacement statement to add.");
-  return { noteContent: `${resolved.trimEnd()}\n\n## SenotaAI approved updates\n${additions.map(addition => `- ${addition}`).join("\n")}\n`, removedClaims, additions };
+  return { noteContent: `${separated.retainedNote}\n\n## SenotaAI approved updates\n${additions.map(addition => `- ${addition}`).join("\n")}\n`, removedClaims, additions };
 }
 
 export async function publishNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string; sourceSha: string | null; conflictOverride?: boolean }) {

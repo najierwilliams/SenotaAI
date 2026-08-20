@@ -139,6 +139,18 @@ describe("reviewable NPC canon drafts", () => {
     expect(result.noteContent).not.toContain("- - Luna has a green lantern.");
   });
 
+  it("consolidates repeated approved-update sections while replacing a nested-bullet claim", () => {
+    const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna protects a quiet archive.\n- Luna protects a quiet archive.\n\n## SenotaAI approved updates\n- - Luna has a green lantern.\n\n## SenotaAI approved updates\n- Luna has a green lantern.";
+    const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a red lantern.\n- Luna protects a quiet archive.";
+    const result = applyApprovedCanonConflictReplacement(existing, proposed, [{ severity: "blocking", existingClaim: "Luna has a green lantern.", replacementAnchor: "- - Luna has a green lantern.", proposedClaim: "Luna has a red lantern.", rationale: "Lantern color conflict." }]);
+
+    expect(result.noteContent.match(/## SenotaAI approved updates/g)).toHaveLength(1);
+    expect(result.noteContent.match(/Luna protects a quiet archive\./g)).toHaveLength(1);
+    expect(result.noteContent.match(/Luna has a red lantern\./g)).toHaveLength(1);
+    expect(result.noteContent).not.toContain("green lantern");
+    expect(result.noteContent).not.toContain("- - ");
+  });
+
   it("refuses a blocking conflict until the administrator explicitly overrides it", async () => {
     const existing = Buffer.from(draftNote.replace(/^<!--[\s\S]*?-->\n/, "")).toString("base64");
     const fetchMock = vi.mocked(fetch);
