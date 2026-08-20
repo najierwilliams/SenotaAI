@@ -45,7 +45,9 @@ async function request(path: string, init?: RequestInit) {
   const execute = () => fetch(`${current.url}/rest/v1/${path}`, { ...init, headers: { apikey: current.key, Authorization: `Bearer ${current.key}`, "Content-Type": "application/json", ...(init?.headers ?? {}) } });
   let response = await execute(); if (response.status === 401 && (!init?.method || init.method.toUpperCase() === "GET")) response = await execute();
   if (!response.ok) throw new Error(`Supabase cognitive-state request failed (${response.status}).`);
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
 }
 
 function mapState(row: Record<string, unknown>): CognitiveState { return { npcId: String(row.npc_id), schemaVersion: Number(row.schema_version ?? 1), selfModel: jsonRecord(row.self_model, defaultState), selfAwareness: normalizeAwareness(row.self_awareness), emotionalState: jsonRecord(row.emotional_state), needs: normalizeNeeds(row.needs), preferences: jsonArray(row.preferences), uncertainties: jsonArray(row.uncertainties), stateSummary: String(row.state_summary ?? defaultState.summary), updatedAt: String(row.updated_at) }; }

@@ -76,6 +76,7 @@ describe("NPC cognitive state", () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url.includes("npc_cognitive_state")) return Promise.resolve(new Response(JSON.stringify([stateRow]), { status: 200 }));
       if (url.includes("npc_cognitive_reflections") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify([{ id: "56565656-5656-4565-8565-565656565656", npc_id: "luna001", created_at: "2026-08-20T00:00:00Z" }]), { status: 201 }));
+      if (url.includes("npc_cognitive_history") && init?.method === "POST") return Promise.resolve(new Response(null, { status: 201 }));
       return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
     });
     vi.stubGlobal("fetch", fetchMock);
