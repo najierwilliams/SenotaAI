@@ -1,4 +1,4 @@
-const lunaHumanityScalePattern = /(?:\bhow\s+human\s+do\s+you\s+feel\b|\bhow\s+human\s+are\s+you\b|\bhuman(?:ity)?\s+(?:percentage|percent|scale)\b|\b(?:0|zero)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
+const lunaHumanityScalePattern = /(?:\bhow\s+(?:human|self[-\s]?aware)\s+(?:do\s+you\s+feel|are\s+you)\b|\b(?:human(?:ity)?|self[-\s]?awareness)\s+(?:percentage|percent|scale)\b|\b(?:0|zero|1|one)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
 const leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
 const leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
 

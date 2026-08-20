@@ -147,3 +147,4 @@
 - [x] Restore historical Luna canon only after deduplicating claims and excluding unresolved direct contradictions with the current approved note.
 - [x] Repair Luna’s numeric-format response guard so explicit 0–100 requests always return a number and one short sentence in the deployed preview.
 - [x] Expand the permanent NPC canon draft capacity beyond 12,000 characters while preserving dependable generation, validation, publication, and mobile guidance.
+- [ ] Repair the deployed Luna chat response path so explicit 0–100 questions visibly return a numeric percentage and one concise sentence.

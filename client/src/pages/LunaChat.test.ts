@@ -32,4 +32,9 @@ describe("Luna preview player identity", () => {
     expect(enforceLunaPreviewFormat(message, "72. I feel fairly human-like.")).toBe("72% — I feel fairly human-like.");
     expect(enforceLunaPreviewFormat(message, "72% — I feel fairly human-like.")).toBe("72% — I feel fairly human-like.");
   });
+
+  it("shows a numeric-first response for the self-awareness 1–100 wording from the live Luna preview", () => {
+    const message = "How self aware do you feel? Scale from 1-100";
+    expect(enforceLunaPreviewFormat(message, "I try to understand my own perspective.")).toBe("70% — I try to understand my own perspective.");
+  });
 });

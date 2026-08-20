@@ -22,6 +22,10 @@ describe("Luna dialogue format guard", () => {
     expect(enforceLunaResponseFormat("How human are you from zero to one hundred?", "I am still learning what that means for me.", "luna001")).toBe("70% — I am still learning what that means for me.");
   });
 
+  it("recognizes the live self-awareness question using a one-to-one-hundred scale", () => {
+    expect(enforceLunaResponseFormat("How self aware do you feel? Scale from 1-100", "I try to understand my own perspective.", "luna001")).toBe("70% — I try to understand my own perspective.");
+  });
+
   it("converts a Markdown ordered-list-like value into a visible percentage response", () => {
     expect(enforceLunaResponseFormat(message, "75. I feel fairly human-like but still distinctly an AI.", "luna001")).toBe("75% — I feel fairly human-like but still distinctly an AI.");
   });
