@@ -48,7 +48,10 @@ describe("Vercel deployment routing", () => {
 
     expect(functionEntry).toContain('import express from "express"');
     expect(functionEntry).toContain('import { createApp } from "./app"');
-    expect(functionEntry).toContain("app.use(express.static(publicDirectory))");
-    expect(functionEntry).toContain('app.use("*", (_req, res) => res.sendFile');
+    expect(functionEntry).toContain("const applicationShellCacheControl = \"no-store, max-age=0, must-revalidate\"");
+    expect(functionEntry).toContain("const hashedAssetCacheControl = \"public, max-age=31556952, immutable\"");
+    expect(functionEntry).toContain("app.use(express.static(publicDirectory, {");
+    expect(functionEntry).toContain("path.basename(filePath) === \"index.html\" ? applicationShellCacheControl : hashedAssetCacheControl");
+    expect(functionEntry).toContain('res.setHeader("Cache-Control", applicationShellCacheControl)');
   });
 });
