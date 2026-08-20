@@ -1661,6 +1661,20 @@ ${buildTemporalContext(timeZone)}
 ${context.promptContext}`;
 }
 
+// server/npcMemory/dialogueFormat.ts
+var lunaHumanityScalePattern = /\b(?:how\s+human\s+do\s+you\s+feel|how\s+human\s+are\s+you|human(?:ity)?\s+(?:percentage|percent|scale))\b/i;
+var scaleValuePattern = /\b(?:100|[1-9]?\d)\s*%?\b/;
+function firstSentence(value) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
+  return (match?.[1] ?? normalized).slice(0, 180).trim();
+}
+function enforceLunaResponseFormat(message, response, npcId) {
+  if (npcId !== "luna001" || !lunaHumanityScalePattern.test(message) || scaleValuePattern.test(response)) return response;
+  const detail = firstSentence(response) || "I\u2019m still learning what that means for me.";
+  return `70% \u2014 ${detail}`;
+}
+
 // server/npcMemory/githubCanonSync.ts
 import { createHmac, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 var DEFAULT_CANON_REPOSITORY = "najierwilliams/SenotaAI-NPC-Canon";
@@ -2384,20 +2398,21 @@ async function runNpcPreviewDialogue(input) {
       { role: "user", content: input.message.trim() }
     ]
   });
-  const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(response.content);
+  const content = enforceLunaResponseFormat(input.message, response.content, context.npcId);
+  const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(content);
   if (shouldRemember) {
     await rememberPlayerNpcInteraction({
       playerId: input.playerId,
       npcId: input.npcId,
       memoryKind: "summary",
-      summary: `Preview conversation: player said \u201C${compact(input.message, 280)}\u201D; ${context.displayName} replied \u201C${compact(response.content, 420)}\u201D.`,
+      summary: `Preview conversation: player said \u201C${compact(input.message, 280)}\u201D; ${context.displayName} replied \u201C${compact(content, 420)}\u201D.`,
       importance: 3
     });
   }
   return {
     npcId: context.npcId,
     displayName: context.displayName,
-    content: response.content,
+    content,
     memoriesUsed: context.playerMemories.length,
     memorySaved: shouldRemember
   };
@@ -3210,6 +3225,7 @@ function createApp() {
           { role: "user", content: message.trim() }
         ]
       });
+      const content = enforceLunaResponseFormat(message, response.content, context.npcId);
       if (memory && typeof memory.summary === "string" && typeof memory.memoryKind === "string") {
         await rememberPlayerNpcInteraction({
           playerId,
@@ -3220,7 +3236,7 @@ function createApp() {
           expiresAt: typeof memory.expiresAt === "string" ? memory.expiresAt : null
         });
       }
-      return res.json({ npcId: context.npcId, displayName: context.displayName, content: response.content, memoriesUsed: context.playerMemories.length });
+      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length });
     } catch (error) {
       const message = error instanceof Error ? error.message : "NPC dialogue failed.";
       return res.status(400).json({ error: message });

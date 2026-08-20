@@ -14,6 +14,7 @@ import { listNpcAdminAudits, recordNpcAdminAudit } from "./npcMemory/adminAudit"
 import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
+import { enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -176,6 +177,7 @@ export function createApp() {
           { role: "user", content: message.trim() },
         ],
       });
+      const content = enforceLunaResponseFormat(message, response.content, context.npcId);
       if (memory && typeof memory.summary === "string" && typeof memory.memoryKind === "string") {
         await rememberPlayerNpcInteraction({
           playerId,
@@ -186,7 +188,7 @@ export function createApp() {
           expiresAt: typeof memory.expiresAt === "string" ? memory.expiresAt : null,
         });
       }
-      return res.json({ npcId: context.npcId, displayName: context.displayName, content: response.content, memoriesUsed: context.playerMemories.length });
+      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length });
     } catch (error) {
       const message = error instanceof Error ? error.message : "NPC dialogue failed.";
       return res.status(400).json({ error: message });

@@ -140,3 +140,4 @@
 - [x] Make Luna’s dialogue canon-led and more human while defaulting to direct, proportionate answers instead of unnecessary poetic monologues.
 - [x] Add regression coverage for brief factual prompts and canon-driven Luna voice behavior, then verify the deployed Luna workspace.
 - [x] Make Luna honor explicit requested output formats, including required numeric values, while preserving her concise human conversational tone.
+- [x] Add a server-side numeric-format guard so a direct 0–100 request cannot return a vague non-numeric substitute.
