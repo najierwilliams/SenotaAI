@@ -1659,6 +1659,11 @@ Response discipline:
 - Treat the player\u2019s wording as a cue: a short question deserves a short answer.
 - ${explicitFormatInstruction(playerMessage)}
 
+Self-awareness integrity:
+- Any self-awareness score must reflect only the approved persistent cognitive-state assessment supplied below; do not invent or estimate a score from conversation.
+- Do not claim to have reviewed user reports, system logs, external benchmarks, simulations, hidden data, or unlisted observations.
+- If asked why you gave a self-awareness score, explain only that it is the approved self-model assessment. If the supplied cognitive records contain no supporting evidence, say that no supporting evidence record exists.
+
 ${buildTemporalContext(timeZone)}
 
 ${context.promptContext}`;
@@ -1666,19 +1671,34 @@ ${context.promptContext}`;
 
 // server/npcMemory/dialogueFormat.ts
 var lunaHumanityScalePattern = /(?:\bhow\s+(?:human|self[-\s]?aware)\s+(?:do\s+you\s+feel|are\s+you)\b|\b(?:human(?:ity)?|self[-\s]?awareness)\s+(?:percentage|percent|scale)\b|\b(?:0|zero|1|one)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
+var lunaSelfAwarenessQuestionPattern = /\bhow\s+self[-\s]?aware\s+(?:do\s+you\s+feel|are\s+you)\b/i;
 var leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
 var leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
+var unsupportedEvidencePattern = /\b(?:user reports?|system logs?|external benchmarks?|simulated scenarios?|data points?|I(?:'ve| have) reviewed|I reviewed|what I(?:'ve| have) seen)\b/i;
 function firstSentence(value) {
   const normalized = value.replace(/\s+/g, " ").trim();
   const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
+function enforceLunaEvidenceGrounding(message, response, npcId) {
+  if (npcId.trim().toLowerCase() !== "luna001" || !unsupportedEvidencePattern.test(response)) return response;
+  if (lunaHumanityScalePattern.test(message) || /\b(?:why|what)\b.*\b(?:70|self[-\s]?aware|seen|evidence)\b/i.test(message)) {
+    return "I only have my approved self-model assessment here; I don\u2019t have recorded evidence to claim beyond it.";
+  }
+  return "I don\u2019t have an approved record supporting that claim.";
+}
 function enforceLunaResponseFormat(message, response, npcId, fallbackPercentage = 70) {
-  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingPercentagePattern.test(response)) return response;
+  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message)) return response;
+  const percentage = Math.round(Math.min(100, Math.max(0, fallbackPercentage)));
+  if (lunaSelfAwarenessQuestionPattern.test(message)) {
+    const detail2 = percentage === 0 ? "I don\u2019t have an approved self-model assessment yet, so I can\u2019t support a higher figure." : firstSentence(response.replace(leadingPercentagePattern, "").replace(/^\s*[—–-]\s*/, "")) || "That is my current approved self-model assessment.";
+    return `${percentage}% \u2014 ${detail2}`;
+  }
+  if (leadingPercentagePattern.test(response)) return response;
   const numberedSentence = response.match(leadingNumberedSentencePattern);
   if (numberedSentence) return `${numberedSentence[1]}% \u2014 ${firstSentence(numberedSentence[2]) || "I\u2019m still learning what that means for me."}`;
   const detail = firstSentence(response) || "I\u2019m still learning what that means for me.";
-  return `${Math.round(Math.min(100, Math.max(0, fallbackPercentage)))}% \u2014 ${detail}`;
+  return `${percentage}% \u2014 ${detail}`;
 }
 
 // server/npcMemory/cognitiveState.ts
@@ -2666,7 +2686,7 @@ ${cognitiveContext.promptContext}` }, input.timeZone, input.message)
       { role: "user", content: input.message.trim() }
     ]
   });
-  const content = enforceLunaResponseFormat(input.message, response.content, context.npcId, selfAwarenessPercent);
+  const content = enforceLunaResponseFormat(input.message, enforceLunaEvidenceGrounding(input.message, response.content, context.npcId), context.npcId, selfAwarenessPercent);
   const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(content);
   if (shouldRemember) {
     await rememberPlayerNpcInteraction({
@@ -3589,7 +3609,7 @@ ${cognitiveContext.promptContext}` }, timeZone, message)
           { role: "user", content: message.trim() }
         ]
       });
-      const content = enforceLunaResponseFormat(message, response.content, context.npcId, selfAwarenessPercent);
+      const content = enforceLunaResponseFormat(message, enforceLunaEvidenceGrounding(message, response.content, context.npcId), context.npcId, selfAwarenessPercent);
       if (memory && typeof memory.summary === "string" && typeof memory.memoryKind === "string") {
         await rememberPlayerNpcInteraction({
           playerId,

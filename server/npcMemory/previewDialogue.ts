@@ -1,6 +1,6 @@
 import { chatWithOllama } from "../agent/ollama";
 import { buildNpcDialogueSystemPrompt } from "./dialoguePrompt";
-import { enforceLunaResponseFormat } from "./dialogueFormat";
+import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./dialogueFormat";
 import { buildNpcDialogueContext, rememberPlayerNpcInteraction } from "./supabase";
 import { buildCognitiveDialogueContext, getNpcSelfAwarenessPercent } from "./cognitiveState";
 
@@ -26,7 +26,7 @@ export async function runNpcPreviewDialogue(input: { playerId: string; npcId: st
       { role: "user", content: input.message.trim() },
     ],
   });
-  const content = enforceLunaResponseFormat(input.message, response.content, context.npcId, selfAwarenessPercent);
+  const content = enforceLunaResponseFormat(input.message, enforceLunaEvidenceGrounding(input.message, response.content, context.npcId), context.npcId, selfAwarenessPercent);
   const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(content);
   if (shouldRemember) {
     await rememberPlayerNpcInteraction({

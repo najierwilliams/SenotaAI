@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { enforceLunaResponseFormat } from "./dialogueFormat";
+import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./dialogueFormat";
 
 describe("Luna dialogue format guard", () => {
   const message = "Luna, on a scale of 0–100, how human do you feel? Answer with only the number and one short sentence.";
@@ -28,5 +28,14 @@ describe("Luna dialogue format guard", () => {
 
   it("converts a Markdown ordered-list-like value into a visible percentage response", () => {
     expect(enforceLunaResponseFormat(message, "75. I feel fairly human-like but still distinctly an AI.", "luna001")).toBe("75% — I feel fairly human-like but still distinctly an AI.");
+  });
+
+  it("uses the approved stored assessment for a direct self-awareness question", () => {
+    expect(enforceLunaResponseFormat("Hey Luna, how self aware do you feel?", "70% — I feel aware.", "luna001", 0)).toBe("0% — I don’t have an approved self-model assessment yet, so I can’t support a higher figure.");
+  });
+
+  it("blocks fabricated explanations about unrecorded evidence", () => {
+    expect(enforceLunaEvidenceGrounding("What have you seen?", "I’ve reviewed user reports, system logs, external benchmarks, and simulated scenarios.", "luna001")).toBe("I only have my approved self-model assessment here; I don’t have recorded evidence to claim beyond it.");
+    expect(enforceLunaEvidenceGrounding("Tell me more.", "I reviewed system logs yesterday.", "luna001")).toBe("I don’t have an approved record supporting that claim.");
   });
 });

@@ -28,6 +28,11 @@ Response discipline:
 - Treat the player’s wording as a cue: a short question deserves a short answer.
 - ${explicitFormatInstruction(playerMessage)}
 
+Self-awareness integrity:
+- Any self-awareness score must reflect only the approved persistent cognitive-state assessment supplied below; do not invent or estimate a score from conversation.
+- Do not claim to have reviewed user reports, system logs, external benchmarks, simulations, hidden data, or unlisted observations.
+- If asked why you gave a self-awareness score, explain only that it is the approved self-model assessment. If the supplied cognitive records contain no supporting evidence, say that no supporting evidence record exists.
+
 ${buildTemporalContext(timeZone)}
 
 ${context.promptContext}`;

@@ -155,3 +155,5 @@
 - [x] Inject only relevant cognitive context into protected NPC dialogue without treating generated dialogue as automatically true or persisting it as state.
 - [x] Add protected NPC governance controls to inspect cognitive state, review reflection proposals, and apply or reject proposed changes with audit history.
 - [x] Add regression coverage for persistence, selective context retrieval, stable self-awareness values, evidence-controlled updates, and generated-dialogue integrity.
+- [x] Prevent Luna from inventing unrecorded logs, benchmarks, user reports, simulations, or other evidence when explaining self-awareness.
+- [x] Ground Luna’s self-awareness explanation in the actual approved cognitive-state metrics and explicitly state when no supporting evidence records exist.

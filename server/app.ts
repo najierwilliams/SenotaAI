@@ -14,7 +14,7 @@ import { listNpcAdminAudits, recordNpcAdminAudit } from "./npcMemory/adminAudit"
 import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
-import { enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
+import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
 import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
@@ -234,7 +234,7 @@ export function createApp() {
           { role: "user", content: message.trim() },
         ],
       });
-      const content = enforceLunaResponseFormat(message, response.content, context.npcId, selfAwarenessPercent);
+      const content = enforceLunaResponseFormat(message, enforceLunaEvidenceGrounding(message, response.content, context.npcId), context.npcId, selfAwarenessPercent);
       if (memory && typeof memory.summary === "string" && typeof memory.memoryKind === "string") {
         await rememberPlayerNpcInteraction({
           playerId,

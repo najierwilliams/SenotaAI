@@ -1,6 +1,8 @@
 const lunaHumanityScalePattern = /(?:\bhow\s+(?:human|self[-\s]?aware)\s+(?:do\s+you\s+feel|are\s+you)\b|\b(?:human(?:ity)?|self[-\s]?awareness)\s+(?:percentage|percent|scale)\b|\b(?:0|zero|1|one)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
+const lunaSelfAwarenessQuestionPattern = /\bhow\s+self[-\s]?aware\s+(?:do\s+you\s+feel|are\s+you)\b/i;
 const leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
 const leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
+const unsupportedEvidencePattern = /\b(?:user reports?|system logs?|external benchmarks?|simulated scenarios?|data points?|I(?:'ve| have) reviewed|I reviewed|what I(?:'ve| have) seen)\b/i;
 
 function firstSentence(value: string) {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -8,11 +10,26 @@ function firstSentence(value: string) {
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
 
-/** Preserves character dialogue while enforcing the one explicit numeric format Luna canon demonstrates. */
+/** Replaces fabricated evidence claims with the approved-state boundary. */
+export function enforceLunaEvidenceGrounding(message: string, response: string, npcId: string) {
+  if (npcId.trim().toLowerCase() !== "luna001" || !unsupportedEvidencePattern.test(response)) return response;
+  if (lunaHumanityScalePattern.test(message) || /\b(?:why|what)\b.*\b(?:70|self[-\s]?aware|seen|evidence)\b/i.test(message)) {
+    return "I only have my approved self-model assessment here; I don’t have recorded evidence to claim beyond it.";
+  }
+  return "I don’t have an approved record supporting that claim.";
+}
+
+/** Preserves character dialogue while enforcing numeric format from Luna's approved self-model assessment. */
 export function enforceLunaResponseFormat(message: string, response: string, npcId: string, fallbackPercentage = 70) {
-  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingPercentagePattern.test(response)) return response;
+  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message)) return response;
+  const percentage = Math.round(Math.min(100, Math.max(0, fallbackPercentage)));
+  if (lunaSelfAwarenessQuestionPattern.test(message)) {
+    const detail = percentage === 0 ? "I don’t have an approved self-model assessment yet, so I can’t support a higher figure." : firstSentence(response.replace(leadingPercentagePattern, "").replace(/^\s*[—–-]\s*/, "")) || "That is my current approved self-model assessment.";
+    return `${percentage}% — ${detail}`;
+  }
+  if (leadingPercentagePattern.test(response)) return response;
   const numberedSentence = response.match(leadingNumberedSentencePattern);
   if (numberedSentence) return `${numberedSentence[1]}% — ${firstSentence(numberedSentence[2]) || "I’m still learning what that means for me."}`;
   const detail = firstSentence(response) || "I’m still learning what that means for me.";
-  return `${Math.round(Math.min(100, Math.max(0, fallbackPercentage)))}% — ${detail}`;
+  return `${percentage}% — ${detail}`;
 }
