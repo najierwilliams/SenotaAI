@@ -78,6 +78,17 @@ function assertUuid(value: string, label: string) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) throw new Error(`${label} must be a UUID.`);
 }
 
+function parseUtcDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Memory date must use YYYY-MM-DD.");
+  const start = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || start.toISOString().slice(0, 10) !== value) throw new Error("Memory date must be a real calendar date.");
+  return { start: start.toISOString(), end: new Date(start.getTime() + 86_400_000).toISOString() };
+}
+
+function normalizeMemorySearch(value: string) {
+  return (value.toLowerCase().match(/[a-z0-9_-]{2,32}/g) ?? []).slice(0, 4);
+}
+
 async function request(path: string, init?: RequestInit) {
   const current = config();
   if (!current) throw new Error("Supabase NPC memory is not configured.");
@@ -121,9 +132,11 @@ export async function listNpcCanonSourcesForAdmin(limit = 100): Promise<NpcCanon
 }
 
 /** Administrative memory review supports filters but never returns data without the caller's verified admin session. */
-export async function listPlayerNpcMemoriesForAdmin(input: { npcId?: string; playerId?: string; includeInactive?: boolean; limit?: number } = {}): Promise<PlayerNpcMemoryAdminRecord[]> {
+export async function listPlayerNpcMemoriesForAdmin(input: { npcId?: string; playerId?: string; includeInactive?: boolean; date?: string; query?: string; limit?: number } = {}): Promise<PlayerNpcMemoryAdminRecord[]> {
   if (input.npcId) assertIdentifier(input.npcId, "NPC ID");
   if (input.playerId) assertUuid(input.playerId, "Player ID");
+  const dateWindow = input.date ? parseUtcDate(input.date) : null;
+  const searchTerms = input.query ? normalizeMemorySearch(input.query) : [];
   const params = new URLSearchParams({
     select: "id,player_id,npc_id,memory_kind,summary,importance,source,occurred_at,expires_at,is_active,is_pinned",
     order: "occurred_at.desc",
@@ -132,6 +145,8 @@ export async function listPlayerNpcMemoriesForAdmin(input: { npcId?: string; pla
   if (input.npcId) params.set("npc_id", `eq.${input.npcId}`);
   if (input.playerId) params.set("player_id", `eq.${input.playerId}`);
   if (!input.includeInactive) params.set("is_active", "eq.true");
+  if (dateWindow) { params.append("occurred_at", `gte.${dateWindow.start}`); params.append("occurred_at", `lt.${dateWindow.end}`); }
+  if (searchTerms.length) params.set("or", `(${searchTerms.flatMap(term => [`summary.ilike.*${term}*`, `npc_id.ilike.*${term}*`]).join(",")})`);
   const records = await request(`player_npc_memory?${params.toString()}`);
   return (records ?? []).map((record: Record<string, unknown>) => ({
     id: String(record.id),

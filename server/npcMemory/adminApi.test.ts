@@ -23,7 +23,7 @@ describe("NPC administration API", () => {
 
   it("keeps canon and player-memory records behind the administrator session", async () => {
     listNpcCanonSourcesForAdmin.mockResolvedValue([{ npcId: "mira-baker", displayName: "Mira Vale", isActive: true }]);
-    listPlayerNpcMemoriesForAdmin.mockResolvedValue([{ id: "memory-1", npcId: "mira-baker", playerId: "player-1", summary: "Met in the market.", isActive: true }]);
+    listPlayerNpcMemoriesForAdmin.mockResolvedValue([{ id: "memory-1", npcId: "mira-baker", playerId: "player-1", summary: "Met in the market.", occurredAt: "2026-08-20T12:00:00.000Z", isActive: true }]);
     const app = createApp();
     const server = app.listen(0);
     const address = server.address();
@@ -38,7 +38,9 @@ describe("NPC administration API", () => {
       await expect(response.json()).resolves.toEqual({ canon: [{ npcId: "mira-baker", displayName: "Mira Vale", isActive: true }] });
       const memoriesResponse = await fetch(`${baseUrl}/api/npc/admin/memories`, { headers: { Cookie: cookie ?? "" } });
       expect(memoriesResponse.status).toBe(200);
-      await expect(memoriesResponse.json()).resolves.toEqual({ memories: [{ id: "memory-1", npcId: "mira-baker", playerId: "player-1", summary: "Met in the market.", isActive: true }] });
+      await expect(memoriesResponse.json()).resolves.toEqual({ memories: [{ id: "memory-1", npcId: "mira-baker", playerId: "player-1", summary: "Met in the market.", occurredAt: "2026-08-20T12:00:00.000Z", isActive: true }], dateBuckets: [{ day: "2026-08-20", count: 1 }] });
+      await fetch(`${baseUrl}/api/npc/admin/memories?date=2026-08-20&query=happy%20dog`, { headers: { Cookie: cookie ?? "" } });
+      expect(listPlayerNpcMemoriesForAdmin).toHaveBeenCalledWith(expect.objectContaining({ date: "2026-08-20", query: "happy dog", limit: 200 }));
       await fetch(`${baseUrl}/api/npc/admin/canon/mira-baker`, { method: "PATCH", headers: { "Content-Type": "application/json", Cookie: cookie ?? "" }, body: JSON.stringify({ canonExcerpt: "Updated canon excerpt", isActive: false }) });
       expect(updateNpcCanonForAdmin).toHaveBeenCalledWith("mira-baker", { canonExcerpt: "Updated canon excerpt", isActive: false });
       expect(recordNpcAdminAudit).toHaveBeenCalledWith("update", "canon", "mira-baker", ["canonExcerpt", "isActive"]);

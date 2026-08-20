@@ -87,8 +87,18 @@ export function createApp() {
     try {
       const npcId = typeof req.query.npcId === "string" ? req.query.npcId : undefined;
       const playerId = typeof req.query.playerId === "string" ? req.query.playerId : undefined;
+      const date = typeof req.query.date === "string" ? req.query.date : undefined;
+      const query = typeof req.query.query === "string" ? req.query.query : undefined;
       const includeInactive = req.query.includeInactive === "true";
-      return res.json({ memories: await listPlayerNpcMemoriesForAdmin({ npcId, playerId, includeInactive }) });
+      const baseInput = { npcId, playerId, includeInactive, limit: 200 };
+      const [memories, allMatchingMemories] = await Promise.all([
+        listPlayerNpcMemoriesForAdmin({ ...baseInput, date, query }),
+        listPlayerNpcMemoriesForAdmin(baseInput),
+      ]);
+      const counts = new Map<string, number>();
+      for (const memory of allMatchingMemories) { const day = memory.occurredAt.slice(0, 10); counts.set(day, (counts.get(day) ?? 0) + 1); }
+      const dateBuckets = Array.from(counts, ([day, count]) => ({ day, count })).sort((left, right) => right.day.localeCompare(left.day));
+      return res.json({ memories, dateBuckets });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "NPC memories are unavailable." });
     }

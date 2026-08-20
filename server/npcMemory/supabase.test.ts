@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildNpcDialogueContext, isNpcMemoryCloudReady, listPlayerNpcMemories, rememberPlayerNpcInteraction, upsertNpcCanonSource } from "./supabase";
+import { buildNpcDialogueContext, isNpcMemoryCloudReady, listPlayerNpcMemories, listPlayerNpcMemoriesForAdmin, rememberPlayerNpcInteraction, upsertNpcCanonSource } from "./supabase";
 
 const playerId = "e3f8edc7-6a3a-437d-9d8e-afd23e6fbc50";
 
@@ -58,5 +58,31 @@ describe("Supabase NPC memory gateway", () => {
     expect(context.promptContext).toContain("Player delivered medicine.");
     expect(fetchMock.mock.calls[1][0]).toContain(`player_id=eq.${playerId}`);
     expect(fetchMock.mock.calls[1][0]).toContain("npc_id=eq.mira-baker");
+  });
+
+  it("filters protected memory review by a real UTC creation date and bounded NPC-or-keyword terms", async () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-secret");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listPlayerNpcMemoriesForAdmin({ npcId: "luna001", date: "2026-08-20", query: "happy dog" });
+
+    const url = decodeURIComponent(String(fetchMock.mock.calls[0][0]));
+    expect(url).toContain("npc_id=eq.luna001");
+    expect(url).toContain("occurred_at=gte.2026-08-20T00:00:00.000Z");
+    expect(url).toContain("occurred_at=lt.2026-08-21T00:00:00.000Z");
+    expect(url).toContain("summary.ilike.*happy*");
+    expect(url).toContain("npc_id.ilike.*dog*");
+  });
+
+  it("rejects invalid calendar dates before an administrator memory query is sent", async () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-secret");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listPlayerNpcMemoriesForAdmin({ date: "2026-02-30" })).rejects.toThrow("real calendar date");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
