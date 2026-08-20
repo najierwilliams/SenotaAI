@@ -2845,7 +2845,7 @@ ${buildTemporalContext(input.timeZone)}${memoryContext}`
     })).mutation(async ({ input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
       const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001" });
-      return { ...response, content: enforceLunaResponseFormat(input.message, response.content, "luna001") };
+      return { ...response, content: enforceLunaResponseFormat(input.message, response.content, "luna001", response.selfAwarenessPercent) };
     })
   }),
   settings: router({

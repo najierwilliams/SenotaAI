@@ -37,4 +37,10 @@ describe("Luna preview player identity", () => {
     const message = "How self aware do you feel? Scale from 1-100";
     expect(enforceLunaPreviewFormat(message, "I try to understand my own perspective.")).toBe("70% — I try to understand my own perspective.");
   });
+
+  it("preserves and falls back to an approved zero-percent assessment instead of inventing 70%", () => {
+    const message = "How self aware do you feel?";
+    expect(enforceLunaPreviewFormat(message, "0% — No approved assessment yet.", 0)).toBe("0% — No approved assessment yet.");
+    expect(enforceLunaPreviewFormat(message, "I cannot support a higher figure.", 0)).toBe("0% — I cannot support a higher figure.");
+  });
 });

@@ -17,11 +17,11 @@ function firstSentence(value: string) {
 }
 
 /** Final display safeguard for the administrator preview; the server remains the authoritative guard. */
-export function enforceLunaPreviewFormat(message: string, response: string) {
+export function enforceLunaPreviewFormat(message: string, response: string, fallbackPercentage = 70) {
   if (!lunaScaleRequestPattern.test(message) || leadingPercentagePattern.test(response)) return response;
   const numberedSentence = response.match(leadingNumberedSentencePattern);
   if (numberedSentence) return `${numberedSentence[1]}% — ${firstSentence(numberedSentence[2]) || "I’m still learning what that means for me."}`;
-  return `70% — ${firstSentence(response) || "I’m still learning what that means for me."}`;
+  return `${Math.round(Math.min(100, Math.max(0, fallbackPercentage)))}% — ${firstSentence(response) || "I’m still learning what that means for me."}`;
 }
 
 export function getLunaPreviewPlayerId(storage: Pick<Storage, "getItem" | "setItem"> = localStorage) {
@@ -43,7 +43,7 @@ export default function LunaChat() {
     const nextMessages = [...messages, { role: "user" as const, content: message }];
     setMessages(nextMessages);
     chat.mutate({ playerId, message, remember }, {
-      onSuccess: (response) => setMessages([...nextMessages, { role: "assistant", content: enforceLunaPreviewFormat(message, response.content) }]),
+      onSuccess: (response) => setMessages([...nextMessages, { role: "assistant", content: enforceLunaPreviewFormat(message, response.content, response.selfAwarenessPercent) }]),
       onError: () => setMessages(messages),
     });
   };
