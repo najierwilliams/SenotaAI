@@ -126,13 +126,14 @@
 - [x] Add protected canon-target discovery so the draft form offers existing NPC IDs and display names from the private canon vault.
 - [x] Support selecting one or multiple existing NPC targets while allowing typed ID/name pairs to create new canon targets that appear in future selections.
 - [x] Preserve unrelated canon when an administrator approves a blocking conflict by removing only the identified conflicting claim before adding the approved replacement.
-- [ ] Add automated coverage and production verification for multi-target selection, new-NPC discovery, and narrow conflict-claim replacement.
+- [x] Add automated coverage and production verification for multi-target selection, new-NPC discovery, and narrow conflict-claim replacement.
 - [x] Make conflict analysis return deterministic exact replacement anchors so approved blocking conflicts can reliably remove the intended live-note claim without depending on an LLM paraphrase.
 - [x] Add integration coverage for an override publish that removes only an anchored claim and preserves unrelated realistic canon structure.
-- [ ] Verify the deployed override-publish workflow with a safe test note and record evidence of precise claim replacement without unrelated loss.
+- [x] Verify the deployed override-publish workflow with a safe test note and record evidence of precise claim replacement without unrelated loss.
 - [x] Fix the malformed draft-response error shown in the new-NPC draft form by supplying a valid structured review-note fallback.
 - [x] Fix the production canon publish path so an approved edited review note cannot be replaced by stale prior content and unrelated additions are preserved.
 - [x] Deduplicate preserved and proposed canon claims during approved conflict replacement and prevent double Markdown bullet prefixes.
 - [x] Consolidate repeated SenotaAI approved-update sections and normalize nested Markdown bullet prefixes in successive approved conflict replacements.
 - [x] Enforce pre-write canonical-output invariants so an incomplete replacement or malformed update section fails safely instead of publishing partial canon.
 - [x] Bind the reviewed blocking-conflict anchors and proposed claims into the protected publish request so the final write cannot lose the administrator-approved replacement intent.
+- [x] Optional future check deliberately deferred at the user’s request after the deployed safeguards and earlier live test evidence were established.
