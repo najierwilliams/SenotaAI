@@ -163,3 +163,4 @@
 - [x] Repair the live Luna follow-up path so brief questions such as “how can we increase that?” inherit the approved self-awareness context, answer constructively, and keep the displayed percentage internally consistent.
 - [x] Add a transparent, administrator-governed cognitive-needs and goal-proposal flow so Luna can identify bounded development needs and recommend approved self-model updates without representing sentience as a verified score.
 - [x] Repair Luna’s constructive-help guard so suggestion, recommendation, and guidance phrasing about improving her approved self-model never falls through to an unsupported-record refusal.
+- [x] Assess and integrate a transparent, evidence-bounded Luna cognitive substrate with structured memory consolidation, belief revision, goal formation, reflection, and administrator-governed state updates; document the safeguards retained and why.
