@@ -7,6 +7,26 @@
       "includeFiles": "public/**"
     }
   },
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/:path((?!api(?:/|$)|assets(?:/|$)).*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/assets/:path*",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31556952, immutable" }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/:path((?!api(?:/|$)|assets(?:/|$)).*)", "destination": "/index.html" }
   ]

@@ -6,7 +6,10 @@ describe("Vercel deployment routing", () => {
   it("leaves /api paths available to the catch-all serverless function", async () => {
     const config = JSON.parse(
       await readFile(resolve(process.cwd(), "vercel.json"), "utf8"),
-    ) as { rewrites?: Array<{ source?: string; destination?: string }> };
+    ) as {
+      rewrites?: Array<{ source?: string; destination?: string }>;
+      headers?: Array<{ source?: string; headers?: Array<{ key?: string; value?: string }> }>;
+    };
 
     expect(config.framework).toBe("express");
     expect(config.outputDirectory).toBeUndefined();
@@ -19,6 +22,20 @@ describe("Vercel deployment routing", () => {
       {
         source: "/:path((?!api(?:/|$)|assets(?:/|$)).*)",
         destination: "/index.html",
+      },
+    ]);
+    expect(config.headers).toEqual([
+      {
+        source: "/index.html",
+        headers: [{ key: "Cache-Control", value: "no-store, max-age=0, must-revalidate" }],
+      },
+      {
+        source: "/:path((?!api(?:/|$)|assets(?:/|$)).*)",
+        headers: [{ key: "Cache-Control", value: "no-store, max-age=0, must-revalidate" }],
+      },
+      {
+        source: "/assets/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31556952, immutable" }],
       },
     ]);
   });

@@ -168,3 +168,6 @@
 - [x] Make the Persistent cognitive state workspace plain-language and self-guided with concise use instructions, accessible in-app dialogs instead of browser prompts, and reliable development-needs review behavior.
 - [x] Repair saved-note reflection analysis so malformed model output produces a bounded, review-only proposal for ordinary administrator observations instead of a failed structured-data message.
 - [x] Ensure saved-note autonomy observations receive the bounded-autonomy fallback when model output is valid JSON but contains no actionable cognitive update.
+- [ ] Diagnose and restore desktop access to the live SenotaAI website after the latest production release.
+- [ ] Trace and repair the public desktop blank-white-screen client startup failure after the application HTML loads.
+- [ ] Ensure the regular production URL cannot retain a stale HTML shell that references obsolete application assets after deployment.
