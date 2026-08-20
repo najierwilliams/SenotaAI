@@ -2,7 +2,7 @@ import { desc } from "drizzle-orm";
 import { npcAdminAudits } from "../../drizzle/schema";
 import { getDb } from "../db";
 
-export async function recordNpcAdminAudit(action: string, recordType: "canon" | "memory" | "relationship" | "cognitive-state" | "cognitive-memory" | "cognitive-belief" | "cognitive-goal" | "cognitive-relationship" | "cognitive-reflection", recordId: string, fields: string[]) {
+export async function recordNpcAdminAudit(action: string, recordType: "canon" | "memory" | "relationship" | "cognitive-state" | "cognitive-memory" | "cognitive-belief" | "cognitive-goal" | "cognitive-relationship" | "cognitive-observation" | "cognitive-reflection", recordId: string, fields: string[]) {
   const db = await getDb();
   if (!db) return null;
   await db.insert(npcAdminAudits).values({ action, recordType, recordId, fields, createdAt: Date.now() });

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../agent/ollama", () => ({ chatWithOllama: vi.fn() }));
 
 import { chatWithOllama } from "../agent/ollama";
-import { addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, proposeCognitiveDevelopment, proposeCognitiveReflection } from "./cognitiveState";
+import { addCognitiveMemory, addCognitiveObservation, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, proposeCognitiveConsolidation, proposeCognitiveDevelopment, proposeCognitiveReflection } from "./cognitiveState";
 
 const stateRow = {
   npc_id: "luna001", schema_version: 1, self_model: { summary: "A persistent digital entity." },
@@ -77,5 +77,46 @@ describe("NPC cognitive state", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(proposeCognitiveDevelopment("luna001")).rejects.toThrow("No cognitive state was changed");
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
+  });
+
+  it("records raw observations separately, then creates a review-only consolidation proposal", async () => {
+    configure();
+    const observation = { id: "66666666-6666-4666-8666-666666666666", npc_id: "luna001", observation_kind: "interaction", content: "The player returned to continue a careful discussion about Luna's goals.", salience: 4, entities: ["player"], metadata: {}, source: "administrator-observation", status: "pending", created_at: "2026-08-20T00:00:00Z", updated_at: "2026-08-20T00:00:00Z" };
+    vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ summary: "The observation supports a reviewable continuity memory.", memory: { memoryKind: "episodic", content: "A player returned to continue a careful discussion about Luna's goals.", importance: 4, emotionalSignificance: 0.2, entities: ["player"], context: {} }, goal: { title: "Maintain dialogue continuity", details: "Use approved records to preserve context across future interactions.", priority: 4 } }), thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("npc_cognitive_observations") && !init?.method) return Promise.resolve(new Response(JSON.stringify([observation]), { status: 200 }));
+      if (url.includes("npc_cognitive_state")) return Promise.resolve(new Response(JSON.stringify([stateRow]), { status: 200 }));
+      if (url.includes("npc_cognitive_memories") || url.includes("npc_cognitive_beliefs") || url.includes("npc_cognitive_goals") || url.includes("npc_cognitive_relationships")) return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+      if (url.includes("npc_cognitive_reflections") && init?.method === "POST") { const body = JSON.parse(String(init.body)); return Promise.resolve(new Response(JSON.stringify([{ id: "77777777-7777-4777-8777-777777777777", npc_id: "luna001", experience: body.experience, proposal: body.proposal, source_observation_ids: body.source_observation_ids, status: "proposed", created_at: "2026-08-20T00:00:00Z", resolved_at: null }]), { status: 201 })); }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const proposal = await proposeCognitiveConsolidation("luna001");
+    expect(proposal.sourceObservationIds).toEqual([observation.id]);
+    expect(proposal.proposal.memory?.content).toContain("player returned");
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_state") && (init as RequestInit | undefined)?.method === "PATCH")).toBe(false);
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_observations") && (init as RequestInit | undefined)?.method === "PATCH")).toBe(true);
+  });
+
+  it("rejects a consolidation response that attempts to patch Luna's approved self-model", async () => {
+    configure();
+    const observation = { id: "88888888-8888-4888-8888-888888888888", npc_id: "luna001", observation_kind: "administrator-note", content: "A new observation was recorded for review.", salience: 3, entities: [], metadata: {}, source: "administrator-observation", status: "pending", created_at: "2026-08-20T00:00:00Z", updated_at: "2026-08-20T00:00:00Z" };
+    vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ summary: "Attempted self-model edit.", selfModelPatch: { summary: "unapproved" } }), thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("npc_cognitive_observations") ? [observation] : url.includes("npc_cognitive_state") ? [stateRow] : []), { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(proposeCognitiveConsolidation("luna001")).rejects.toThrow("No cognitive state was changed");
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
+  });
+
+  it("records an administrator observation without turning it into a cognitive memory", async () => {
+    configure();
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("npc_cognitive_observations") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify([{ id: "99999999-9999-4999-8999-999999999999", npc_id: "luna001", observation_kind: "administrator-note", content: "The player prefers careful, direct explanations.", salience: 3, entities: ["player"], metadata: {}, source: "administrator-observation", status: "pending", created_at: "2026-08-20T00:00:00Z", updated_at: "2026-08-20T00:00:00Z" }]), { status: 201 }));
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await addCognitiveObservation("luna001", { observationKind: "administrator-note", content: "The player prefers careful, direct explanations.", salience: 3, entities: ["player"], metadata: {}, source: "administrator-observation" });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("npc_cognitive_observations"))).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("npc_cognitive_memories"))).toBe(false);
   });
 });

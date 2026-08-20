@@ -15,7 +15,7 @@ import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
-import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
+import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, addCognitiveObservation, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveObservations, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveConsolidation, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -138,10 +138,10 @@ export function createApp() {
   app.get("/api/npc/admin/cognitive/:npcId", async (req, res) => {
     if (!await requireNpcAdmin(req, res)) return;
     try {
-      const [state, memories, beliefs, goals, relationships, reflections] = await Promise.all([
-        getNpcCognitiveState(req.params.npcId), listCognitiveMemories(req.params.npcId), listCognitiveBeliefs(req.params.npcId), listCognitiveGoals(req.params.npcId), listCognitiveRelationships(req.params.npcId), listCognitiveReflections(req.params.npcId),
+      const [state, memories, beliefs, goals, relationships, reflections, observations] = await Promise.all([
+        getNpcCognitiveState(req.params.npcId), listCognitiveMemories(req.params.npcId), listCognitiveBeliefs(req.params.npcId), listCognitiveGoals(req.params.npcId), listCognitiveRelationships(req.params.npcId), listCognitiveReflections(req.params.npcId), listCognitiveObservations(req.params.npcId),
       ]);
-      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections });
+      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections, observations });
     } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to load cognitive state." }); }
   });
 
@@ -173,6 +173,18 @@ export function createApp() {
     if (!await requireNpcAdmin(req, res)) return;
     try { const relationship = await upsertCognitiveRelationship(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("update", "cognitive-relationship", relationship.id, ["admin-approved"]); return res.json({ relationship }); }
     catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update cognitive relationship." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/observations", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const observation = await addCognitiveObservation(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("create", "cognitive-observation", observation.id, ["raw", "review-first"]); return res.status(201).json({ observation }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to record cognitive observation." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/consolidations", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const reflection = await proposeCognitiveConsolidation(req.params.npcId); await recordNpcAdminAudit("create-consolidation-proposal", "cognitive-reflection", reflection.id, ["observation-derived", "administrator-review-required"]); return res.status(201).json({ reflection }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to consolidate cognitive observations." }); }
   });
 
   app.post("/api/npc/admin/cognitive/:npcId/reflections", async (req, res) => {
