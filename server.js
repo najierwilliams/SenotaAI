@@ -1666,16 +1666,19 @@ ${context.promptContext}`;
 
 // server/npcMemory/dialogueFormat.ts
 var lunaHumanityScalePattern = /(?:\bhow\s+human\s+do\s+you\s+feel\b|\bhow\s+human\s+are\s+you\b|\bhuman(?:ity)?\s+(?:percentage|percent|scale)\b|\b(?:0|zero)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
-var leadingScaleValuePattern = /^\s*(?:100|[1-9]?\d)(?:\s*%|\b)/;
+var leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
+var leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
 function firstSentence(value) {
   const normalized = value.replace(/\s+/g, " ").trim();
   const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
 function enforceLunaResponseFormat(message, response, npcId) {
-  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingScaleValuePattern.test(response)) return response;
+  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingPercentagePattern.test(response)) return response;
+  const numberedSentence = response.match(leadingNumberedSentencePattern);
+  if (numberedSentence) return `${numberedSentence[1]}% \u2014 ${firstSentence(numberedSentence[2]) || "I\u2019m still learning what that means for me."}`;
   const detail = firstSentence(response) || "I\u2019m still learning what that means for me.";
-  return `70. ${detail}`;
+  return `70% \u2014 ${detail}`;
 }
 
 // server/npcMemory/githubCanonSync.ts

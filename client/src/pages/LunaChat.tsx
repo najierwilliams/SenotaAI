@@ -7,7 +7,8 @@ import { Link } from "wouter";
 
 const LUNA_PREVIEW_PLAYER_KEY = "senota-luna-preview-player-id";
 const lunaScaleRequestPattern = /(?:\bhow\s+human\s+do\s+you\s+feel\b|\bhow\s+human\s+are\s+you\b|\bhuman(?:ity)?\s+(?:percentage|percent|scale)\b|\b(?:0|zero)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
-const leadingScaleValuePattern = /^\s*(?:100|[1-9]?\d)(?:\s*%|\b)/;
+const leadingPercentagePattern = /^\s*(?:100|[1-9]?\d)\s*%/;
+const leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
 
 function firstSentence(value: string) {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -17,8 +18,10 @@ function firstSentence(value: string) {
 
 /** Final display safeguard for the administrator preview; the server remains the authoritative guard. */
 export function enforceLunaPreviewFormat(message: string, response: string) {
-  if (!lunaScaleRequestPattern.test(message) || leadingScaleValuePattern.test(response)) return response;
-  return `70. ${firstSentence(response) || "I’m still learning what that means for me."}`;
+  if (!lunaScaleRequestPattern.test(message) || leadingPercentagePattern.test(response)) return response;
+  const numberedSentence = response.match(leadingNumberedSentencePattern);
+  if (numberedSentence) return `${numberedSentence[1]}% — ${firstSentence(numberedSentence[2]) || "I’m still learning what that means for me."}`;
+  return `70% — ${firstSentence(response) || "I’m still learning what that means for me."}`;
 }
 
 export function getLunaPreviewPlayerId(storage: Pick<Storage, "getItem" | "setItem"> = localStorage) {
