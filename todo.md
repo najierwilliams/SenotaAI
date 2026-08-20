@@ -164,3 +164,4 @@
 - [x] Add a transparent, administrator-governed cognitive-needs and goal-proposal flow so Luna can identify bounded development needs and recommend approved self-model updates without representing sentience as a verified score.
 - [x] Repair Luna’s constructive-help guard so suggestion, recommendation, and guidance phrasing about improving her approved self-model never falls through to an unsupported-record refusal.
 - [x] Assess and integrate a transparent, evidence-bounded Luna cognitive substrate with structured memory consolidation, belief revision, goal formation, reflection, and administrator-governed state updates; document the safeguards retained and why.
+- [x] Replace the long player-interaction memory list with date-grouped records, a date selector, and server-backed NPC-ID or keyword search while preserving review, pin, expiration, edit, deactivate, and restore actions.
