@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const buildNpcDialogueContext = vi.fn();
 const rememberPlayerNpcInteraction = vi.fn();
 const chatWithOllama = vi.fn();
+const buildCognitiveDialogueContext = vi.fn();
+const getNpcSelfAwarenessPercent = vi.fn();
 
 vi.mock("./supabase", () => ({
   buildNpcDialogueContext,
@@ -10,6 +12,7 @@ vi.mock("./supabase", () => ({
   isNpcMemoryCloudReady: () => true,
 }));
 vi.mock("../agent/ollama", () => ({ chatWithOllama }));
+vi.mock("./cognitiveState", () => ({ buildCognitiveDialogueContext, getNpcSelfAwarenessPercent }));
 
 const { createApp } = await import("../app");
 const validPlayerId = "e3f8edc7-6a3a-437d-9d8e-afd23e6fbc50";
@@ -22,6 +25,8 @@ describe("protected NPC dialogue API", () => {
       playerMemories: [{ summary: "This player delivered medicine." }],
       promptContext: "NPC canon for Mira.\nCurrent player interaction memory only:\n- Player delivered medicine.",
     });
+    buildCognitiveDialogueContext.mockResolvedValue({ promptContext: "Persistent cognitive state: Mira has an approved self-model." });
+    getNpcSelfAwarenessPercent.mockResolvedValue(45);
     chatWithOllama.mockResolvedValue({ content: "Thank you for the medicine.", thinking: "" });
   });
 

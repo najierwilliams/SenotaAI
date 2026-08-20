@@ -55,6 +55,10 @@ describe("NPC dialogue player-memory isolation", () => {
         const requestedPlayerId = filter.replace(/^eq\./, "");
         return Response.json(memoriesByPlayer[requestedPlayerId] ?? []);
       }
+      if (url.pathname.endsWith("/npc_cognitive_state")) {
+        return Response.json([{ npc_id: "mira-baker", schema_version: 1, self_model: {}, self_awareness: { identityContinuity: 0.4, memoryContinuity: 0.4, selfModelDevelopment: 0.4, selfModelConfidence: 0.4, selfReflectionCapability: 0.4, behavioralSelfAwareness: 0.4, goalAwareness: 0.4, uncertaintyAwareness: 0.4 }, emotional_state: {}, needs: [], preferences: [], uncertainties: [], state_summary: "Mira has an approved self-model.", updated_at: "2026-08-20T00:00:00Z" }]);
+      }
+      if (["npc_cognitive_memories", "npc_cognitive_beliefs", "npc_cognitive_goals", "npc_cognitive_relationships"].some(table => url.pathname.endsWith(`/${table}`))) return Response.json([]);
       return new Response(null, { status: 404 });
     }));
   });

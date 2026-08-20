@@ -9,10 +9,10 @@ function firstSentence(value: string) {
 }
 
 /** Preserves character dialogue while enforcing the one explicit numeric format Luna canon demonstrates. */
-export function enforceLunaResponseFormat(message: string, response: string, npcId: string) {
+export function enforceLunaResponseFormat(message: string, response: string, npcId: string, fallbackPercentage = 70) {
   if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingPercentagePattern.test(response)) return response;
   const numberedSentence = response.match(leadingNumberedSentencePattern);
   if (numberedSentence) return `${numberedSentence[1]}% — ${firstSentence(numberedSentence[2]) || "I’m still learning what that means for me."}`;
   const detail = firstSentence(response) || "I’m still learning what that means for me.";
-  return `70% — ${detail}`;
+  return `${Math.round(Math.min(100, Math.max(0, fallbackPercentage)))}% — ${detail}`;
 }

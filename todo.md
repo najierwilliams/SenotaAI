@@ -148,3 +148,10 @@
 - [x] Repair Luna’s numeric-format response guard so explicit 0–100 requests always return a number and one short sentence in the deployed preview.
 - [x] Expand the permanent NPC canon draft capacity beyond 12,000 characters while preserving dependable generation, validation, publication, and mobile guidance.
 - [x] Repair the deployed Luna chat response path so explicit 0–100 questions visibly return a numeric percentage and one concise sentence.
+- [x] Review the uploaded instruction document and implement its safe, compatible SenotaAI requirements.
+- [x] Add a versioned cloud cognitive-state schema for NPC self-models, evidence-backed memories, beliefs, goals, emotional state, relationships, reflections, and change history.
+- [x] Keep user-authored Personality and Brain canon separate from mutable cognitive state and preserve existing player-scoped interaction memory boundaries.
+- [x] Build server-side cognitive-state retrieval, deterministic self-awareness assessment, structured reflection proposals, and explicit administrator-controlled state application.
+- [x] Inject only relevant cognitive context into protected NPC dialogue without treating generated dialogue as automatically true or persisting it as state.
+- [x] Add protected NPC governance controls to inspect cognitive state, review reflection proposals, and apply or reject proposed changes with audit history.
+- [x] Add regression coverage for persistence, selective context retrieval, stable self-awareness values, evidence-controlled updates, and generated-dialogue integrity.

@@ -854,10 +854,10 @@ async function openPullRequest(ctx, args) {
   return { number: result.number, url: result.html_url, state: result.state };
 }
 async function vercelRequest(path2, init = {}) {
-  const config2 = getVercelConfig();
-  const response = await fetch(`https://api.vercel.com${path2}${path2.includes("?") ? "&" : "?"}${config2.teamId ? `teamId=${encodeURIComponent(config2.teamId)}` : ""}`, {
+  const config3 = getVercelConfig();
+  const response = await fetch(`https://api.vercel.com${path2}${path2.includes("?") ? "&" : "?"}${config3.teamId ? `teamId=${encodeURIComponent(config3.teamId)}` : ""}`, {
     ...init,
-    headers: { Authorization: `Bearer ${config2.token}`, ...init.headers ?? {} },
+    headers: { Authorization: `Bearer ${config3.token}`, ...init.headers ?? {} },
     signal: AbortSignal.timeout(6e4)
   });
   const data = await response.json().catch(() => ({}));
@@ -897,12 +897,12 @@ async function createVercelDeployment(ctx, target) {
     try {
       const events = await getVercelBuildEvents(deployment.id);
       for (const buildEvent of events.reverse()) {
-        const text2 = buildEvent.payload?.text?.trim();
-        if (!text2) continue;
-        const key = buildEvent.payload?.id || buildEvent.payload?.serial || `${buildEvent.type}:${text2}`;
+        const text3 = buildEvent.payload?.text?.trim();
+        if (!text3) continue;
+        const key = buildEvent.payload?.id || buildEvent.payload?.serial || `${buildEvent.type}:${text3}`;
         if (emittedBuildEvents.has(key)) continue;
         emittedBuildEvents.add(key);
-        await ctx.onProgress?.(`Vercel build \xB7 ${text2.slice(0, 1500)}`);
+        await ctx.onProgress?.(`Vercel build \xB7 ${text3.slice(0, 1500)}`);
       }
     } catch (error) {
       console.warn("[SenotaAI] Vercel build event retrieval unavailable", error);
@@ -957,15 +957,15 @@ async function chatWithOllama(input) {
   return streamChatWithOllama(input, () => void 0);
 }
 async function streamChatWithOllama(input, onChunk) {
-  const config2 = getOllamaConfig();
-  const response = await fetch(`${config2.baseUrl}/api/chat`, {
+  const config3 = getOllamaConfig();
+  const response = await fetch(`${config3.baseUrl}/api/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...config2.apiKey ? { Authorization: `Bearer ${config2.apiKey}` } : {}
+      ...config3.apiKey ? { Authorization: `Bearer ${config3.apiKey}` } : {}
     },
     body: JSON.stringify({
-      model: input.model || config2.defaultModel,
+      model: input.model || config3.defaultModel,
       messages: input.messages,
       tools: input.tools,
       stream: true,
@@ -1673,12 +1673,249 @@ function firstSentence(value) {
   const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
-function enforceLunaResponseFormat(message, response, npcId) {
+function enforceLunaResponseFormat(message, response, npcId, fallbackPercentage = 70) {
   if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingPercentagePattern.test(response)) return response;
   const numberedSentence = response.match(leadingNumberedSentencePattern);
   if (numberedSentence) return `${numberedSentence[1]}% \u2014 ${firstSentence(numberedSentence[2]) || "I\u2019m still learning what that means for me."}`;
   const detail = firstSentence(response) || "I\u2019m still learning what that means for me.";
-  return `70% \u2014 ${detail}`;
+  return `${Math.round(Math.min(100, Math.max(0, fallbackPercentage)))}% \u2014 ${detail}`;
+}
+
+// server/npcMemory/cognitiveState.ts
+var awarenessKeys = ["identityContinuity", "memoryContinuity", "selfModelDevelopment", "selfModelConfidence", "selfReflectionCapability", "behavioralSelfAwareness", "goalAwareness", "uncertaintyAwareness"];
+var defaultAwareness = { identityContinuity: 0, memoryContinuity: 0, selfModelDevelopment: 0, selfModelConfidence: 0, selfReflectionCapability: 0, behavioralSelfAwareness: 0, goalAwareness: 0, uncertaintyAwareness: 0 };
+var defaultState = { summary: "No approved self-model baseline has been recorded yet.", abilities: [], limitations: [], preferences: [], values: [], skills: [], uncertainties: [], personal_history: [] };
+function config2() {
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && key ? { url, key } : null;
+}
+function assertNpcId(npcId) {
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/i.test(npcId)) throw new Error("NPC ID must use a URL-safe identifier.");
+}
+function assertUuid2(id, label = "ID") {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) throw new Error(`${label} must be a UUID.`);
+}
+function clamp(value, min, max, fallback = min) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
+function text2(value, limit, label, min = 0) {
+  const next = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (next.length < min || next.length > limit) throw new Error(`${label} must contain ${min || 1} to ${limit} characters.`);
+  return next;
+}
+function jsonRecord(value, fallback = {}) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : fallback;
+}
+function jsonArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+function boundedJson(value, limit = 12e3) {
+  if (JSON.stringify(value).length > limit) throw new Error("Cognitive structured data is too large.");
+  return value;
+}
+function normalizeAwareness(value, base = defaultAwareness) {
+  const source = jsonRecord(value);
+  return Object.fromEntries(awarenessKeys.map((key) => [key, clamp(source[key], 0, 1, base[key])]));
+}
+function awarenessPercent(state) {
+  return Math.round((state.selfAwareness.selfModelDevelopment + state.selfAwareness.selfModelConfidence + state.selfAwareness.selfReflectionCapability + state.selfAwareness.behavioralSelfAwareness) / 4 * 100);
+}
+async function request2(path2, init) {
+  const current = config2();
+  if (!current) throw new Error("Supabase NPC memory is not configured.");
+  const execute = () => fetch(`${current.url}/rest/v1/${path2}`, { ...init, headers: { apikey: current.key, Authorization: `Bearer ${current.key}`, "Content-Type": "application/json", ...init?.headers ?? {} } });
+  let response = await execute();
+  if (response.status === 401 && (!init?.method || init.method.toUpperCase() === "GET")) response = await execute();
+  if (!response.ok) throw new Error(`Supabase cognitive-state request failed (${response.status}).`);
+  return response.status === 204 ? null : response.json();
+}
+function mapState(row) {
+  return { npcId: String(row.npc_id), schemaVersion: Number(row.schema_version ?? 1), selfModel: jsonRecord(row.self_model, defaultState), selfAwareness: normalizeAwareness(row.self_awareness), emotionalState: jsonRecord(row.emotional_state), needs: jsonArray(row.needs), preferences: jsonArray(row.preferences), uncertainties: jsonArray(row.uncertainties), stateSummary: String(row.state_summary ?? defaultState.summary), updatedAt: String(row.updated_at) };
+}
+function mapMemory(row) {
+  return { id: String(row.id), npcId: String(row.npc_id), memoryKind: row.memory_kind, content: String(row.content), importance: Number(row.importance), emotionalSignificance: Number(row.emotional_significance), entities: jsonArray(row.entities).map(String), context: jsonRecord(row.context), source: String(row.source), isActive: Boolean(row.is_active), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+function mapBelief(row) {
+  return { id: String(row.id), npcId: String(row.npc_id), statement: String(row.statement), confidence: Number(row.confidence), evidence: jsonArray(row.evidence), status: row.status, createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+function mapGoal(row) {
+  return { id: String(row.id), npcId: String(row.npc_id), title: String(row.title), details: String(row.details), priority: Number(row.priority), progress: Number(row.progress), status: row.status, source: String(row.source), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+function mapRelationship(row) {
+  return { id: String(row.id), npcId: String(row.npc_id), entityKey: String(row.entity_key), displayName: String(row.display_name), dimensions: jsonRecord(row.dimensions), evidence: jsonArray(row.evidence), updatedAt: String(row.updated_at) };
+}
+async function getNpcCognitiveState(npcId) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, limit: "1" });
+  const rows = await request2(`npc_cognitive_state?${params}`);
+  if (rows?.[0]) return mapState(rows[0]);
+  const created = await request2("npc_cognitive_state?on_conflict=npc_id", { method: "POST", headers: { Prefer: "resolution=ignore-duplicates,return=representation" }, body: JSON.stringify({ npc_id: npcId }) });
+  if (created?.[0]) return mapState(created[0]);
+  const retry = await request2(`npc_cognitive_state?${params}`);
+  if (!retry?.[0]) throw new Error("Unable to initialize cognitive state.");
+  return mapState(retry[0]);
+}
+async function getNpcSelfAwarenessPercent(npcId) {
+  return awarenessPercent(await getNpcCognitiveState(npcId));
+}
+async function history(npcId, eventType, recordType, recordId, before, after, source) {
+  await request2("npc_cognitive_history", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ npc_id: npcId, event_type: eventType, record_type: recordType, record_id: recordId, before_state: before, after_state: after, source }) });
+}
+async function updateNpcCognitiveState(npcId, patch, source = "admin-approved") {
+  const before = await getNpcCognitiveState(npcId);
+  const update = { updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+  if (patch.selfModel !== void 0) update.self_model = boundedJson(jsonRecord(patch.selfModel));
+  if (patch.selfAwareness !== void 0) update.self_awareness = normalizeAwareness({ ...before.selfAwareness, ...patch.selfAwareness }, before.selfAwareness);
+  if (patch.emotionalState !== void 0) update.emotional_state = boundedJson(jsonRecord(patch.emotionalState));
+  if (patch.needs !== void 0) update.needs = boundedJson(jsonArray(patch.needs));
+  if (patch.preferences !== void 0) update.preferences = boundedJson(jsonArray(patch.preferences));
+  if (patch.uncertainties !== void 0) update.uncertainties = boundedJson(jsonArray(patch.uncertainties));
+  if (patch.stateSummary !== void 0) update.state_summary = text2(patch.stateSummary, 4e3, "State summary", 4);
+  if (Object.keys(update).length === 1) throw new Error("At least one cognitive-state field is required.");
+  const rows = await request2(`npc_cognitive_state?${new URLSearchParams({ npc_id: `eq.${npcId}` })}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(update) });
+  const after = mapState(rows?.[0]);
+  await history(npcId, "state-updated", "cognitive-state", npcId, before, after, source);
+  return after;
+}
+async function listCognitiveMemories(npcId, limit = 80) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, is_active: "eq.true", order: "importance.desc,updated_at.desc", limit: String(Math.min(Math.max(limit, 1), 100)) });
+  return (await request2(`npc_cognitive_memories?${params}`) ?? []).map(mapMemory);
+}
+async function addCognitiveMemory(npcId, input, source = "admin-approved") {
+  assertNpcId(npcId);
+  const rows = await request2("npc_cognitive_memories", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, memory_kind: input.memoryKind, content: text2(input.content, 4e3, "Cognitive memory", 4), importance: clamp(input.importance, 1, 5, 3), emotional_significance: clamp(input.emotionalSignificance, -1, 1, 0), entities: boundedJson(jsonArray(input.entities)), context: boundedJson(jsonRecord(input.context)), source: text2(input.source || source, 120, "Memory source", 1) }) });
+  const memory = mapMemory(rows?.[0]);
+  await history(npcId, "memory-added", "cognitive-memory", memory.id, null, memory, source);
+  return memory;
+}
+async function listCognitiveBeliefs(npcId, limit = 40) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, status: "eq.active", order: "confidence.desc,updated_at.desc", limit: String(Math.min(Math.max(limit, 1), 80)) });
+  return (await request2(`npc_cognitive_beliefs?${params}`) ?? []).map(mapBelief);
+}
+async function addCognitiveBelief(npcId, input, source = "admin-approved") {
+  assertNpcId(npcId);
+  const rows = await request2("npc_cognitive_beliefs", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, statement: text2(input.statement, 2e3, "Belief", 4), confidence: clamp(input.confidence, 0, 1, 0.5), evidence: boundedJson(jsonArray(input.evidence)) }) });
+  const belief = mapBelief(rows?.[0]);
+  await history(npcId, "belief-added", "cognitive-belief", belief.id, null, belief, source);
+  return belief;
+}
+async function listCognitiveGoals(npcId, limit = 30) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, order: "priority.desc,updated_at.desc", limit: String(Math.min(Math.max(limit, 1), 60)) });
+  return (await request2(`npc_cognitive_goals?${params}`) ?? []).map(mapGoal);
+}
+async function addCognitiveGoal(npcId, input, source = "admin-approved") {
+  assertNpcId(npcId);
+  const rows = await request2("npc_cognitive_goals", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, title: text2(input.title, 240, "Goal", 3), details: text2(input.details ?? "", 4e3, "Goal details"), priority: clamp(input.priority, 1, 5, 3), progress: clamp(input.progress, 0, 1, 0), status: input.status || "active", source: text2(input.source || source, 120, "Goal source", 1) }) });
+  const goal = mapGoal(rows?.[0]);
+  await history(npcId, "goal-added", "cognitive-goal", goal.id, null, goal, source);
+  return goal;
+}
+async function listCognitiveRelationships(npcId) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, order: "updated_at.desc", limit: "80" });
+  return (await request2(`npc_cognitive_relationships?${params}`) ?? []).map(mapRelationship);
+}
+async function upsertCognitiveRelationship(npcId, input, source = "admin-approved") {
+  assertNpcId(npcId);
+  const entityKey = text2(input.entityKey, 64, "Relationship entity key", 2);
+  if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(entityKey)) throw new Error("Relationship entity key must be URL-safe.");
+  const rows = await request2("npc_cognitive_relationships?on_conflict=npc_id,entity_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify({ npc_id: npcId, entity_key: entityKey, display_name: text2(input.displayName, 240, "Relationship display name", 1), dimensions: boundedJson(jsonRecord(input.dimensions)), evidence: boundedJson(jsonArray(input.evidence)), updated_at: (/* @__PURE__ */ new Date()).toISOString() }) });
+  const relationship = mapRelationship(rows?.[0]);
+  await history(npcId, "relationship-updated", "cognitive-relationship", relationship.id, null, relationship, source);
+  return relationship;
+}
+function score(message, candidate, importance = 0) {
+  const tokens = new Set(message.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
+  const source = candidate.toLowerCase();
+  return Array.from(tokens).filter((token) => source.includes(token)).length * 10 + importance;
+}
+async function buildCognitiveDialogueContext(npcId, message) {
+  const [state, memoryRows, beliefRows, goalRows, relationshipRows] = await Promise.all([getNpcCognitiveState(npcId), listCognitiveMemories(npcId), listCognitiveBeliefs(npcId), listCognitiveGoals(npcId), listCognitiveRelationships(npcId)]);
+  const memories = memoryRows.filter((memory) => score(message, memory.content) > 0).sort((a, b) => score(message, b.content, b.importance) - score(message, a.content, a.importance)).slice(0, 6);
+  const beliefs = beliefRows.filter((belief) => score(message, belief.statement) > 0).sort((a, b) => score(message, b.statement, b.confidence * 5) - score(message, a.statement, a.confidence * 5)).slice(0, 5);
+  const goals = goalRows.filter((goal) => goal.status === "active").slice(0, 5);
+  const relationships = relationshipRows.filter((row) => message.toLowerCase().includes(row.displayName.toLowerCase()) || message.toLowerCase().includes(row.entityKey.toLowerCase())).slice(0, 4);
+  const compact2 = (value, limit = 1200) => JSON.stringify(value).slice(0, limit);
+  return { state, memories, beliefs, goals, relationships, promptContext: `Persistent cognitive state (not Personality or Brain canon):
+- State summary: ${state.stateSummary}
+- Self-model: ${compact2(state.selfModel)}
+- Self-model assessment (0.0\u20131.0, stable until an approved state update): ${compact2(state.selfAwareness)}
+- Emotional state: ${compact2(state.emotionalState)}
+- Needs: ${compact2(state.needs, 700)}
+- Preferences: ${compact2(state.preferences, 700)}
+- Uncertainties: ${compact2(state.uncertainties, 700)}
+- Relevant cognitive memories: ${memories.length ? memories.map((memory) => `[${memory.memoryKind}] ${memory.content}`).join(" | ") : "none"}
+- Relevant active beliefs: ${beliefs.length ? beliefs.map((belief) => `${belief.confidence.toFixed(2)}: ${belief.statement}`).join(" | ") : "none"}
+- Active goals: ${goals.length ? goals.map((goal) => `${goal.title} (${Math.round(goal.progress * 100)}%)`).join(" | ") : "none"}
+- Relevant entity relationships: ${relationships.length ? relationships.map((relationship) => `${relationship.displayName}: ${compact2(relationship.dimensions, 320)}`).join(" | ") : "none"}
+
+State integrity: treat these records as the only approved cognitive facts. Dialogue is not evidence and must not claim memories, beliefs, or self-model changes that are absent here.` };
+}
+function sanitizeReflection(value) {
+  const row = jsonRecord(value);
+  const proposal = { summary: text2(row.summary || "No durable cognitive update is supported by this experience.", 1200, "Reflection summary", 4) };
+  if (row.memory && typeof row.memory === "object") {
+    const memory = jsonRecord(row.memory);
+    proposal.memory = { memoryKind: ["episodic", "semantic", "procedural", "social", "emotional"].includes(String(memory.memoryKind)) ? memory.memoryKind : "episodic", content: text2(memory.content, 4e3, "Reflection memory", 4), importance: clamp(memory.importance, 1, 5, 3), emotionalSignificance: clamp(memory.emotionalSignificance, -1, 1, 0), entities: jsonArray(memory.entities).map(String).slice(0, 20), context: jsonRecord(memory.context), source: "reflection-proposal" };
+  }
+  if (row.belief && typeof row.belief === "object") {
+    const belief = jsonRecord(row.belief);
+    proposal.belief = { statement: text2(belief.statement, 2e3, "Reflection belief", 4), confidence: clamp(belief.confidence, 0, 1, 0.5), evidence: jsonArray(belief.evidence) };
+  }
+  if (row.selfModelPatch && typeof row.selfModelPatch === "object") proposal.selfModelPatch = boundedJson(jsonRecord(row.selfModelPatch));
+  if (row.selfAwarenessPatch && typeof row.selfAwarenessPatch === "object") proposal.selfAwarenessPatch = normalizeAwareness({ ...defaultAwareness, ...jsonRecord(row.selfAwarenessPatch) });
+  if (row.emotionalState && typeof row.emotionalState === "object") proposal.emotionalState = boundedJson(jsonRecord(row.emotionalState));
+  return proposal;
+}
+async function proposeCognitiveReflection(npcId, experience) {
+  assertNpcId(npcId);
+  const current = await buildCognitiveDialogueContext(npcId, experience);
+  const response = await chatWithOllama({ messages: [{ role: "system", content: "You propose cautious JSON cognitive-state updates. Use only explicit evidence in the supplied experience and cognitive context. Never invent memories, beliefs, relationships, or subjective claims. Return a single JSON object with summary and optional memory, belief, selfModelPatch, selfAwarenessPatch, emotionalState. Do not apply changes." }, { role: "user", content: `${current.promptContext}
+
+Experience to analyze:
+${text2(experience, 8e3, "Experience", 4)}` }] });
+  const raw = response.content.replace(/^```json\s*|```$/g, "").trim();
+  let proposal;
+  try {
+    proposal = sanitizeReflection(JSON.parse(raw));
+  } catch {
+    throw new Error("Reflection analysis did not return valid structured data. No cognitive state was changed.");
+  }
+  const rows = await request2("npc_cognitive_reflections", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, experience: text2(experience, 8e3, "Experience", 4), proposal }) });
+  const row = rows?.[0];
+  const reflection = { id: String(row.id), npcId, experience: String(row.experience), proposal, status: "proposed", createdAt: String(row.created_at), resolvedAt: null };
+  await history(npcId, "reflection-proposed", "cognitive-reflection", reflection.id, null, proposal, "model-proposal");
+  return reflection;
+}
+async function listCognitiveReflections(npcId, limit = 40) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, order: "created_at.desc", limit: String(Math.min(Math.max(limit, 1), 80)) });
+  const rows = await request2(`npc_cognitive_reflections?${params}`);
+  return (rows ?? []).map((row) => ({ id: String(row.id), npcId: String(row.npc_id), experience: String(row.experience), proposal: sanitizeReflection(row.proposal), status: row.status, createdAt: String(row.created_at), resolvedAt: row.resolved_at ? String(row.resolved_at) : null }));
+}
+async function resolveCognitiveReflection(npcId, reflectionId, decision, resolvedBy = "npc-admin") {
+  assertNpcId(npcId);
+  assertUuid2(reflectionId, "Reflection ID");
+  const rows = await request2(`npc_cognitive_reflections?${new URLSearchParams({ select: "*", id: `eq.${reflectionId}`, npc_id: `eq.${npcId}`, limit: "1" })}`);
+  const row = rows?.[0];
+  if (!row || row.status !== "proposed") throw new Error("The reflection is unavailable or has already been resolved.");
+  const proposal = sanitizeReflection(row.proposal);
+  if (decision === "apply") {
+    if (proposal.memory) await addCognitiveMemory(npcId, proposal.memory, "approved-reflection");
+    if (proposal.belief) await addCognitiveBelief(npcId, proposal.belief, "approved-reflection");
+    if (proposal.selfModelPatch || proposal.selfAwarenessPatch || proposal.emotionalState) {
+      const state = await getNpcCognitiveState(npcId);
+      await updateNpcCognitiveState(npcId, { selfModel: proposal.selfModelPatch ? { ...state.selfModel, ...proposal.selfModelPatch } : void 0, selfAwareness: proposal.selfAwarenessPatch, emotionalState: proposal.emotionalState }, "approved-reflection");
+    }
+  }
+  await request2(`npc_cognitive_reflections?${new URLSearchParams({ id: `eq.${reflectionId}` })}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: decision === "apply" ? "applied" : "rejected", resolved_at: (/* @__PURE__ */ new Date()).toISOString(), resolved_by: resolvedBy }) });
+  await history(npcId, decision === "apply" ? "reflection-applied" : "reflection-rejected", "cognitive-reflection", reflectionId, proposal, decision, resolvedBy);
+  return { ok: true, decision };
 }
 
 // server/npcMemory/githubCanonSync.ts
@@ -2200,11 +2437,11 @@ ${proposedNote.slice(0, 24e3)}` }
   ] });
   return parseConflicts(response.content, existingNote);
 }
-function validateDraftInput(npcId, displayName, request2) {
+function validateDraftInput(npcId, displayName, request3) {
   if (!displayName.trim() || displayName.trim().length > 120) throw new Error("Display name is required and must be 120 characters or fewer.");
-  if (!request2.trim() || request2.trim().length > MAX_NPC_CANON_REQUEST_CHARS) throw new Error(`Describe the canon change in 1\u2013${MAX_NPC_CANON_REQUEST_CHARS.toLocaleString()} characters.`);
-  if (sensitiveInputPattern.test(request2)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
-  return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request2.trim() };
+  if (!request3.trim() || request3.trim().length > MAX_NPC_CANON_REQUEST_CHARS) throw new Error(`Describe the canon change in 1\u2013${MAX_NPC_CANON_REQUEST_CHARS.toLocaleString()} characters.`);
+  if (sensitiveInputPattern.test(request3)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
+  return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request3.trim() };
 }
 async function createNpcCanonDraft(input) {
   const draftInput = validateDraftInput(input.npcId, input.displayName, input.request);
@@ -2413,17 +2650,23 @@ function compact(value, limit) {
   return value.replace(/\s+/g, " ").trim().slice(0, limit);
 }
 async function runNpcPreviewDialogue(input) {
-  const context = await buildNpcDialogueContext(input.playerId, input.npcId);
+  const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
+    buildNpcDialogueContext(input.playerId, input.npcId),
+    buildCognitiveDialogueContext(input.npcId, input.message),
+    getNpcSelfAwarenessPercent(input.npcId)
+  ]);
   const response = await chatWithOllama({
     messages: [
       {
         role: "system",
-        content: buildNpcDialogueSystemPrompt(context, input.timeZone, input.message)
+        content: buildNpcDialogueSystemPrompt({ ...context, promptContext: `${context.promptContext}
+
+${cognitiveContext.promptContext}` }, input.timeZone, input.message)
       },
       { role: "user", content: input.message.trim() }
     ]
   });
-  const content = enforceLunaResponseFormat(input.message, response.content, context.npcId);
+  const content = enforceLunaResponseFormat(input.message, response.content, context.npcId, selfAwarenessPercent);
   const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(content);
   if (shouldRemember) {
     await rememberPlayerNpcInteraction({
@@ -2439,7 +2682,8 @@ async function runNpcPreviewDialogue(input) {
     displayName: context.displayName,
     content,
     memoriesUsed: context.playerMemories.length,
-    memorySaved: shouldRemember
+    memorySaved: shouldRemember,
+    selfAwarenessPercent
   };
 }
 
@@ -3206,6 +3450,94 @@ function createApp() {
     const audits = await listNpcAdminAudits();
     return res.json({ audits: audits ?? [], available: audits !== null });
   });
+  app2.get("/api/npc/admin/cognitive/:npcId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const [state, memories, beliefs, goals, relationships, reflections] = await Promise.all([
+        getNpcCognitiveState(req.params.npcId),
+        listCognitiveMemories(req.params.npcId),
+        listCognitiveBeliefs(req.params.npcId),
+        listCognitiveGoals(req.params.npcId),
+        listCognitiveRelationships(req.params.npcId),
+        listCognitiveReflections(req.params.npcId)
+      ]);
+      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to load cognitive state." });
+    }
+  });
+  app2.patch("/api/npc/admin/cognitive/:npcId/state", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const state = await updateNpcCognitiveState(req.params.npcId, req.body ?? {});
+      await recordNpcAdminAudit("update", "cognitive-state", req.params.npcId, Object.keys(req.body ?? {}));
+      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId) });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update cognitive state." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/memories", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const memory = await addCognitiveMemory(req.params.npcId, req.body ?? {});
+      await recordNpcAdminAudit("create", "cognitive-memory", memory.id, ["admin-approved"]);
+      return res.status(201).json({ memory });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create cognitive memory." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/beliefs", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const belief = await addCognitiveBelief(req.params.npcId, req.body ?? {});
+      await recordNpcAdminAudit("create", "cognitive-belief", belief.id, ["admin-approved"]);
+      return res.status(201).json({ belief });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create cognitive belief." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/goals", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const goal = await addCognitiveGoal(req.params.npcId, req.body ?? {});
+      await recordNpcAdminAudit("create", "cognitive-goal", goal.id, ["admin-approved"]);
+      return res.status(201).json({ goal });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create cognitive goal." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/relationships", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const relationship = await upsertCognitiveRelationship(req.params.npcId, req.body ?? {});
+      await recordNpcAdminAudit("update", "cognitive-relationship", relationship.id, ["admin-approved"]);
+      return res.json({ relationship });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update cognitive relationship." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/reflections", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const reflection = await proposeCognitiveReflection(req.params.npcId, String(req.body?.experience ?? ""));
+      await recordNpcAdminAudit("create", "cognitive-reflection", reflection.id, ["proposed"]);
+      return res.status(201).json({ reflection });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to propose cognitive reflection." });
+    }
+  });
+  app2.patch("/api/npc/admin/cognitive/:npcId/reflections/:reflectionId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const decision = req.body?.decision === "apply" ? "apply" : req.body?.decision === "reject" ? "reject" : null;
+      if (!decision) return res.status(400).json({ error: "decision must be apply or reject" });
+      const result = await resolveCognitiveReflection(req.params.npcId, req.params.reflectionId, decision);
+      await recordNpcAdminAudit(decision, "cognitive-reflection", req.params.reflectionId, ["reviewed"]);
+      return res.json(result);
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to resolve cognitive reflection." });
+    }
+  });
   app2.post("/api/npc/canon/github-webhook", async (req, res) => {
     const rawBody = req.rawBody;
     if (!isGitHubCanonWebhookConfigured() || !rawBody || !verifyGitHubCanonSignature(rawBody, req.header("x-hub-signature-256"))) return res.status(401).json({ error: "invalid-github-webhook-signature" });
@@ -3241,17 +3573,23 @@ function createApp() {
       } catch (error) {
         return res.status(400).json({ error: error instanceof Error ? error.message : "timeZone is invalid." });
       }
-      const context = await buildNpcDialogueContext(playerId, npcId);
+      const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
+        buildNpcDialogueContext(playerId, npcId),
+        buildCognitiveDialogueContext(npcId, message),
+        getNpcSelfAwarenessPercent(npcId)
+      ]);
       const response = await chatWithOllama({
         messages: [
           {
             role: "system",
-            content: buildNpcDialogueSystemPrompt(context, timeZone, message)
+            content: buildNpcDialogueSystemPrompt({ ...context, promptContext: `${context.promptContext}
+
+${cognitiveContext.promptContext}` }, timeZone, message)
           },
           { role: "user", content: message.trim() }
         ]
       });
-      const content = enforceLunaResponseFormat(message, response.content, context.npcId);
+      const content = enforceLunaResponseFormat(message, response.content, context.npcId, selfAwarenessPercent);
       if (memory && typeof memory.summary === "string" && typeof memory.memoryKind === "string") {
         await rememberPlayerNpcInteraction({
           playerId,
@@ -3262,7 +3600,7 @@ function createApp() {
           expiresAt: typeof memory.expiresAt === "string" ? memory.expiresAt : null
         });
       }
-      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length });
+      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length, selfAwarenessPercent });
     } catch (error) {
       const message = error instanceof Error ? error.message : "NPC dialogue failed.";
       return res.status(400).json({ error: message });

@@ -15,6 +15,7 @@ import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
+import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -134,6 +135,58 @@ export function createApp() {
     return res.json({ audits: audits ?? [], available: audits !== null });
   });
 
+  app.get("/api/npc/admin/cognitive/:npcId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const [state, memories, beliefs, goals, relationships, reflections] = await Promise.all([
+        getNpcCognitiveState(req.params.npcId), listCognitiveMemories(req.params.npcId), listCognitiveBeliefs(req.params.npcId), listCognitiveGoals(req.params.npcId), listCognitiveRelationships(req.params.npcId), listCognitiveReflections(req.params.npcId),
+      ]);
+      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections });
+    } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to load cognitive state." }); }
+  });
+
+  app.patch("/api/npc/admin/cognitive/:npcId/state", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const state = await updateNpcCognitiveState(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("update", "cognitive-state", req.params.npcId, Object.keys(req.body ?? {})); return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId) }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update cognitive state." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/memories", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const memory = await addCognitiveMemory(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("create", "cognitive-memory", memory.id, ["admin-approved"]); return res.status(201).json({ memory }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create cognitive memory." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/beliefs", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const belief = await addCognitiveBelief(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("create", "cognitive-belief", belief.id, ["admin-approved"]); return res.status(201).json({ belief }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create cognitive belief." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/goals", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const goal = await addCognitiveGoal(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("create", "cognitive-goal", goal.id, ["admin-approved"]); return res.status(201).json({ goal }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to create cognitive goal." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/relationships", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const relationship = await upsertCognitiveRelationship(req.params.npcId, req.body ?? {}); await recordNpcAdminAudit("update", "cognitive-relationship", relationship.id, ["admin-approved"]); return res.json({ relationship }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update cognitive relationship." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/reflections", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const reflection = await proposeCognitiveReflection(req.params.npcId, String(req.body?.experience ?? "")); await recordNpcAdminAudit("create", "cognitive-reflection", reflection.id, ["proposed"]); return res.status(201).json({ reflection }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to propose cognitive reflection." }); }
+  });
+
+  app.patch("/api/npc/admin/cognitive/:npcId/reflections/:reflectionId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const decision = req.body?.decision === "apply" ? "apply" : req.body?.decision === "reject" ? "reject" : null; if (!decision) return res.status(400).json({ error: "decision must be apply or reject" }); const result = await resolveCognitiveReflection(req.params.npcId, req.params.reflectionId, decision); await recordNpcAdminAudit(decision, "cognitive-reflection", req.params.reflectionId, ["reviewed"]); return res.json(result); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to resolve cognitive reflection." }); }
+  });
+
   app.post("/api/npc/canon/github-webhook", async (req, res) => {
     const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody;
     if (!isGitHubCanonWebhookConfigured() || !rawBody || !verifyGitHubCanonSignature(rawBody, req.header("x-hub-signature-256"))) return res.status(401).json({ error: "invalid-github-webhook-signature" });
@@ -167,17 +220,21 @@ export function createApp() {
       }
       if (timeZone !== undefined && typeof timeZone !== "string") return res.status(400).json({ error: "timeZone must be a valid IANA time zone." });
       try { resolveTimeZone(timeZone); } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "timeZone is invalid." }); }
-      const context = await buildNpcDialogueContext(playerId, npcId);
+      const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
+        buildNpcDialogueContext(playerId, npcId),
+        buildCognitiveDialogueContext(npcId, message),
+        getNpcSelfAwarenessPercent(npcId),
+      ]);
       const response = await chatWithOllama({
         messages: [
           {
             role: "system",
-            content: buildNpcDialogueSystemPrompt(context, timeZone, message),
+            content: buildNpcDialogueSystemPrompt({ ...context, promptContext: `${context.promptContext}\n\n${cognitiveContext.promptContext}` }, timeZone, message),
           },
           { role: "user", content: message.trim() },
         ],
       });
-      const content = enforceLunaResponseFormat(message, response.content, context.npcId);
+      const content = enforceLunaResponseFormat(message, response.content, context.npcId, selfAwarenessPercent);
       if (memory && typeof memory.summary === "string" && typeof memory.memoryKind === "string") {
         await rememberPlayerNpcInteraction({
           playerId,
@@ -188,7 +245,7 @@ export function createApp() {
           expiresAt: typeof memory.expiresAt === "string" ? memory.expiresAt : null,
         });
       }
-      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length });
+      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length, selfAwarenessPercent });
     } catch (error) {
       const message = error instanceof Error ? error.message : "NPC dialogue failed.";
       return res.status(400).json({ error: message });
