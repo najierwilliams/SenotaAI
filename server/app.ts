@@ -1,5 +1,4 @@
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { timingSafeEqual } from "crypto";
 import express from "express";
 import { runAutonomousTask } from "./agent/engine";
 import {
@@ -18,6 +17,7 @@ import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
 import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, addCognitiveObservation, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveObservations, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveConsolidation, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
 import { getNpcReflectionSchedule, runNpcReflectionSchedule } from "./npcMemory/reflectionScheduler";
+import { verifyGitHubActionsReflectionToken } from "./npcMemory/reflectionSchedulerAuth";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -30,15 +30,6 @@ import { buildTemporalContext, resolveTimeZone } from "./temporalContext";
 
 function readCookie(header: string | undefined, name: string) {
   return header?.split(";").map(item => item.trim()).find(item => item.startsWith(`${name}=`))?.slice(name.length + 1);
-}
-
-function isTrustedReflectionSchedulerRequest(req: express.Request) {
-  const expected = process.env.GITHUB_WEBHOOK_SECRET;
-  const supplied = req.header("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!expected || !supplied) return false;
-  const expectedBytes = Buffer.from(expected);
-  const suppliedBytes = Buffer.from(supplied);
-  return expectedBytes.length === suppliedBytes.length && timingSafeEqual(expectedBytes, suppliedBytes);
 }
 
 /**
@@ -348,7 +339,7 @@ export function createApp() {
 
   app.post("/api/scheduled/npc-reflection", async (req, res) => {
     try {
-      const trustedScheduler = isTrustedReflectionSchedulerRequest(req);
+      const trustedScheduler = await verifyGitHubActionsReflectionToken(req.header("authorization"));
       const cronUser = trustedScheduler ? null : await sdk.authenticateRequest(req).catch(() => null);
       const taskUid = trustedScheduler
         ? "github-actions-luna001"

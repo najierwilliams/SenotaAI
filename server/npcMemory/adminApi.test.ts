@@ -20,6 +20,9 @@ const getNpcReflectionSchedule = vi.fn();
 const runNpcReflectionSchedule = vi.fn();
 vi.mock("./reflectionScheduler", () => ({ getNpcReflectionSchedule, runNpcReflectionSchedule }));
 
+const verifyGitHubActionsReflectionToken = vi.fn();
+vi.mock("./reflectionSchedulerAuth", () => ({ verifyGitHubActionsReflectionToken }));
+
 const { createApp } = await import("../app");
 
 describe("NPC administration API", () => {
@@ -54,15 +57,15 @@ describe("NPC administration API", () => {
   });
 
   it("accepts Luna’s automatic reflection callback only from the configured scheduler", async () => {
-    process.env.GITHUB_WEBHOOK_SECRET = "scheduler-secret";
     runNpcReflectionSchedule.mockResolvedValue({ ok: true, skipped: "waiting-for-varied-interval" });
     const app = createApp();
     const server = app.listen(0);
     const address = server.address();
     const baseUrl = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`;
     try {
+      verifyGitHubActionsReflectionToken.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
       expect((await fetch(`${baseUrl}/api/scheduled/npc-reflection`, { method: "POST" })).status).toBe(403);
-      const response = await fetch(`${baseUrl}/api/scheduled/npc-reflection`, { method: "POST", headers: { Authorization: "Bearer scheduler-secret" } });
+      const response = await fetch(`${baseUrl}/api/scheduled/npc-reflection`, { method: "POST", headers: { Authorization: "Bearer signed-github-identity" } });
       expect(response.status).toBe(200);
       expect(runNpcReflectionSchedule).toHaveBeenCalledWith("github-actions-luna001");
     } finally {
