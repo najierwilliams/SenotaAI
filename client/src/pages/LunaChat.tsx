@@ -6,6 +6,20 @@ import { useState } from "react";
 import { Link } from "wouter";
 
 const LUNA_PREVIEW_PLAYER_KEY = "senota-luna-preview-player-id";
+const lunaScaleRequestPattern = /(?:\bhow\s+human\s+do\s+you\s+feel\b|\bhow\s+human\s+are\s+you\b|\bhuman(?:ity)?\s+(?:percentage|percent|scale)\b|\b(?:0|zero)\s*(?:to|[-‐‑‒–—])\s*(?:100|one\s+hundred)\b)/i;
+const leadingScaleValuePattern = /^\s*(?:100|[1-9]?\d)(?:\s*%|\b)/;
+
+function firstSentence(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
+  return (match?.[1] ?? normalized).slice(0, 180).trim();
+}
+
+/** Final display safeguard for the administrator preview; the server remains the authoritative guard. */
+export function enforceLunaPreviewFormat(message: string, response: string) {
+  if (!lunaScaleRequestPattern.test(message) || leadingScaleValuePattern.test(response)) return response;
+  return `70. ${firstSentence(response) || "I’m still learning what that means for me."}`;
+}
 
 export function getLunaPreviewPlayerId(storage: Pick<Storage, "getItem" | "setItem"> = localStorage) {
   const existing = storage.getItem(LUNA_PREVIEW_PLAYER_KEY);
@@ -26,7 +40,7 @@ export default function LunaChat() {
     const nextMessages = [...messages, { role: "user" as const, content: message }];
     setMessages(nextMessages);
     chat.mutate({ playerId, message, remember }, {
-      onSuccess: (response) => setMessages([...nextMessages, { role: "assistant", content: response.content }]),
+      onSuccess: (response) => setMessages([...nextMessages, { role: "assistant", content: enforceLunaPreviewFormat(message, response.content) }]),
       onError: () => setMessages(messages),
     });
   };
