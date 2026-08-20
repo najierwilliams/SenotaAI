@@ -7,6 +7,7 @@ const unsupportedRecordRefusalPattern = /^\s*I don[’']t have an approved recor
 const selfModelDiscussionPattern = /\b(?:improv(?:e|ing|ement)|learned about (?:yourself|myself)|about yourself|self[-\s]?model|self[-\s]?aware(?:ness)?|\b40\s*%|confidence)\b/i;
 const baselineFollowUpPattern = /\bhow\s+(?:can|do)\s+(?:we|i)\s+(?:increase|improve|grow|raise|build|boost)\s+(?:that|it|this)\b/i;
 const percentageMentionPattern = /\b(100|[1-9]?\d)\s*%/g;
+const decimalSubscorePattern = /\b(?:0\.\d+|1\.0+)\b/;
 
 function firstSentence(value: string) {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -15,12 +16,15 @@ function firstSentence(value: string) {
 }
 
 function hasConflictingPercentage(value: string, approvedPercentage: number) {
-  return Array.from(value.matchAll(percentageMentionPattern)).some((match) => Number(match[1]) !== approvedPercentage);
+  return decimalSubscorePattern.test(value) || Array.from(value.matchAll(percentageMentionPattern)).some((match) => Number(match[1]) !== approvedPercentage);
 }
 
 /** Replaces fabricated evidence claims with the approved-state boundary. */
 export function enforceLunaEvidenceGrounding(message: string, response: string, npcId: string) {
   if (npcId.trim().toLowerCase() !== "luna001") return response;
+  if (baselineFollowUpPattern.test(message)) {
+    return "I can identify possible next steps, like clearer long-term goals, carefully reviewed continuity notes, and reflection proposals; those only become part of my state after administrator approval.";
+  }
   if ((selfModelDiscussionPattern.test(message) || baselineFollowUpPattern.test(message)) && unsupportedRecordRefusalPattern.test(response)) {
     if (/\bimprov(?:e|ing|ement)\b/i.test(message) || baselineFollowUpPattern.test(message)) {
       return "We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won’t treat a reply alone as proof.";
