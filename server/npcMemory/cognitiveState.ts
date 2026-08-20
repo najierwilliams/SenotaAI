@@ -137,7 +137,80 @@ function fallbackDevelopmentProposal(state: CognitiveState): CognitiveReflection
     goal: { title: "Maintain canon consistency", details: "Use approved canon and administrator-reviewed working records to keep Luna’s answers clear, grounded, and consistent over time.", priority: 4, progress: 0, status: "active", source: "development-proposal-fallback" },
   };
 }
-export async function proposeCognitiveReflection(npcId: string, experience: string, mode: "reflection" | "development" = "reflection") { assertNpcId(npcId); const current = await buildCognitiveDialogueContext(npcId, experience); const instructions = mode === "development" ? "Review the approved cognitive state for up to three bounded development needs and at most one concrete goal. A need must concern canon grounding, memory continuity, reflection, goal clarity, or evaluation, and cite only supplied state. Do not claim, infer, measure, or target sentience or consciousness. Return JSON with summary, optional needs, and optional goal. Do not apply changes." : "Use only explicit evidence in the supplied experience and cognitive context. Never invent memories, beliefs, relationships, or subjective claims. Return a single JSON object with summary and optional memory, belief, selfModelPatch, selfAwarenessPatch, emotionalState. Do not apply changes."; const response = await chatWithOllama({ messages: [{ role: "system", content: `You propose cautious JSON cognitive-state updates. ${instructions}` }, { role: "user", content: `${current.promptContext}\n\nExperience to analyze:\n${text(experience, 8000, "Experience", 4)}` }] }); const raw = response.content.replace(/^```json\s*|```$/g, "").trim(); let proposal: CognitiveReflectionProposal; try { proposal = sanitizeReflection(JSON.parse(raw)); } catch (proposalError) { if (proposalError instanceof Error && /unverified consciousness|cannot assert or target/i.test(proposalError.message)) throw new Error(`${proposalError.message} No cognitive state was changed.`); throw new Error("Reflection analysis did not return valid structured data. No cognitive state was changed."); } return persistReflection(npcId, experience, proposal, mode === "development" ? "development-proposal" : "model-proposal"); }
+function fallbackSavedNoteProposal(experience: string): CognitiveReflectionProposal {
+  const observation = text(experience, 8000, "Experience", 4);
+  if (unverifiedConsciousnessPattern.test(observation)) throw new Error("Cognitive reflections cannot assert or target unverified consciousness.");
+
+  const requestsAutonomy = /\b(?:act(?:ing)? on (?:her|its) own|act independently|think freely|free will|autonom\w*|independent\w*)\b/i.test(observation);
+  if (requestsAutonomy) {
+    return {
+      summary: "The automatic review response was unavailable. The administrator’s observation has been preserved as a review-only proposal for bounded autonomy; it does not treat unrestricted free will or subjective experience as an established fact.",
+      memory: {
+        memoryKind: "semantic",
+        content: `Administrator-provided working note for review: ${observation}`,
+        importance: 4,
+        emotionalSignificance: 0,
+        entities: ["administrator"],
+        context: { reviewStatus: "requires-approval", topic: "bounded-autonomy" },
+        source: "administrator-observation",
+      },
+      goal: {
+        title: "Develop bounded autonomous reasoning",
+        details: "Explore initiative, independent reasoning, and decision-making within approved canon, explicit permissions, safety limits, and administrator review. This is a proposed development direction, not a verified claim of unrestricted free will.",
+        priority: 4,
+        progress: 0,
+        status: "active",
+        source: "saved-note-proposal-fallback",
+      },
+    };
+  }
+
+  return {
+    summary: "The automatic review response was unavailable. This administrator observation has been preserved as a review-only working note and will not affect Luna unless it is explicitly approved.",
+    memory: {
+      memoryKind: "semantic",
+      content: `Administrator-provided working note for review: ${observation}`,
+      importance: 3,
+      emotionalSignificance: 0,
+      entities: ["administrator"],
+      context: { reviewStatus: "requires-approval" },
+      source: "administrator-observation",
+    },
+  };
+}
+
+export async function proposeCognitiveReflection(npcId: string, experience: string, mode: "reflection" | "development" = "reflection") {
+  assertNpcId(npcId);
+  const current = await buildCognitiveDialogueContext(npcId, experience);
+  const instructions = mode === "development"
+    ? "Review the approved cognitive state for up to three bounded development needs and at most one concrete goal. A need must concern canon grounding, memory continuity, reflection, goal clarity, or evaluation, and cite only supplied state. Do not claim, infer, measure, or target sentience or consciousness. Return JSON with summary, optional needs, and optional goal. Do not apply changes."
+    : "Use only explicit evidence in the supplied experience and cognitive context. Never invent memories, beliefs, relationships, or subjective claims. Return a single JSON object with summary and optional memory, belief, selfModelPatch, selfAwarenessPatch, emotionalState. Do not apply changes.";
+  const response = await chatWithOllama({
+    messages: [
+      { role: "system", content: `You propose cautious JSON cognitive-state updates. ${instructions}` },
+      { role: "user", content: `${current.promptContext}\n\nExperience to analyze:\n${text(experience, 8000, "Experience", 4)}` },
+    ],
+  });
+  const raw = response.content.replace(/^```json\s*|```$/g, "").trim();
+  let proposal: CognitiveReflectionProposal;
+  let source = mode === "development" ? "development-proposal" : "model-proposal";
+  try {
+    proposal = sanitizeReflection(JSON.parse(raw));
+  } catch (proposalError) {
+    const message = proposalError instanceof Error ? proposalError.message : "";
+    if (/unverified consciousness|cannot assert or target/i.test(message)) throw new Error(`${message} No cognitive state was changed.`);
+    if (mode === "development") throw new Error("Reflection analysis did not return valid structured data. No cognitive state was changed.");
+    try {
+      proposal = fallbackSavedNoteProposal(experience);
+      source = "saved-note-proposal-fallback";
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : "";
+      if (/unverified consciousness|cannot assert or target/i.test(fallbackMessage)) throw new Error(`${fallbackMessage} No cognitive state was changed.`);
+      throw fallbackError;
+    }
+  }
+  return persistReflection(npcId, experience, proposal, source);
+}
 export async function proposeCognitiveDevelopment(npcId: string) {
   const experience = "Administrator requested a cautious review of the current approved cognitive state to identify bounded development needs and a possible next goal.";
   try { return await proposeCognitiveReflection(npcId, experience, "development"); }

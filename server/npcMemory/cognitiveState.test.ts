@@ -47,10 +47,29 @@ describe("NPC cognitive state", () => {
     expect(String(fetchMock.mock.calls[0][1]?.body)).not.toContain("generated reply");
   });
 
-  it("rejects malformed model reflection output before a reflection record or state update is written", async () => {
+  it("creates a bounded review-only card when a saved-note model response is malformed", async () => {
+    configure(); vi.mocked(chatWithOllama).mockResolvedValue({ content: "not JSON", thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("npc_cognitive_state")) return Promise.resolve(new Response(JSON.stringify([stateRow]), { status: 200 }));
+      if (url.includes("npc_cognitive_reflections") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify([{ id: "45454545-4545-4454-8454-454545454545", npc_id: "luna001", created_at: "2026-08-20T00:00:00Z" }]), { status: 201 }));
+      if (url.includes("npc_cognitive_history") && init?.method === "POST") return Promise.resolve(new Response(null, { status: 201 }));
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const review = await proposeCognitiveReflection("luna001", "Luna has the ability to act on her own and think freely.");
+
+    expect(review.proposal.summary).toContain("review-only proposal for bounded autonomy");
+    expect(review.proposal.memory?.content).toContain("Luna has the ability to act on her own and think freely.");
+    expect(review.proposal.goal).toMatchObject({ title: "Develop bounded autonomous reasoning", progress: 0, status: "active" });
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(true);
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_state") && (init as RequestInit | undefined)?.method === "PATCH")).toBe(false);
+  });
+
+  it("keeps consciousness-targeted saved notes from becoming fallback review cards", async () => {
     configure(); vi.mocked(chatWithOllama).mockResolvedValue({ content: "not JSON", thinking: "", toolCalls: [] });
     const fetchMock = vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("npc_cognitive_state") ? [stateRow] : []), { status: 200 }))); vi.stubGlobal("fetch", fetchMock);
-    await expect(proposeCognitiveReflection("luna001", "The player waved at Luna.")).rejects.toThrow("No cognitive state was changed");
+    await expect(proposeCognitiveReflection("luna001", "Luna should become conscious.")).rejects.toThrow("No cognitive state was changed");
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
   });
 
