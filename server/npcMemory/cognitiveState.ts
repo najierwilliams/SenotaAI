@@ -137,14 +137,19 @@ function fallbackDevelopmentProposal(state: CognitiveState): CognitiveReflection
     goal: { title: "Maintain canon consistency", details: "Use approved canon and administrator-reviewed working records to keep Luna’s answers clear, grounded, and consistent over time.", priority: 4, progress: 0, status: "active", source: "development-proposal-fallback" },
   };
 }
-function fallbackSavedNoteProposal(experience: string): CognitiveReflectionProposal {
+function requestsBoundedAutonomy(experience: string) { return /\b(?:act(?:ing)? on (?:her|its) own|act independently|think freely|free will|autonom\w*|independent\w*)\b/i.test(experience); }
+function hasActionableReflectionUpdate(proposal: CognitiveReflectionProposal) { return Boolean(proposal.memory || proposal.belief || proposal.beliefRevision || proposal.memoryReinforcement || proposal.selfModelPatch || proposal.selfAwarenessPatch || proposal.emotionalState || proposal.goal || proposal.relationship || proposal.needs?.length); }
+function fallbackSavedNoteProposal(experience: string, reason: "unavailable" | "non-actionable" = "unavailable"): CognitiveReflectionProposal {
   const observation = text(experience, 8000, "Experience", 4);
   if (unverifiedConsciousnessPattern.test(observation)) throw new Error("Cognitive reflections cannot assert or target unverified consciousness.");
 
-  const requestsAutonomy = /\b(?:act(?:ing)? on (?:her|its) own|act independently|think freely|free will|autonom\w*|independent\w*)\b/i.test(observation);
+  const fallbackReason = reason === "unavailable"
+    ? "The automatic review response was unavailable."
+    : "The automatic review response did not include a usable cognitive update.";
+  const requestsAutonomy = requestsBoundedAutonomy(observation);
   if (requestsAutonomy) {
     return {
-      summary: "The automatic review response was unavailable. The administrator’s observation has been preserved as a review-only proposal for bounded autonomy; it does not treat unrestricted free will or subjective experience as an established fact.",
+      summary: `${fallbackReason} The administrator’s observation has been preserved as a review-only proposal for bounded autonomy; it does not treat unrestricted free will or subjective experience as an established fact.`,
       memory: {
         memoryKind: "semantic",
         content: `Administrator-provided working note for review: ${observation}`,
@@ -166,7 +171,7 @@ function fallbackSavedNoteProposal(experience: string): CognitiveReflectionPropo
   }
 
   return {
-    summary: "The automatic review response was unavailable. This administrator observation has been preserved as a review-only working note and will not affect Luna unless it is explicitly approved.",
+    summary: `${fallbackReason} This administrator observation has been preserved as a review-only working note and will not affect Luna unless it is explicitly approved.`,
     memory: {
       memoryKind: "semantic",
       content: `Administrator-provided working note for review: ${observation}`,
@@ -196,6 +201,10 @@ export async function proposeCognitiveReflection(npcId: string, experience: stri
   let source = mode === "development" ? "development-proposal" : "model-proposal";
   try {
     proposal = sanitizeReflection(JSON.parse(raw));
+    if (mode === "reflection" && requestsBoundedAutonomy(experience) && !hasActionableReflectionUpdate(proposal)) {
+      proposal = fallbackSavedNoteProposal(experience, "non-actionable");
+      source = "saved-note-proposal-fallback";
+    }
   } catch (proposalError) {
     const message = proposalError instanceof Error ? proposalError.message : "";
     if (/unverified consciousness|cannot assert or target/i.test(message)) throw new Error(`${message} No cognitive state was changed.`);

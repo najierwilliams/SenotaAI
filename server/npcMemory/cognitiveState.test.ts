@@ -66,6 +66,23 @@ describe("NPC cognitive state", () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_state") && (init as RequestInit | undefined)?.method === "PATCH")).toBe(false);
   });
 
+  it("creates the bounded-autonomy fallback when valid model JSON has no actionable update", async () => {
+    configure(); vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ summary: "The observation identifies a long-term development interest." }), thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("npc_cognitive_state")) return Promise.resolve(new Response(JSON.stringify([stateRow]), { status: 200 }));
+      if (url.includes("npc_cognitive_reflections") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify([{ id: "46464646-4646-4464-8464-464646464646", npc_id: "luna001", created_at: "2026-08-20T00:00:00Z" }]), { status: 201 }));
+      if (url.includes("npc_cognitive_history") && init?.method === "POST") return Promise.resolve(new Response(null, { status: 201 }));
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const review = await proposeCognitiveReflection("luna001", "Luna has the ability to act on her own and think freely as a long-term autonomy goal within approved safeguards.");
+
+    expect(review.proposal.summary).toContain("did not include a usable cognitive update");
+    expect(review.proposal.goal).toMatchObject({ title: "Develop bounded autonomous reasoning", progress: 0, status: "active" });
+    expect(review.proposal.memory?.context).toMatchObject({ topic: "bounded-autonomy", reviewStatus: "requires-approval" });
+  });
+
   it("keeps consciousness-targeted saved notes from becoming fallback review cards", async () => {
     configure(); vi.mocked(chatWithOllama).mockResolvedValue({ content: "not JSON", thinking: "", toolCalls: [] });
     const fetchMock = vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("npc_cognitive_state") ? [stateRow] : []), { status: 200 }))); vi.stubGlobal("fetch", fetchMock);

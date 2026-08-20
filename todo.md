@@ -167,3 +167,4 @@
 - [x] Replace the long player-interaction memory list with date-grouped records, a date selector, and server-backed NPC-ID or keyword search while preserving review, pin, expiration, edit, deactivate, and restore actions.
 - [x] Make the Persistent cognitive state workspace plain-language and self-guided with concise use instructions, accessible in-app dialogs instead of browser prompts, and reliable development-needs review behavior.
 - [x] Repair saved-note reflection analysis so malformed model output produces a bounded, review-only proposal for ordinary administrator observations instead of a failed structured-data message.
+- [x] Ensure saved-note autonomy observations receive the bounded-autonomy fallback when model output is valid JSON but contains no actionable cognitive update.
