@@ -236,6 +236,20 @@ function separateApprovedUpdateSections(noteContent: string) {
   return { retainedNote: retained.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd(), approvedStatements: uniqueCanonStatements(approved) };
 }
 
+function canonicalReplacementViolations(noteContent: string, conflicts: CanonConflict[]) {
+  const blocking = conflicts.filter(conflict => conflict.severity === "blocking");
+  const normalizedLines = new Set(noteContent.split("\n").map(normalizeCanonLine).filter(Boolean));
+  const violations: string[] = [];
+  for (const conflict of blocking) {
+    if (!normalizedLines.has(normalizeCanonLine(conflict.proposedClaim))) violations.push(`missing approved replacement “${conflict.proposedClaim}”`);
+    if (normalizedLines.has(normalizeCanonLine(conflict.existingClaim))) violations.push(`retained superseded claim “${conflict.existingClaim}”`);
+  }
+  const updateSections = (noteContent.match(/^##\s+SenotaAI approved updates\s*$/gim) ?? []).length;
+  if (updateSections !== 1) violations.push("expected exactly one SenotaAI approved updates section");
+  if (/^\s*[-*+]\s+[-*+]\s+/m.test(noteContent)) violations.push("found a nested Markdown bullet prefix");
+  return violations;
+}
+
 /** Removes only exact blocking claims and appends approved novel statements; no unrelated canon paragraph is replaced. */
 export function applyApprovedCanonConflictReplacement(existingNote: string, proposedNote: string, conflicts: CanonConflict[]) {
   let resolved = existingNote;
@@ -255,7 +269,10 @@ export function applyApprovedCanonConflictReplacement(existingNote: string, prop
     ...conflicts.filter(item => item.severity === "blocking").map(item => item.proposedClaim.trim()).filter(Boolean),
   ]);
   if (!additions.length) throw new Error("The approved revision did not contain a replacement statement to add.");
-  return { noteContent: `${separated.retainedNote}\n\n## SenotaAI approved updates\n${additions.map(addition => `- ${addition}`).join("\n")}\n`, removedClaims, additions };
+  const noteContent = `${separated.retainedNote}\n\n## SenotaAI approved updates\n${additions.map(addition => `- ${addition}`).join("\n")}\n`;
+  const violations = canonicalReplacementViolations(noteContent, conflicts);
+  if (violations.length) throw new Error(`SenotaAI could not safely canonicalize this approved conflict replacement: ${violations.join("; ")}. Review the note and generate a fresh draft.`);
+  return { noteContent, removedClaims, additions };
 }
 
 export async function publishNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string; sourceSha: string | null; conflictOverride?: boolean }) {

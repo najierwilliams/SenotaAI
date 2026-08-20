@@ -151,6 +151,12 @@ describe("reviewable NPC canon drafts", () => {
     expect(result.noteContent).not.toContain("- - ");
   });
 
+  it("fails safely rather than writing an incomplete replacement when the proposed claim cannot be retained", () => {
+    const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a blue lantern.";
+    const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\nLuna protects the archive.";
+    expect(() => applyApprovedCanonConflictReplacement(existing, proposed, [{ severity: "blocking", existingClaim: "Luna has a blue lantern.", replacementAnchor: "- Luna has a blue lantern.", proposedClaim: "", rationale: "Lantern color conflict." }])).toThrow("could not safely canonicalize");
+  });
+
   it("refuses a blocking conflict until the administrator explicitly overrides it", async () => {
     const existing = Buffer.from(draftNote.replace(/^<!--[\s\S]*?-->\n/, "")).toString("base64");
     const fetchMock = vi.mocked(fetch);
