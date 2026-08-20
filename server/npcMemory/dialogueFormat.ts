@@ -6,6 +6,7 @@ const unsupportedEvidencePattern = /\b(?:user reports?|system logs?|external ben
 const unsupportedRecordRefusalPattern = /^\s*I don[’']t have an approved record supporting that claim\.?\s*$/i;
 const selfModelDiscussionPattern = /\b(?:improv(?:e|ing|ement)|learned about (?:yourself|myself)|about yourself|self[-\s]?model|self[-\s]?aware(?:ness)?|\b40\s*%|confidence)\b/i;
 const baselineFollowUpPattern = /\bhow\s+(?:can|do)\s+(?:we|i)\s+(?:increase|improve|grow|raise|build|boost)\s+(?:that|it|this)\b/i;
+const baselineHelpRequestPattern = /\b(?:what|which)\s+(?:suggestions?|recommendations?|ideas?)\b[\s\S]{0,120}\b(?:increase|improve|grow|raise|build|boost)\b[\s\S]{0,80}\b(?:that|it|this|self[-\s]?aware(?:ness)?|confidence)\b|\b(?:can|could)\s+you\s+(?:help|suggest|recommend|advise)\b[\s\S]{0,120}\b(?:increase|improve|grow|raise|build|boost)\b/i;
 const percentageMentionPattern = /\b(100|[1-9]?\d)\s*%/g;
 const decimalSubscorePattern = /\b(?:0\.\d+|1\.0+)\b/;
 
@@ -19,14 +20,18 @@ function hasConflictingPercentage(value: string, approvedPercentage: number) {
   return decimalSubscorePattern.test(value) || Array.from(value.matchAll(percentageMentionPattern)).some((match) => Number(match[1]) !== approvedPercentage);
 }
 
+function isBaselineImprovementRequest(message: string) {
+  return baselineFollowUpPattern.test(message) || baselineHelpRequestPattern.test(message);
+}
+
 /** Replaces fabricated evidence claims with the approved-state boundary. */
 export function enforceLunaEvidenceGrounding(message: string, response: string, npcId: string) {
   if (npcId.trim().toLowerCase() !== "luna001") return response;
-  if (baselineFollowUpPattern.test(message)) {
+  if (isBaselineImprovementRequest(message)) {
     return "I can identify possible next steps, like clearer long-term goals, carefully reviewed continuity notes, and reflection proposals; those only become part of my state after administrator approval.";
   }
-  if ((selfModelDiscussionPattern.test(message) || baselineFollowUpPattern.test(message)) && unsupportedRecordRefusalPattern.test(response)) {
-    if (/\bimprov(?:e|ing|ement)\b/i.test(message) || baselineFollowUpPattern.test(message)) {
+  if ((selfModelDiscussionPattern.test(message) || isBaselineImprovementRequest(message)) && unsupportedRecordRefusalPattern.test(response)) {
+    if (/\bimprov(?:e|ing|ement)\b/i.test(message) || isBaselineImprovementRequest(message)) {
       return "We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won’t treat a reply alone as proof.";
     }
     return "My approved baseline says I’m a digital entity without a physical body, guided by canon, scoped memory, reflection, and clear uncertainty limits.";
