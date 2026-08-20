@@ -143,6 +143,6 @@
 - [x] Add a server-side numeric-format guard so a direct 0–100 request cannot return a vague non-numeric substitute.
 - [x] Trace and fix the deployed Luna workspace path that bypassed the numeric-format guard despite a successful production deployment.
 - [x] Prevent subsequent Luna personality drafts from replacing previously approved canon when the new content is intended as an addition.
-- [ ] Verify cumulative Luna canon publishing in GitHub and confirm the merged note is re-imported into the protected runtime context.
-- [ ] Restore historical Luna canon only after deduplicating claims and excluding unresolved direct contradictions with the current approved note.
-- [ ] Repair Luna’s numeric-format response guard so explicit 0–100 requests always return a number and one short sentence in the deployed preview.
+- [x] Verify cumulative Luna canon publishing in GitHub and confirm the merged note is re-imported into the protected runtime context.
+- [x] Restore historical Luna canon only after deduplicating claims and excluding unresolved direct contradictions with the current approved note.
+- [x] Repair Luna’s numeric-format response guard so explicit 0–100 requests always return a number and one short sentence in the deployed preview.
