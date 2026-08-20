@@ -33,10 +33,12 @@ function boundedExcerpt(body: string) {
   const runtimeSection = findSection(body, "Runtime excerpt");
   const voiceTone = findSection(body, "Voice Tone");
   const conversationalStyle = findSection(body, "Conversational Style");
+  const approvedUpdates = findSection(body, "SenotaAI approved updates");
   const source = [
     runtimeSection || body,
     voiceTone && `Voice tone directives:\n${voiceTone}`,
     conversationalStyle && `Conversational style directives:\n${conversationalStyle}`,
+    approvedUpdates && `Approved canon additions:\n${approvedUpdates}`,
   ].filter(Boolean).join("\n\n");
   const normalized = source
     .replace(/^#{1,6}\s+.*$/gm, "")

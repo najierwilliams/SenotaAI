@@ -236,6 +236,20 @@ function separateApprovedUpdateSections(noteContent: string) {
   return { retainedNote: retained.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd(), approvedStatements: uniqueCanonStatements(approved) };
 }
 
+/** Preserves the approved vault note and adds only genuinely new, non-conflicting canon claims. */
+export function applyApprovedCanonAddition(existingNote: string, proposedNote: string) {
+  const separated = separateApprovedUpdateSections(deduplicateCanonBullets(existingNote));
+  const additions = uniqueCanonStatements([
+    ...separated.approvedStatements,
+    ...extractApprovedAdditions(existingNote, proposedNote),
+  ]);
+  if (!additions.length) return { noteContent: `${separated.retainedNote}\n`, additions: [] as string[] };
+  return {
+    noteContent: `${separated.retainedNote}\n\n## SenotaAI approved updates\n${additions.map(addition => `- ${addition}`).join("\n")}\n`,
+    additions,
+  };
+}
+
 function canonicalReplacementViolations(noteContent: string, conflicts: CanonConflict[]) {
   const blocking = conflicts.filter(conflict => conflict.severity === "blocking");
   const normalizedLines = new Set(noteContent.split("\n").map(normalizeCanonLine).filter(Boolean));
@@ -290,7 +304,8 @@ export async function publishNpcCanonDraft(input: { npcId: string; displayName: 
   const conflicts = reviewedBlockingConflicts.length ? [...reviewedBlockingConflicts, ...detectedConflicts.filter(conflict => conflict.severity !== "blocking")] : detectedConflicts;
   if (conflicts.some(conflict => conflict.severity === "blocking") && !input.conflictOverride) throw new Error("Potential canon conflicts need an explicit override before publishing.");
   const replacement = conflicts.some(conflict => conflict.severity === "blocking") ? applyApprovedCanonConflictReplacement(current?.content ?? "", input.noteContent, conflicts) : null;
-  const resolvedNoteContent = replacement?.noteContent ?? input.noteContent;
+  const addition = !replacement && current?.content ? applyApprovedCanonAddition(current.content, input.noteContent) : null;
+  const resolvedNoteContent = replacement?.noteContent ?? addition?.noteContent ?? input.noteContent;
   const resolvedParsed = validateNpcCanonDraft({ ...input, noteContent: resolvedNoteContent });
   const { owner, repo } = splitRepository(canonRepository());
   const result = await githubRequest<{ commit?: { sha?: string }; content?: { path?: string } }>(`/repos/${owner}/${repo}/contents/${encodedPath(path)}`, {
@@ -300,6 +315,6 @@ export async function publishNpcCanonDraft(input: { npcId: string; displayName: 
   });
   const committed = result.commit?.sha ? await readCanonNote(path, result.commit.sha) : null;
   if (!committed || committed.content !== resolvedNoteContent) throw new Error("GitHub did not preserve the reviewed canon content exactly. No publish success was recorded; reopen the draft and try again.");
-  await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit", ...(input.conflictOverride ? ["conflictOverride"] : []), ...(replacement ? ["conflictClaimReplacement"] : [])]);
+  await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit", ...(input.conflictOverride ? ["conflictOverride"] : []), ...(replacement ? ["conflictClaimReplacement"] : []), ...(addition?.additions.length ? ["canonAdditionMerge"] : [])]);
   return { ok: true, npcId: parsed.npcId, path: result.content?.path || path, commitSha: result.commit?.sha || null, excerptLength: resolvedParsed.canonExcerpt.length, conflicts, replacedClaims: replacement?.removedClaims ?? [], sync: "The signed GitHub webhook will import this note into Supabase automatically." };
 }

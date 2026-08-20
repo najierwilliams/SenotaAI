@@ -1575,12 +1575,15 @@ function boundedExcerpt(body) {
   const runtimeSection = findSection(body, "Runtime excerpt");
   const voiceTone = findSection(body, "Voice Tone");
   const conversationalStyle = findSection(body, "Conversational Style");
+  const approvedUpdates = findSection(body, "SenotaAI approved updates");
   const source = [
     runtimeSection || body,
     voiceTone && `Voice tone directives:
 ${voiceTone}`,
     conversationalStyle && `Conversational style directives:
-${conversationalStyle}`
+${conversationalStyle}`,
+    approvedUpdates && `Approved canon additions:
+${approvedUpdates}`
   ].filter(Boolean).join("\n\n");
   const normalized = source.replace(/^#{1,6}\s+.*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();
   if (normalized.length < 12) throw new Error("Obsidian NPC note needs a meaningful Runtime excerpt or canon body.");
@@ -2313,6 +2316,23 @@ function separateApprovedUpdateSections(noteContent) {
   }
   return { retainedNote: retained.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd(), approvedStatements: uniqueCanonStatements(approved) };
 }
+function applyApprovedCanonAddition(existingNote, proposedNote) {
+  const separated = separateApprovedUpdateSections(deduplicateCanonBullets(existingNote));
+  const additions = uniqueCanonStatements([
+    ...separated.approvedStatements,
+    ...extractApprovedAdditions(existingNote, proposedNote)
+  ]);
+  if (!additions.length) return { noteContent: `${separated.retainedNote}
+`, additions: [] };
+  return {
+    noteContent: `${separated.retainedNote}
+
+## SenotaAI approved updates
+${additions.map((addition) => `- ${addition}`).join("\n")}
+`,
+    additions
+  };
+}
 function canonicalReplacementViolations(noteContent, conflicts) {
   const blocking = conflicts.filter((conflict) => conflict.severity === "blocking");
   const normalizedLines = new Set(noteContent.split("\n").map(normalizeCanonLine).filter(Boolean));
@@ -2368,7 +2388,8 @@ async function publishNpcCanonDraft(input) {
   const conflicts = reviewedBlockingConflicts.length ? [...reviewedBlockingConflicts, ...detectedConflicts.filter((conflict) => conflict.severity !== "blocking")] : detectedConflicts;
   if (conflicts.some((conflict) => conflict.severity === "blocking") && !input.conflictOverride) throw new Error("Potential canon conflicts need an explicit override before publishing.");
   const replacement = conflicts.some((conflict) => conflict.severity === "blocking") ? applyApprovedCanonConflictReplacement(current?.content ?? "", input.noteContent, conflicts) : null;
-  const resolvedNoteContent = replacement?.noteContent ?? input.noteContent;
+  const addition = !replacement && current?.content ? applyApprovedCanonAddition(current.content, input.noteContent) : null;
+  const resolvedNoteContent = replacement?.noteContent ?? addition?.noteContent ?? input.noteContent;
   const resolvedParsed = validateNpcCanonDraft({ ...input, noteContent: resolvedNoteContent });
   const { owner, repo } = splitRepository2(canonRepository2());
   const result = await githubRequest2(`/repos/${owner}/${repo}/contents/${encodedPath(path2)}`, {
@@ -2378,7 +2399,7 @@ async function publishNpcCanonDraft(input) {
   });
   const committed = result.commit?.sha ? await readCanonNote(path2, result.commit.sha) : null;
   if (!committed || committed.content !== resolvedNoteContent) throw new Error("GitHub did not preserve the reviewed canon content exactly. No publish success was recorded; reopen the draft and try again.");
-  await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit", ...input.conflictOverride ? ["conflictOverride"] : [], ...replacement ? ["conflictClaimReplacement"] : []]);
+  await recordNpcAdminAudit("website-canon-publish", "canon", parsed.npcId, ["noteContent", "runtimeExcerpt", "githubCommit", ...input.conflictOverride ? ["conflictOverride"] : [], ...replacement ? ["conflictClaimReplacement"] : [], ...addition?.additions.length ? ["canonAdditionMerge"] : []]);
   return { ok: true, npcId: parsed.npcId, path: result.content?.path || path2, commitSha: result.commit?.sha || null, excerptLength: resolvedParsed.canonExcerpt.length, conflicts, replacedClaims: replacement?.removedClaims ?? [], sync: "The signed GitHub webhook will import this note into Supabase automatically." };
 }
 

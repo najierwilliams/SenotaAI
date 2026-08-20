@@ -142,3 +142,5 @@
 - [x] Make Luna honor explicit requested output formats, including required numeric values, while preserving her concise human conversational tone.
 - [x] Add a server-side numeric-format guard so a direct 0–100 request cannot return a vague non-numeric substitute.
 - [x] Trace and fix the deployed Luna workspace path that bypassed the numeric-format guard despite a successful production deployment.
+- [x] Prevent subsequent Luna personality drafts from replacing previously approved canon when the new content is intended as an addition.
+- [ ] Verify cumulative Luna canon publishing in GitHub and confirm the merged note is re-imported into the protected runtime context.

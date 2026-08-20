@@ -5,7 +5,7 @@ const recordNpcAdminAudit = vi.fn();
 vi.mock("../agent/ollama", () => ({ chatWithOllama }));
 vi.mock("./adminAudit", () => ({ recordNpcAdminAudit }));
 
-const { analyzeNpcCanonConflicts, applyApprovedCanonConflictReplacement, createNpcCanonDraft, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
+const { analyzeNpcCanonConflicts, applyApprovedCanonAddition, applyApprovedCanonConflictReplacement, createNpcCanonDraft, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } = await import("./canonDrafts");
 
 const draftNote = `<!-- SenotaAI draft summary: Adds a cautious bond with the town archivist. -->
 ---
@@ -99,6 +99,18 @@ describe("reviewable NPC canon drafts", () => {
     expect(result.noteContent).toContain("She keeps the archivist's confidence.");
     expect(result.noteContent).toContain("I do not have a body.");
     expect(() => validateNpcCanonDraft({ npcId: "luna001", displayName: "Luna", noteContent: result.noteContent })).not.toThrow();
+  });
+
+  it("adds a later personality note without replacing earlier approved Luna canon", () => {
+    const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Runtime excerpt\nLuna speaks with quiet warmth.\n\n## Voice Tone\n- Grounded and emotionally aware.";
+    const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n# Luna\n\n## Runtime excerpt\nLuna gives direct answers.\n\n## Conversational Style\n- Use short natural sentences for simple questions.";
+    const result = applyApprovedCanonAddition(existing, proposed);
+
+    expect(result.noteContent).toContain("Luna speaks with quiet warmth.");
+    expect(result.noteContent).toContain("Grounded and emotionally aware.");
+    expect(result.noteContent).toContain("Luna gives direct answers.");
+    expect(result.noteContent).toContain("Use short natural sentences for simple questions.");
+    expect(result.noteContent.match(/## SenotaAI approved updates/g)).toHaveLength(1);
   });
 
   it("refuses an approved automatic replacement when the conflict lacks a verified exact anchor", () => {
@@ -199,6 +211,25 @@ describe("reviewable NPC canon drafts", () => {
     const [, writeRequest] = fetchMock.mock.calls[1] ?? [];
     expect(writeRequest).toMatchObject({ method: "PUT" });
     expect(recordNpcAdminAudit).toHaveBeenCalledWith("website-canon-publish", "canon", "mira-vale", expect.any(Array));
+  });
+
+  it("merges a later non-conflicting personality addition into the current vault note", async () => {
+    const existingNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\nLuna speaks with quiet warmth.";
+    const proposedNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\nLuna answers simple questions directly.";
+    const expected = applyApprovedCanonAddition(existingNote, proposedNote);
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(existingNote).toString("base64"), sha: "current-sha" }) as never)
+      .mockResolvedValueOnce(response(true, { commit: { sha: "merged-sha" }, content: { path: "NPCs/luna001.md" } }) as never)
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(expected.noteContent).toString("base64"), sha: "merged-content-sha" }) as never);
+    chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [] }) });
+
+    await publishNpcCanonDraft({ npcId: "luna001", displayName: "Luna", noteContent: proposedNote, sourceSha: "current-sha" });
+
+    const [, writeRequest] = fetchMock.mock.calls[1] ?? [];
+    const writtenNote = Buffer.from(JSON.parse(String(writeRequest?.body)).content, "base64").toString("utf8");
+    expect(writtenNote).toContain("Luna speaks with quiet warmth.");
+    expect(writtenNote).toContain("Luna answers simple questions directly.");
   });
 
   it("does not report publish success when GitHub returns content that differs from the reviewed note", async () => {
