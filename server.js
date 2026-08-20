@@ -1662,15 +1662,15 @@ ${context.promptContext}`;
 }
 
 // server/npcMemory/dialogueFormat.ts
-var lunaHumanityScalePattern = /\b(?:how\s+human\s+do\s+you\s+feel|how\s+human\s+are\s+you|human(?:ity)?\s+(?:percentage|percent|scale))\b/i;
-var scaleValuePattern = /\b(?:100|[1-9]?\d)\s*%?\b/;
+var lunaHumanityScalePattern = /\b(?:how\s+human\s+do\s+you\s+feel|how\s+human\s+are\s+you|human(?:ity)?\s+(?:percentage|percent|scale)|0\s*[-–—]\s*100)\b/i;
+var leadingScaleValuePattern = /^\s*(?:100|[1-9]?\d)(?:\s*%|\b)/;
 function firstSentence(value) {
   const normalized = value.replace(/\s+/g, " ").trim();
   const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
 function enforceLunaResponseFormat(message, response, npcId) {
-  if (npcId !== "luna001" || !lunaHumanityScalePattern.test(message) || scaleValuePattern.test(response)) return response;
+  if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message) || leadingScaleValuePattern.test(response)) return response;
   const detail = firstSentence(response) || "I\u2019m still learning what that means for me.";
   return `70% \u2014 ${detail}`;
 }
@@ -2555,7 +2555,8 @@ ${buildTemporalContext(input.timeZone)}${memoryContext}`
       }, "Use a valid IANA time zone such as America/New_York.")
     })).mutation(async ({ input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
-      return runNpcPreviewDialogue({ ...input, npcId: "luna001" });
+      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001" });
+      return { ...response, content: enforceLunaResponseFormat(input.message, response.content, "luna001") };
     })
   }),
   settings: router({

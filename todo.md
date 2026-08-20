@@ -141,3 +141,4 @@
 - [x] Add regression coverage for brief factual prompts and canon-driven Luna voice behavior, then verify the deployed Luna workspace.
 - [x] Make Luna honor explicit requested output formats, including required numeric values, while preserving her concise human conversational tone.
 - [x] Add a server-side numeric-format guard so a direct 0–100 request cannot return a vague non-numeric substitute.
+- [x] Trace and fix the deployed Luna workspace path that bypassed the numeric-format guard despite a successful production deployment.

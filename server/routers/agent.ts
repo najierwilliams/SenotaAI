@@ -28,6 +28,7 @@ import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
 import { createNpcCanonDraft, createNpcCanonDraftBatch, isNpcCanonPublishingConfigured, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
 import { runNpcPreviewDialogue } from "../npcMemory/previewDialogue";
+import { enforceLunaResponseFormat } from "../npcMemory/dialogueFormat";
 import { buildTemporalContext, resolveTimeZone } from "../temporalContext";
 
 const executionModeSchema = z.enum(["confirm", "auto"]);
@@ -158,7 +159,8 @@ export const agentRouter = router({
       timeZone: z.string().trim().max(100).optional().refine((value) => { try { resolveTimeZone(value); return true; } catch { return false; } }, "Use a valid IANA time zone such as America/New_York."),
     })).mutation(async ({ input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
-      return runNpcPreviewDialogue({ ...input, npcId: "luna001" });
+      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001" });
+      return { ...response, content: enforceLunaResponseFormat(input.message, response.content, "luna001") };
     }),
   }),
 

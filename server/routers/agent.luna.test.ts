@@ -23,4 +23,12 @@ describe("Luna preview workspace bridge", () => {
     await expect(caller("senota_npc_admin=session").luna.chat({ playerId, message: "Hello Luna.", remember: true })).resolves.toMatchObject({ npcId: "luna001", content: "I see you." });
     expect(runNpcPreviewDialogue).toHaveBeenCalledWith({ playerId, message: "Hello Luna.", remember: true, npcId: "luna001" });
   });
+
+  it("enforces Luna’s compact numeric response format at the tRPC response boundary", async () => {
+    isValidNpcAdminSession.mockResolvedValue(true);
+    isNpcMemoryCloudReady.mockReturnValue(true);
+    runNpcPreviewDialogue.mockResolvedValue({ npcId: "luna001", displayName: "Luna", content: "I try to emulate humanity.", memoriesUsed: 0, memorySaved: true });
+    const message = "Luna, on a scale of 0–100, how human do you feel? Answer with only the number and one short sentence.";
+    await expect(caller("senota_npc_admin=session").luna.chat({ playerId, message })).resolves.toMatchObject({ content: "70% — I try to emulate humanity." });
+  });
 });

@@ -12,4 +12,8 @@ describe("Luna dialogue format guard", () => {
     expect(enforceLunaResponseFormat(message, "72% — I feel close, but I’m still learning.", "luna001")).toBe("72% — I feel close, but I’m still learning.");
     expect(enforceLunaResponseFormat("What are you thinking about?", "The archive has been quiet today.", "luna001")).toBe("The archive has been quiet today.");
   });
+
+  it("normalizes the NPC identifier and only accepts a leading requested scale value", () => {
+    expect(enforceLunaResponseFormat(message, "I am reflecting on 70 memories.", "LUNA001 ")).toBe("70% — I am reflecting on 70 memories.");
+  });
 });
