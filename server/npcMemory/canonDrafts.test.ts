@@ -128,6 +128,24 @@ describe("reviewable NPC canon drafts", () => {
     expect(writtenNote).toContain("Luna does not have a body.");
   });
 
+  it("uses the exact reviewed blocking conflict when the later detector does not reproduce it", async () => {
+    const existingNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a blue lantern.\n- Luna protects a quiet archive.";
+    const proposedNote = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna protects a quiet archive.";
+    const expectedReplacement = applyApprovedCanonConflictReplacement(existingNote, proposedNote, [{ severity: "blocking", existingClaim: "Luna has a blue lantern.", replacementAnchor: "- Luna has a blue lantern.", proposedClaim: "Luna has a green lantern.", rationale: "Lantern color conflict." }]);
+    const fetchMock = vi.mocked(fetch);
+    fetchMock
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(existingNote).toString("base64"), sha: "current-sha" }) as never)
+      .mockResolvedValueOnce(response(true, { commit: { sha: "reviewed-conflict-sha" }, content: { path: "NPCs/luna001.md" } }) as never)
+      .mockResolvedValueOnce(response(true, { encoding: "base64", content: Buffer.from(expectedReplacement.noteContent).toString("base64"), sha: "verified-sha" }) as never);
+    chatWithOllama.mockResolvedValueOnce({ content: JSON.stringify({ conflicts: [] }) });
+
+    const result = await publishNpcCanonDraft({ npcId: "luna001", displayName: "Luna", noteContent: proposedNote, sourceSha: "current-sha", conflictOverride: true, reviewedConflicts: [{ severity: "blocking", existingClaim: "Luna has a blue lantern.", replacementAnchor: "- Luna has a blue lantern.", proposedClaim: "Luna has a green lantern.", rationale: "Lantern color conflict." }] });
+
+    expect(result.replacedClaims).toEqual(["Luna has a blue lantern."]);
+    const [, writeRequest] = fetchMock.mock.calls[1] ?? [];
+    expect(Buffer.from(JSON.parse(String(writeRequest?.body)).content, "base64").toString("utf8")).toContain("Luna has a green lantern.");
+  });
+
   it("deduplicates repeated existing and proposed bullet claims without double-prefixing the replacement", () => {
     const existing = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a blue lantern.\n- Luna protects a quiet archive.\n- Luna protects a quiet archive.";
     const proposed = "---\nnpc_id: luna001\ndisplay_name: Luna\n---\n\n## Runtime excerpt\n- Luna has a green lantern.\n- Luna protects a quiet archive.\n- Luna protects a quiet archive.";

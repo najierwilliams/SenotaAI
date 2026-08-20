@@ -2279,7 +2279,14 @@ async function publishNpcCanonDraft(input) {
   const path2 = canonicalNpcPath(input.npcId);
   const current = await readCanonNote(path2);
   if ((current?.sha ?? null) !== input.sourceSha) throw new Error("This NPC note changed in the vault while you were reviewing it. Generate a fresh draft before publishing.");
-  const conflicts = await analyzeNpcCanonConflicts(current?.content ?? null, input.noteContent);
+  const detectedConflicts = await analyzeNpcCanonConflicts(current?.content ?? null, input.noteContent);
+  const reviewedBlockingConflicts = input.reviewedConflicts?.filter((conflict) => conflict.severity === "blocking") ?? [];
+  for (const conflict of reviewedBlockingConflicts) {
+    if (!conflict.replacementAnchor || !current?.content || !findExactReplacementAnchor(current.content, conflict.replacementAnchor)) {
+      throw new Error("A reviewed conflict anchor no longer matches the current vault note. Generate a fresh draft before publishing.");
+    }
+  }
+  const conflicts = reviewedBlockingConflicts.length ? [...reviewedBlockingConflicts, ...detectedConflicts.filter((conflict) => conflict.severity !== "blocking")] : detectedConflicts;
   if (conflicts.some((conflict) => conflict.severity === "blocking") && !input.conflictOverride) throw new Error("Potential canon conflicts need an explicit override before publishing.");
   const replacement = conflicts.some((conflict) => conflict.severity === "blocking") ? applyApprovedCanonConflictReplacement(current?.content ?? "", input.noteContent, conflicts) : null;
   const resolvedNoteContent = replacement?.noteContent ?? input.noteContent;
@@ -2469,7 +2476,14 @@ ${buildTemporalContext(input.timeZone)}${memoryContext}`
       displayName: z2.string().trim().min(1).max(120),
       noteContent: z2.string().trim().min(12).max(1e5),
       sourceSha: z2.string().min(1).nullable(),
-      conflictOverride: z2.boolean().optional()
+      conflictOverride: z2.boolean().optional(),
+      reviewedConflicts: z2.array(z2.object({
+        severity: z2.enum(["warning", "blocking"]),
+        existingClaim: z2.string().trim().min(1).max(500),
+        proposedClaim: z2.string().trim().min(1).max(500),
+        rationale: z2.string().trim().min(1).max(700),
+        replacementAnchor: z2.string().trim().min(1).max(500).nullable()
+      })).max(6).optional()
     })).mutation(async ({ input }) => {
       if (!isNpcCanonPublishingConfigured()) throw new TRPCError4({ code: "PRECONDITION_FAILED", message: "Canon publishing is not configured." });
       return publishNpcCanonDraft(input);

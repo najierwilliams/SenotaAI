@@ -31,7 +31,7 @@ type CanonDraft = {
   summary: string;
   sourceSha: string | null;
   excerptLength: number;
-  conflicts: Array<{ severity: "warning" | "blocking"; existingClaim: string; proposedClaim: string; rationale: string }>;
+  conflicts: Array<{ severity: "warning" | "blocking"; existingClaim: string; proposedClaim: string; rationale: string; replacementAnchor: string | null }>;
 };
 
 type CanonTarget = { npcId: string; displayName: string; path: string };
@@ -186,6 +186,7 @@ export default function Home() {
       noteContent: latestDraft.noteContent,
       sourceSha: latestDraft.sourceSha,
       conflictOverride: canonConflictOverride,
+      reviewedConflicts: latestDraft.conflicts,
     };
     validateCanonDraft.mutate(approvedDraft, {
       onSuccess: () => publishCanonDraft.mutate(approvedDraft, {

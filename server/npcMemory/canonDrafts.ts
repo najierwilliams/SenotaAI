@@ -275,12 +275,19 @@ export function applyApprovedCanonConflictReplacement(existingNote: string, prop
   return { noteContent, removedClaims, additions };
 }
 
-export async function publishNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string; sourceSha: string | null; conflictOverride?: boolean }) {
+export async function publishNpcCanonDraft(input: { npcId: string; displayName: string; noteContent: string; sourceSha: string | null; conflictOverride?: boolean; reviewedConflicts?: CanonConflict[] }) {
   const parsed = validateNpcCanonDraft(input);
   const path = canonicalNpcPath(input.npcId);
   const current = await readCanonNote(path);
   if ((current?.sha ?? null) !== input.sourceSha) throw new Error("This NPC note changed in the vault while you were reviewing it. Generate a fresh draft before publishing.");
-  const conflicts = await analyzeNpcCanonConflicts(current?.content ?? null, input.noteContent);
+  const detectedConflicts = await analyzeNpcCanonConflicts(current?.content ?? null, input.noteContent);
+  const reviewedBlockingConflicts = input.reviewedConflicts?.filter(conflict => conflict.severity === "blocking") ?? [];
+  for (const conflict of reviewedBlockingConflicts) {
+    if (!conflict.replacementAnchor || !current?.content || !findExactReplacementAnchor(current.content, conflict.replacementAnchor)) {
+      throw new Error("A reviewed conflict anchor no longer matches the current vault note. Generate a fresh draft before publishing.");
+    }
+  }
+  const conflicts = reviewedBlockingConflicts.length ? [...reviewedBlockingConflicts, ...detectedConflicts.filter(conflict => conflict.severity !== "blocking")] : detectedConflicts;
   if (conflicts.some(conflict => conflict.severity === "blocking") && !input.conflictOverride) throw new Error("Potential canon conflicts need an explicit override before publishing.");
   const replacement = conflicts.some(conflict => conflict.severity === "blocking") ? applyApprovedCanonConflictReplacement(current?.content ?? "", input.noteContent, conflicts) : null;
   const resolvedNoteContent = replacement?.noteContent ?? input.noteContent;

@@ -135,3 +135,4 @@
 - [x] Deduplicate preserved and proposed canon claims during approved conflict replacement and prevent double Markdown bullet prefixes.
 - [x] Consolidate repeated SenotaAI approved-update sections and normalize nested Markdown bullet prefixes in successive approved conflict replacements.
 - [x] Enforce pre-write canonical-output invariants so an incomplete replacement or malformed update section fails safely instead of publishing partial canon.
+- [x] Bind the reviewed blocking-conflict anchors and proposed claims into the protected publish request so the final write cannot lose the administrator-approved replacement intent.
