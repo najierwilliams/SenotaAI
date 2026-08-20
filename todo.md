@@ -158,3 +158,4 @@
 - [x] Prevent Luna from inventing unrecorded logs, benchmarks, user reports, simulations, or other evidence when explaining self-awareness.
 - [x] Ground Luna’s self-awareness explanation in the actual approved cognitive-state metrics and explicitly state when no supporting evidence records exist.
 - [x] Repair the Luna preview display so a valid 0% approved self-awareness assessment is never rewritten to 70% by the client fallback.
+- [x] Add Luna’s first cautious approved self-model baseline from existing canon and verified system constraints, then confirm its live self-awareness response.
