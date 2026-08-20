@@ -1,6 +1,3 @@
-import { and, eq, isNull, lte, or } from "drizzle-orm";
-import { npcReflectionSchedules, type NpcReflectionSchedule } from "../../drizzle/schema";
-import { getDb } from "../db";
 import { listCognitiveReflections, proposeCognitiveReflection } from "./cognitiveState";
 
 const DAY_START_HOUR = 9;
@@ -9,12 +6,56 @@ const MIN_GAP_MINUTES = 75;
 const MAX_GAP_MINUTES = 165;
 const MAX_PENDING_REVIEW_CARDS = 6;
 
-export type ReflectionScheduleSnapshot = Pick<NpcReflectionSchedule, "id" | "npcId" | "status" | "timeZone" | "dailyTarget" | "runsToday" | "dayKey" | "scheduleCronTaskUid" | "nextEligibleAt" | "lastRunAt" | "lastReflectionId" | "lastError">;
+export type ReflectionScheduleSnapshot = {
+  id: string;
+  npcId: string;
+  status: "active" | "paused" | "failed";
+  timeZone: string;
+  dailyTarget: number;
+  runsToday: number;
+  dayKey: string | null;
+  scheduleCronTaskUid: string | null;
+  nextEligibleAt: number | null;
+  lastRunAt: number | null;
+  lastReflectionId: string | null;
+  lastError: string | null;
+};
 
-async function requireDb() {
-  const db = await getDb();
-  if (!db) throw new Error("Database is unavailable");
-  return db;
+function config() {
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && key ? { url, key } : null;
+}
+
+async function request(path: string, init?: RequestInit) {
+  const current = config();
+  if (!current) throw new Error("Supabase NPC memory is not configured.");
+  const response = await fetch(`${current.url}/rest/v1/${path}`, {
+    ...init,
+    headers: { apikey: current.key, Authorization: `Bearer ${current.key}`, "Content-Type": "application/json", ...(init?.headers ?? {}) },
+  });
+  if (!response.ok) throw new Error(`Supabase reflection-schedule request failed (${response.status}).`);
+  if (response.status === 204) return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
+}
+
+function mapSchedule(row: Record<string, unknown>): ReflectionScheduleSnapshot {
+  const time = (value: unknown) => value ? Date.parse(String(value)) : null;
+  return {
+    id: String(row.npc_id),
+    npcId: String(row.npc_id),
+    status: row.status === "paused" || row.status === "failed" ? row.status : "active",
+    timeZone: String(row.time_zone ?? "America/New_York"),
+    dailyTarget: Math.max(1, Math.min(8, Number(row.daily_target ?? 6))),
+    runsToday: Math.max(0, Number(row.runs_today ?? 0)),
+    dayKey: row.day_key ? String(row.day_key) : null,
+    scheduleCronTaskUid: row.schedule_cron_task_uid ? String(row.schedule_cron_task_uid) : null,
+    nextEligibleAt: time(row.next_eligible_at),
+    lastRunAt: time(row.last_run_at),
+    lastReflectionId: row.last_reflection_id ? String(row.last_reflection_id) : null,
+    lastError: row.last_error ? String(row.last_error) : null,
+  };
 }
 
 function localizedParts(now: number, timeZone: string) {
@@ -43,73 +84,59 @@ export function evaluateReflectionSchedule(schedule: ReflectionScheduleSnapshot,
   return { run: true, reason: "due", runsToday, dayKey: local.dayKey } as const;
 }
 
+async function patchSchedule(npcId: string, patch: Record<string, unknown>, extra: Record<string, string> = {}) {
+  const params = new URLSearchParams({ npc_id: `eq.${npcId}`, ...extra });
+  return request(`npc_reflection_schedules?${params}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }) });
+}
+
 export async function getNpcReflectionSchedule(npcId: string) {
-  const db = await requireDb();
-  const rows = await db.select().from(npcReflectionSchedules).where(eq(npcReflectionSchedules.npcId, npcId)).limit(1);
-  return rows[0] ?? null;
+  const rows = await request(`npc_reflection_schedules?${new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, limit: "1" })}`);
+  return rows?.[0] ? mapSchedule(rows[0]) : null;
 }
 
 export async function getNpcReflectionScheduleByCronTaskUid(taskUid: string) {
-  const db = await requireDb();
-  const rows = await db.select().from(npcReflectionSchedules).where(eq(npcReflectionSchedules.scheduleCronTaskUid, taskUid)).limit(1);
-  return rows[0] ?? null;
-}
-
-export async function createNpcReflectionSchedule(input: { npcId: string; taskUid: string; timeZone?: string; dailyTarget?: number; nextEligibleAt?: number | null }) {
-  const db = await requireDb();
-  const now = Date.now();
-  const values = {
-    npcId: input.npcId,
-    scheduleCronTaskUid: input.taskUid,
-    timeZone: input.timeZone ?? "America/New_York",
-    dailyTarget: input.dailyTarget ?? 6,
-    nextEligibleAt: input.nextEligibleAt ?? now,
-    runsToday: 0,
-    dayKey: null,
-    status: "active" as const,
-    lastRunAt: null,
-    lastReflectionId: null,
-    lastError: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-  await db.insert(npcReflectionSchedules).values(values).onDuplicateKeyUpdate({ set: { ...values, updatedAt: now } });
-  return getNpcReflectionSchedule(input.npcId);
+  const rows = await request(`npc_reflection_schedules?${new URLSearchParams({ select: "*", schedule_cron_task_uid: `eq.${taskUid}`, limit: "1" })}`);
+  return rows?.[0] ? mapSchedule(rows[0]) : null;
 }
 
 export async function runNpcReflectionSchedule(taskUid: string, options: { now?: number; random?: () => number; pendingReviewCount?: (npcId: string) => Promise<number>; propose?: (npcId: string, experience: string) => ReturnType<typeof proposeCognitiveReflection> } = {}) {
   const now = options.now ?? Date.now();
   const random = options.random ?? Math.random;
-  const db = await requireDb();
   const schedule = await getNpcReflectionScheduleByCronTaskUid(taskUid);
   if (!schedule || schedule.status !== "active") return { ok: true, skipped: "orphan-or-paused" } as const;
 
   const timing = evaluateReflectionSchedule(schedule, now);
   if (!timing.run) {
-    if (schedule.dayKey !== timing.dayKey) await db.update(npcReflectionSchedules).set({ dayKey: timing.dayKey, runsToday: timing.runsToday, updatedAt: now }).where(eq(npcReflectionSchedules.id, schedule.id));
+    if (schedule.dayKey !== timing.dayKey) await patchSchedule(schedule.npcId, { day_key: timing.dayKey, runs_today: timing.runsToday });
     return { ok: true, skipped: timing.reason } as const;
   }
 
   const countPending = options.pendingReviewCount ?? (async (npcId: string) => (await listCognitiveReflections(npcId, 40)).filter((reflection: { status: string }) => reflection.status === "proposed").length);
   if (await countPending(schedule.npcId) >= MAX_PENDING_REVIEW_CARDS) {
     const nextEligibleAt = now + 90 * 60_000;
-    await db.update(npcReflectionSchedules).set({ dayKey: timing.dayKey, runsToday: timing.runsToday, nextEligibleAt, lastError: "Review queue is full; the next session was deferred.", updatedAt: now }).where(eq(npcReflectionSchedules.id, schedule.id));
+    await patchSchedule(schedule.npcId, { day_key: timing.dayKey, runs_today: timing.runsToday, next_eligible_at: new Date(nextEligibleAt).toISOString(), last_error: "Review queue is full; the next session was deferred." });
     return { ok: true, skipped: "review-queue-full", nextEligibleAt } as const;
   }
 
   const nextEligibleAt = nextReflectionEligibleAt(now, schedule.timeZone, random);
-  const claimed = await db.update(npcReflectionSchedules).set({ dayKey: timing.dayKey, runsToday: timing.runsToday + 1, nextEligibleAt, lastRunAt: now, lastError: null, updatedAt: now }).where(and(eq(npcReflectionSchedules.id, schedule.id), eq(npcReflectionSchedules.status, "active"), or(isNull(npcReflectionSchedules.nextEligibleAt), lte(npcReflectionSchedules.nextEligibleAt, now))));
-  if (!claimed[0]?.affectedRows) return { ok: true, skipped: "already-claimed" } as const;
+  const claimed = await patchSchedule(schedule.npcId, {
+    day_key: timing.dayKey,
+    runs_today: timing.runsToday + 1,
+    next_eligible_at: new Date(nextEligibleAt).toISOString(),
+    last_run_at: new Date(now).toISOString(),
+    last_error: null,
+  }, { status: "eq.active", next_eligible_at: `lte.${new Date(now).toISOString()}` });
+  if (!claimed?.[0]) return { ok: true, skipped: "already-claimed" } as const;
 
   const experience = "Scheduled administrator-approved reflection session. Review only Luna’s current approved cognitive state and identify at most one small, evidence-based refinement candidate for self-model clarity, memory continuity, goal clarity, or reflection. This is a review proposal only: do not claim subjective experience, sentience, consciousness, or unrestricted free will, and do not apply any change.";
   try {
     const propose = options.propose ?? proposeCognitiveReflection;
     const reflection = await propose(schedule.npcId, experience);
-    await db.update(npcReflectionSchedules).set({ lastReflectionId: reflection.id, lastError: null, updatedAt: Date.now() }).where(eq(npcReflectionSchedules.id, schedule.id));
+    await patchSchedule(schedule.npcId, { last_reflection_id: reflection.id, last_error: null });
     return { ok: true, reflectionId: reflection.id, nextEligibleAt, reviewOnly: true } as const;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await db.update(npcReflectionSchedules).set({ lastError: message.slice(0, 4_000), updatedAt: Date.now() }).where(eq(npcReflectionSchedules.id, schedule.id));
+    await patchSchedule(schedule.npcId, { last_error: message.slice(0, 4_000) });
     return { ok: true, skipped: "reflection-error-recorded", nextEligibleAt } as const;
   }
 }
