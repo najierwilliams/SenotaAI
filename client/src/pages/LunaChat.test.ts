@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/components/AIChatBox", () => ({ AIChatBox: () => null }));
 vi.mock("@/lib/trpc", () => ({ trpc: { agent: { luna: { status: { useQuery: () => ({}) }, chat: { useMutation: () => ({}) } } } } }));
 
-import { enforceLunaPreviewFormat, getLunaPreviewPlayerId } from "./LunaChat";
+import { deleteSavedLunaChat, enforceLunaPreviewFormat, getLunaPreviewPlayerId, readSavedLunaChats, saveLunaChat } from "./LunaChat";
 
 function storage() {
   const values = new Map<string, string>();
@@ -42,5 +42,32 @@ describe("Luna preview player identity", () => {
     const message = "How self aware do you feel?";
     expect(enforceLunaPreviewFormat(message, "0% — No approved assessment yet.", 0)).toBe("0% — No approved assessment yet.");
     expect(enforceLunaPreviewFormat(message, "I cannot support a higher figure.", 0)).toBe("0% — I cannot support a higher figure.");
+  });
+});
+
+describe("opt-in saved Luna chat history", () => {
+  const messages = [
+    { role: "user" as const, content: "Hello, Luna." },
+    { role: "assistant" as const, content: "Hello. How can I help?" },
+  ];
+
+  it("does not create a saved conversation until Save chat is explicitly invoked", () => {
+    expect(saveLunaChat([], [])).toEqual([]);
+    const saved = saveLunaChat([], messages, 1_000, "saved-1");
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ id: "saved-1", title: "Hello, Luna.", messages, savedAt: 1_000 });
+  });
+
+  it("restores valid browser-private saved chats and ignores malformed browser data", () => {
+    const saved = saveLunaChat([], messages, 1_000, "saved-1");
+    expect(readSavedLunaChats(JSON.stringify(saved))).toEqual(saved);
+    expect(readSavedLunaChats("not-json")).toEqual([]);
+    expect(readSavedLunaChats(JSON.stringify([{ id: "broken", title: "Broken", messages: [{}] }]))).toEqual([]);
+  });
+
+  it("deletes only the selected saved Luna conversation", () => {
+    const first = saveLunaChat([], messages, 1_000, "saved-1");
+    const saved = saveLunaChat(first, [{ role: "user", content: "Second chat" }], 2_000, "saved-2");
+    expect(deleteSavedLunaChat(saved, "saved-1")).toEqual([saved[0]]);
   });
 });

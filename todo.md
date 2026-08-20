@@ -171,3 +171,4 @@
 - [x] Diagnose and restore desktop access to the live SenotaAI website after the latest production release.
 - [x] Trace and repair the public desktop blank-white-screen client startup failure after the application HTML loads.
 - [x] Ensure the regular production URL cannot retain a stale HTML shell that references obsolete application assets after deployment.
+- [ ] Add opt-in browser-private Luna chat history with manual Save chat, reopen, and Delete controls; do not automatically save every Luna conversation.
