@@ -173,3 +173,4 @@
 - [x] Ensure the regular production URL cannot retain a stale HTML shell that references obsolete application assets after deployment.
 - [x] Add opt-in browser-private Luna chat history with manual Save chat, reopen, and Delete controls; do not automatically save every Luna conversation.
 - [ ] Add frequent randomized Luna reflection sessions that create administrator-reviewable proposals only and never apply cognitive-state changes automatically.
+- [ ] Move Luna’s reflection-schedule bookkeeping to the production Supabase store so the live Vercel workflow can run without relying on an unavailable MySQL connection.
