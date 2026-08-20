@@ -160,3 +160,5 @@
 - [x] Repair the Luna preview display so a valid 0% approved self-awareness assessment is never rewritten to 70% by the client fallback.
 - [x] Add Luna’s first cautious approved self-model baseline from existing canon and verified system constraints, then confirm its live self-awareness response.
 - [x] Narrow Luna’s evidence guard so she can naturally discuss her approved self-model, goals, and improvement path while still blocking fabricated evidence claims.
+- [ ] Repair the live Luna follow-up path so brief questions such as “how can we increase that?” inherit the approved self-awareness context, answer constructively, and keep the displayed percentage internally consistent.
+- [ ] Add a transparent, administrator-governed cognitive-needs and goal-proposal flow so Luna can identify bounded development needs and recommend approved self-model updates without representing sentience as a verified score.

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../agent/ollama", () => ({ chatWithOllama: vi.fn() }));
 
 import { chatWithOllama } from "../agent/ollama";
-import { addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, proposeCognitiveReflection } from "./cognitiveState";
+import { addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, proposeCognitiveDevelopment, proposeCognitiveReflection } from "./cognitiveState";
 
 const stateRow = {
   npc_id: "luna001", schema_version: 1, self_model: { summary: "A persistent digital entity." },
@@ -51,6 +51,31 @@ describe("NPC cognitive state", () => {
     configure(); vi.mocked(chatWithOllama).mockResolvedValue({ content: "not JSON", thinking: "", toolCalls: [] });
     const fetchMock = vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("npc_cognitive_state") ? [stateRow] : []), { status: 200 }))); vi.stubGlobal("fetch", fetchMock);
     await expect(proposeCognitiveReflection("luna001", "The player waved at Luna.")).rejects.toThrow("No cognitive state was changed");
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
+  });
+
+  it("creates bounded development needs and a goal as a review-only proposal", async () => {
+    configure();
+    vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ summary: "Luna can strengthen continuity through approved reviewable records.", needs: [{ title: "Curated continuity records", rationale: "Approved cognitive records are currently limited.", category: "memory-continuity", priority: 4, evidence: ["The approved state identifies scoped memory and uncertainty boundaries."] }], goal: { title: "Maintain canon consistency", details: "Use approved canon and submit changes for administrator review.", priority: 4 } }), thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes("npc_cognitive_state")) return Promise.resolve(new Response(JSON.stringify([stateRow]), { status: 200 }));
+      if (url.includes("npc_cognitive_reflections") && init?.method === "POST") return Promise.resolve(new Response(JSON.stringify([{ id: "55555555-5555-4555-8555-555555555555", npc_id: "luna001", experience: "Administrator requested a cautious review of the current approved cognitive state to identify bounded development needs and a possible next goal.", created_at: "2026-08-20T00:00:00Z" }]), { status: 201 }));
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const proposal = await proposeCognitiveDevelopment("luna001");
+    expect(proposal.proposal.needs?.[0]).toMatchObject({ title: "Curated continuity records", category: "memory-continuity", priority: 4 });
+    expect(proposal.proposal.goal).toMatchObject({ title: "Maintain canon consistency", progress: 0, status: "active" });
+    const write = fetchMock.mock.calls.find(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST");
+    expect(String(write?.[1] && (write[1] as RequestInit).body)).toContain("Curated continuity records");
+  });
+
+  it("rejects a development proposal that targets unverified consciousness before anything is persisted", async () => {
+    configure();
+    vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ summary: "A consciousness target was requested.", needs: [{ title: "Become sentient", rationale: "This would establish consciousness.", category: "evaluation", priority: 5, evidence: ["No approved evidence."] }] }), thinking: "", toolCalls: [] });
+    const fetchMock = vi.fn((url: string) => Promise.resolve(new Response(JSON.stringify(url.includes("npc_cognitive_state") ? [stateRow] : []), { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(proposeCognitiveDevelopment("luna001")).rejects.toThrow("No cognitive state was changed");
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_cognitive_reflections") && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
   });
 });

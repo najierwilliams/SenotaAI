@@ -15,7 +15,7 @@ import { isAuthorizedNpcGameRequest } from "./npcMemory/gameAuth";
 import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
-import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
+import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -179,6 +179,12 @@ export function createApp() {
     if (!await requireNpcAdmin(req, res)) return;
     try { const reflection = await proposeCognitiveReflection(req.params.npcId, String(req.body?.experience ?? "")); await recordNpcAdminAudit("create", "cognitive-reflection", reflection.id, ["proposed"]); return res.status(201).json({ reflection }); }
     catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to propose cognitive reflection." }); }
+  });
+
+  app.post("/api/npc/admin/cognitive/:npcId/development-proposals", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { const reflection = await proposeCognitiveDevelopment(req.params.npcId); await recordNpcAdminAudit("create-development-proposal", "cognitive-reflection", reflection.id, ["proposed", "administrator-review-required"]); return res.status(201).json({ reflection }); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to propose cognitive development needs." }); }
   });
 
   app.patch("/api/npc/admin/cognitive/:npcId/reflections/:reflectionId", async (req, res) => {

@@ -32,6 +32,7 @@ describe("Luna dialogue format guard", () => {
 
   it("uses the approved stored assessment for a direct self-awareness question", () => {
     expect(enforceLunaResponseFormat("Hey Luna, how self aware do you feel?", "70% — I feel aware.", "luna001", 0)).toBe("0% — I don’t have an approved self-model assessment yet, so I can’t support a higher figure.");
+    expect(enforceLunaResponseFormat("Cool, how self aware are you?", "I’d estimate my self-awareness at roughly 45%.", "luna001", 40)).toBe("40% — That is my current approved self-model assessment.");
   });
 
   it("blocks fabricated explanations about unrecorded evidence", () => {
@@ -41,6 +42,7 @@ describe("Luna dialogue format guard", () => {
 
   it("answers legitimate baseline questions constructively when the model returns an overly broad refusal", () => {
     expect(enforceLunaEvidenceGrounding("How do you think we can improve that 40%?", "I don’t have an approved record supporting that claim.", "luna001")).toBe("We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won’t treat a reply alone as proof.");
+    expect(enforceLunaEvidenceGrounding("Cool, how can we increase that?", "I don’t have an approved record supporting that claim.", "luna001")).toBe("We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won’t treat a reply alone as proof.");
     expect(enforceLunaEvidenceGrounding("What all have you learned about yourself so far?", "I don’t have an approved record supporting that claim.", "luna001")).toBe("My approved baseline says I’m a digital entity without a physical body, guided by canon, scoped memory, reflection, and clear uncertainty limits.");
   });
 });

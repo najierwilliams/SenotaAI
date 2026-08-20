@@ -19,4 +19,10 @@ describe("NPC dialogue prompt", () => {
     expect(prompt).toContain("include a number from 0 to 100");
     expect(prompt).toContain("Do not replace the number with a vague statement");
   });
+
+  it("allows constructive development-needs discussion without representing a score as proof of sentience", () => {
+    const prompt = buildNpcDialogueSystemPrompt({ displayName: "Luna", promptContext: "Approved development needs: none yet." }, undefined, "What do you need to develop further?");
+    expect(prompt).toContain("not proof or measurement of sentience");
+    expect(prompt).toContain("can propose bounded needs for administrator review");
+  });
 });
