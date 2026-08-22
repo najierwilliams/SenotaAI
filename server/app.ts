@@ -16,7 +16,8 @@ import { syncObsidianNpcCanon } from "./npcMemory/obsidianSync";
 import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
 import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, addCognitiveObservation, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveObservations, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveConsolidation, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
-import { getNpcReflectionSchedule, runNpcReflectionSchedule } from "./npcMemory/reflectionScheduler";
+import { getNpcReflectionSchedule, getNpcReflectionScheduleByCronTaskUid, runNpcReflectionSchedule } from "./npcMemory/reflectionScheduler";
+import { buildAutonomousDialogueContext, getAutonomySnapshot, recordAgentOutcome, runAutonomousAgentCycle, updateAgentMode } from "./npcMemory/autonomousAgent";
 import { verifyGitHubActionsReflectionToken } from "./npcMemory/reflectionSchedulerAuth";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
@@ -217,6 +218,45 @@ export function createApp() {
     catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to resolve cognitive reflection." }); }
   });
 
+  app.get("/api/npc/admin/autonomy/:npcId", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try { return res.json(await getAutonomySnapshot(req.params.npcId)); }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to load Luna's autonomous state." }); }
+  });
+
+  app.patch("/api/npc/admin/autonomy/:npcId/mode", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const mode = req.body?.mode;
+      if (mode !== "active" && mode !== "paused" && mode !== "observation-only") return res.status(400).json({ error: "mode must be active, paused, or observation-only" });
+      const state = await updateAgentMode(req.params.npcId, mode);
+      await recordNpcAdminAudit("autonomy-mode-updated", "agent-state", req.params.npcId, [mode]);
+      return res.json({ state });
+    } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update autonomous-agent mode." }); }
+  });
+
+  app.post("/api/npc/admin/autonomy/:npcId/events", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const { content, source, sourceReliability, salience, metadata } = req.body ?? {};
+      if (typeof content !== "string" || !content.trim()) return res.status(400).json({ error: "content is required" });
+      const result = await runAutonomousAgentCycle({ npcId: req.params.npcId, eventKind: "creator-input", content, source: typeof source === "string" && source.trim() ? source : "creator-input", sourceReliability: typeof sourceReliability === "number" ? sourceReliability : 0.7, salience: typeof salience === "number" ? salience : 3, metadata: metadata && typeof metadata === "object" && !Array.isArray(metadata) ? metadata : {} });
+      await recordNpcAdminAudit("autonomous-event-processed", "agent-event", result.event.id, ["no-individual-approval-required"]);
+      return res.status(201).json(result);
+    } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to process autonomous-agent event." }); }
+  });
+
+  app.post("/api/npc/admin/autonomy/:npcId/outcomes", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const { decisionId, observation, predictedOutcome, predictionError, valence, feedbackSource, stateDelta } = req.body ?? {};
+      if (typeof decisionId !== "string" || typeof observation !== "string") return res.status(400).json({ error: "decisionId and observation are required" });
+      const outcomeResult = await recordAgentOutcome({ npcId: req.params.npcId, decisionId, observation, predictedOutcome: typeof predictedOutcome === "string" ? predictedOutcome : undefined, predictionError: typeof predictionError === "number" ? predictionError : 0.5, valence: typeof valence === "number" ? valence : 0, feedbackSource: typeof feedbackSource === "string" && feedbackSource.trim() ? feedbackSource : "creator-observation", stateDelta: stateDelta && typeof stateDelta === "object" && !Array.isArray(stateDelta) ? stateDelta : {} });
+      await recordNpcAdminAudit("autonomous-outcome-recorded", "agent-outcome", outcomeResult.outcome?.id ? String(outcomeResult.outcome.id) : req.params.npcId, ["consequence-feedback"]);
+      return res.status(201).json(outcomeResult);
+    } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to record autonomous-agent outcome." }); }
+  });
+
   app.post("/api/npc/canon/github-webhook", async (req, res) => {
     const rawBody = (req as express.Request & { rawBody?: Buffer }).rawBody;
     if (!isGitHubCanonWebhookConfigured() || !rawBody || !verifyGitHubCanonSignature(rawBody, req.header("x-hub-signature-256"))) return res.status(401).json({ error: "invalid-github-webhook-signature" });
@@ -250,16 +290,21 @@ export function createApp() {
       }
       if (timeZone !== undefined && typeof timeZone !== "string") return res.status(400).json({ error: "timeZone must be a valid IANA time zone." });
       try { resolveTimeZone(timeZone); } catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : "timeZone is invalid." }); }
-      const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
+      const autonomy = await runAutonomousAgentCycle({ npcId, eventKind: "dialogue", content: message, source: `player:${playerId}`, sourceReliability: 0.45, salience: 3, metadata: { timeZone: timeZone ?? null } }).catch(error => {
+        console.warn("[Luna] Autonomous dialogue cycle deferred:", error);
+        return null;
+      });
+      const [context, cognitiveContext, autonomousContext, selfAwarenessPercent] = await Promise.all([
         buildNpcDialogueContext(playerId, npcId),
         buildCognitiveDialogueContext(npcId, message),
+        buildAutonomousDialogueContext(npcId, message).catch(() => null),
         getNpcSelfAwarenessPercent(npcId),
       ]);
       const response = await chatWithOllama({
         messages: [
           {
             role: "system",
-            content: buildNpcDialogueSystemPrompt({ ...context, promptContext: `${context.promptContext}\n\n${cognitiveContext.promptContext}` }, timeZone, message),
+            content: buildNpcDialogueSystemPrompt({ ...context, promptContext: `${context.promptContext}\n\n${cognitiveContext.promptContext}\n\n${autonomousContext?.promptContext ?? "Autonomous operational context is unavailable for this turn."}` }, timeZone, message),
           },
           { role: "user", content: message.trim() },
         ],
@@ -275,7 +320,7 @@ export function createApp() {
           expiresAt: typeof memory.expiresAt === "string" ? memory.expiresAt : null,
         });
       }
-      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length, selfAwarenessPercent });
+      return res.json({ npcId: context.npcId, displayName: context.displayName, content, memoriesUsed: context.playerMemories.length, selfAwarenessPercent, autonomy: autonomy ? { decisionId: "decision" in autonomy && autonomy.decision ? autonomy.decision.id : null, currentActivity: autonomy.state.currentActivity, skipped: "skipped" in autonomy ? autonomy.skipped : null } : null });
     } catch (error) {
       const message = error instanceof Error ? error.message : "NPC dialogue failed.";
       return res.status(400).json({ error: message });
@@ -347,9 +392,13 @@ export function createApp() {
           ? cronUser.taskUid
           : null;
       if (!taskUid) return res.status(403).json({ error: "scheduled-trigger-only" });
+      const schedule = await getNpcReflectionScheduleByCronTaskUid(taskUid);
+      const autonomy = schedule
+        ? await runAutonomousAgentCycle({ npcId: schedule.npcId, eventKind: "time", content: "A bounded autonomous cycle is available. Reassess current beliefs, commitments, uncertainty, and internal activity from the recorded state.", source: "scheduled-autonomy-rhythm", sourceReliability: 1, salience: 2, metadata: { timeZone: schedule.timeZone, scheduledAt: new Date().toISOString() } }).catch(error => ({ error: error instanceof Error ? error.message : String(error) }))
+        : null;
       const result = await runNpcReflectionSchedule(taskUid);
-      if ("reflectionId" in result && typeof result.reflectionId === "string") await recordNpcAdminAudit("scheduled-review-proposal", "cognitive-reflection", result.reflectionId, ["review-only", "administrator-approval-required"]);
-      return res.json(result);
+      if ("reflectionId" in result && typeof result.reflectionId === "string") await recordNpcAdminAudit("scheduled-review-proposal", "cognitive-reflection", result.reflectionId, ["legacy-review-only"]);
+      return res.json({ ...result, autonomy: autonomy && "event" in autonomy ? { decisionId: "decision" in autonomy && autonomy.decision ? autonomy.decision.id : null, currentActivity: autonomy.state.currentActivity } : autonomy });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
