@@ -499,7 +499,9 @@ async function closeExpiredBehaviorEpisodes(npcId: string) {
 
 async function supersedeActiveBehaviorEpisodes(npcId: string) {
   const now = new Date().toISOString();
-  await request(`npc_agent_behavior_episodes?${new URLSearchParams({ npc_id: `eq.${npcId}`, status: "eq.active" })}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "superseded", ends_at: now, updated_at: now }) });
+  // The persistent episode contract has active/completed/cancelled states. Cancelling
+  // records a deliberate replacement without claiming a non-existent "superseded" state.
+  await request(`npc_agent_behavior_episodes?${new URLSearchParams({ npc_id: `eq.${npcId}`, status: "eq.active" })}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "cancelled", ends_at: now, updated_at: now }) });
 }
 
 async function beginBehaviorEpisode(npcId: string, decision: AgentDecision) {
