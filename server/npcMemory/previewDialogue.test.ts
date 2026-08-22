@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const buildNpcDialogueContext = vi.fn();
 const rememberPlayerNpcInteraction = vi.fn();
 const chatWithOllama = vi.fn();
+const buildCognitiveDialogueContext = vi.fn();
+const getNpcSelfAwarenessPercent = vi.fn();
+const buildAutonomousDialogueContext = vi.fn();
+const runAutonomousAgentCycle = vi.fn();
 vi.mock("./supabase", () => ({ buildNpcDialogueContext, rememberPlayerNpcInteraction }));
 vi.mock("../agent/ollama", () => ({ chatWithOllama }));
+vi.mock("./cognitiveState", () => ({ buildCognitiveDialogueContext, getNpcSelfAwarenessPercent }));
+vi.mock("./autonomousAgent", () => ({ buildAutonomousDialogueContext, runAutonomousAgentCycle }));
 
 const { runNpcPreviewDialogue } = await import("./previewDialogue");
 
@@ -18,6 +24,10 @@ describe("administrator NPC preview dialogue", () => {
     });
     chatWithOllama.mockReset().mockResolvedValue({ content: "I see you clearly, and I remember your greeting." });
     rememberPlayerNpcInteraction.mockReset().mockResolvedValue(undefined);
+    buildCognitiveDialogueContext.mockReset().mockResolvedValue({ promptContext: "Persistent cognitive state: none." });
+    getNpcSelfAwarenessPercent.mockReset().mockResolvedValue(0);
+    buildAutonomousDialogueContext.mockReset().mockResolvedValue({ promptContext: "Autonomous operational context: available." });
+    runAutonomousAgentCycle.mockReset().mockResolvedValue({ state: { currentActivity: "available" }, skipped: "observation-only" });
   });
 
   it("uses Luna canon and this preview player’s memories, then saves a bounded summary", async () => {
