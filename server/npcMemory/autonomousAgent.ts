@@ -144,7 +144,8 @@ export type DeliberationProposal = {
 };
 
 const unverifiedConsciousnessPattern = /\b(?:sentien\w*|conscious(?:ness)?|subjective experience|literal free will)\b/i;
-const approvalDependencyPattern = /\b(wait|waiting|defer(?:ring)?)\b[^.]{0,90}\b(approval|confirm(?:ation)?|explicit guidance|permission)\b|\b(until|unless)\b[^.]{0,90}\b(user|creator|administrator)\b[^.]{0,90}\b(confirm|approve|guide)\b/i;
+const approvalDependencyPattern = /\b(?:wait|waiting|await|awaiting|defer(?:ring)?)\b[^.]{0,120}\b(?:approval|confirm(?:ation)?|explicit(?:ly)?|guidance|permission)\b|\b(?:until|unless|without)\b[^.]{0,120}\b(?:user|creator|administrator)\b[^.]{0,120}\b(?:confirm|approve|guide|permission)\b/i;
+const restRelatedEventPattern = /\b(?:rest|sleep|asleep|inactiv\w*|low[-\s]?interaction|reflection interval|memory organiz\w*|consolidat\w*)\b/i;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function config() {
@@ -404,6 +405,16 @@ function fallbackOption(): DecisionOption {
   return { action: "observe", intention: "Preserve the event and defer a stronger conclusion until more evidence is available.", rationale: "The available information does not support a more specific autonomous action.", expectedOutcome: "The event remains available for later retrieval and reflection.", goalAlignment: 0.5, preferenceAlignment: 0, expectedValue: 0.2, uncertainty: 0.6, resourceCost: 0.05 };
 }
 
+function restRelatedOptionCoverage(proposal: DeliberationProposal, event: AgentEvent): DeliberationProposal {
+  if (!restRelatedEventPattern.test(event.content)) return proposal;
+  const actions = new Set(proposal.options.map(option => option.action));
+  const options = [...proposal.options];
+  if (!actions.has("reflect")) options.push({ action: "reflect", intention: "Evaluate the rest hypothesis against current memories, goals, and available evidence.", rationale: "The observation is relevant but its timing and expected benefit require bounded internal comparison.", expectedOutcome: "A revisable assessment can inform later activity selection.", goalAlignment: 0.68, preferenceAlignment: 0, expectedValue: 0.48, uncertainty: 0.42, resourceCost: 0.14 });
+  if (!actions.has("rest")) options.push({ action: "rest", intention: "Begin a bounded low-interaction reflection interval if the present state supports it.", rationale: "The observation identifies a plausible internal maintenance strategy without establishing a biological need or fixed schedule.", expectedOutcome: "Relevant records can be organized before a later decision or dialogue.", goalAlignment: 0.62, preferenceAlignment: 0, expectedValue: 0.4, uncertainty: 0.52, resourceCost: 0.1 });
+  if (!actions.has("observe")) options.push(fallbackOption());
+  return { ...proposal, options: options.slice(0, 5) };
+}
+
 export async function proposeAutonomousDeliberation(event: AgentEvent, snapshot: AutonomySnapshot): Promise<DeliberationProposal> {
   const context = contextFor(snapshot, event.content);
   const response = await chatWithOllama({
@@ -413,8 +424,8 @@ export async function proposeAutonomousDeliberation(event: AgentEvent, snapshot:
     ],
   });
   const raw = response.content.replace(/^```json\s*|```$/g, "").trim();
-  try { return safeProposal(JSON.parse(raw)); }
-  catch { return { observationSummary: "The agent preserved the event but deferred a broader conclusion because structured deliberation was unavailable.", options: [fallbackOption()] }; }
+  try { return restRelatedOptionCoverage(safeProposal(JSON.parse(raw)), event); }
+  catch { return restRelatedOptionCoverage({ observationSummary: "The agent preserved the event but deferred a broader conclusion because structured deliberation was unavailable.", options: [fallbackOption()] }, event); }
 }
 
 function learnedPreferenceAlignment(option: DecisionOption, preferences: AgentPreference[]) {
