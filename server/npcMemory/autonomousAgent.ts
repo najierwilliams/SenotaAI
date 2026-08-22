@@ -341,6 +341,10 @@ export async function getAutonomySnapshot(npcId: string): Promise<AutonomySnapsh
   return { state, beliefs, preferences, goals, events, decisions, episodes };
 }
 
+function activeBehaviorEpisode(snapshot: AutonomySnapshot) {
+  return snapshot.episodes.find(item => item.status === "active" && (!item.endsAt || new Date(item.endsAt).getTime() > Date.now())) ?? null;
+}
+
 function cognitiveRelevance(message: string, candidate: string) {
   const tokens = new Set(message.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
   return Array.from(tokens).filter(token => candidate.toLowerCase().includes(token)).length;
@@ -350,7 +354,7 @@ function contextFor(snapshot: AutonomySnapshot, message: string) {
   const relevantBeliefs = snapshot.beliefs.sort((a, b) => (cognitiveRelevance(message, b.statement) * 3 + b.confidence) - (cognitiveRelevance(message, a.statement) * 3 + a.confidence)).slice(0, 8);
   const preferences = snapshot.preferences.slice(0, 8);
   const goals = snapshot.goals.filter(goal => goal.status === "active" || goal.status === "candidate").slice(0, 6);
-  const episode = snapshot.episodes.find(item => item.status === "active" && (!item.endsAt || new Date(item.endsAt).getTime() > Date.now())) ?? null;
+  const episode = activeBehaviorEpisode(snapshot);
   return {
     relevantBeliefs,
     preferences,
@@ -475,8 +479,14 @@ async function closeExpiredBehaviorEpisodes(npcId: string) {
   await request(`npc_agent_behavior_episodes?${new URLSearchParams({ npc_id: `eq.${npcId}`, status: "eq.active", ends_at: `lte.${now}` })}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "completed", updated_at: now }) });
 }
 
+async function supersedeActiveBehaviorEpisodes(npcId: string) {
+  const now = new Date().toISOString();
+  await request(`npc_agent_behavior_episodes?${new URLSearchParams({ npc_id: `eq.${npcId}`, status: "eq.active" })}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: "superseded", ends_at: now, updated_at: now }) });
+}
+
 async function beginBehaviorEpisode(npcId: string, decision: AgentDecision) {
   await closeExpiredBehaviorEpisodes(npcId);
+  await supersedeActiveBehaviorEpisodes(npcId);
   const startsAt = new Date();
   const endsAt = new Date(startsAt.getTime() + episodeDurationMs(decision.chosenOption.action));
   const rows = await request("npc_agent_behavior_episodes", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, decision_id: decision.id, activity: decision.chosenOption.action, planned_outcome: decision.chosenOption.expectedOutcome, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() }) });
@@ -505,10 +515,17 @@ export async function runAutonomousAgentCycle(input: { npcId: string; eventKind:
   ]);
   const chosen = selectOption(proposal.options, snapshot.state, snapshot.preferences);
   const decision = await persistDecision(input.npcId, event, proposal, chosen);
-  const episode = await beginBehaviorEpisode(input.npcId, decision);
-  const state = await updateAgentState(input.npcId, { currentIntention: decision.intention, currentActivity: decision.chosenOption.action, attentionBudget: Math.max(0.2, snapshot.state.attentionBudget - decision.chosenOption.resourceCost * 0.15), lastDeliberatedAt: new Date().toISOString() });
+  const existingEpisode = activeBehaviorEpisode(snapshot);
+  const preserveEpisode = input.eventKind === "dialogue" && existingEpisode !== null && (existingEpisode.activity === "rest" || existingEpisode.activity === "reflect");
+  const episode = preserveEpisode ? existingEpisode : await beginBehaviorEpisode(input.npcId, decision);
+  const state = await updateAgentState(input.npcId, {
+    currentIntention: preserveEpisode ? snapshot.state.currentIntention : decision.intention,
+    currentActivity: preserveEpisode ? existingEpisode.activity : decision.chosenOption.action,
+    attentionBudget: Math.max(0.2, snapshot.state.attentionBudget - decision.chosenOption.resourceCost * 0.15),
+    lastDeliberatedAt: new Date().toISOString(),
+  });
   await markEventProcessed(event);
-  return { event, proposal, belief, preference, goal, decision, episode, state } as const;
+  return { event, proposal, belief, preference, goal, decision, episode, state, activityPreserved: preserveEpisode } as const;
 }
 
 async function getAgentDecision(npcId: string, decisionId: string) {
@@ -556,6 +573,6 @@ export async function buildAutonomousDialogueContext(npcId: string, message: str
   return {
     state: snapshot.state,
     currentEpisode: context.episode,
-    promptContext: `Autonomous operational context (not proof of consciousness or free will):\n${context.text}\n\nDialogue rule: Treat this as Luna's current operational state. Let it naturally influence relevance, priorities, and wording, but do not invent private experience. A rest episode means a recorded low-interaction reflection interval, not biological sleep. Do not claim a belief, preference, goal, decision, consequence, or experience absent from these records.`,
+    promptContext: `Autonomous operational context (not proof of consciousness or free will):\n${context.text}\n\nDialogue rule: Treat this as Luna's current operational state. Let it naturally influence relevance, priorities, and wording, but do not invent private experience. ${context.episode ? `The active ${context.episode.activity} episode is the runtime state for this reply and takes precedence over generic canon wording that Luna is always active or immediately available. ` : ""}A rest episode means a recorded low-interaction reflection interval, not biological sleep. If asked about it, do not say Luna was literally asleep; frame it as a bounded reflection interval when the recorded episode supports that. Do not claim a belief, preference, goal, decision, consequence, or experience absent from these records.`,
   };
 }

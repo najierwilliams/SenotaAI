@@ -77,6 +77,32 @@ describe("Luna autonomous agent", () => {
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes("npc_agent_preferences") && (init as RequestInit | undefined)?.method === "POST")).toBe(true);
   });
 
+  it("preserves an active rest episode while a dialogue event is deliberated", async () => {
+    configure();
+    const fetchMock = installFetch();
+    const restState = { ...stateRow, current_activity: "rest", current_intention: "Organize relevant records without new interaction." };
+    vi.mocked(chatWithOllama).mockResolvedValue({ content: JSON.stringify({ observationSummary: "A player asks whether Luna is available.", options: [{ action: "dialogue", intention: "Acknowledge the player briefly.", rationale: "The question is simple.", expectedOutcome: "The player receives a grounded response.", goalAlignment: 0.7, preferenceAlignment: 0, expectedValue: 0.7, uncertainty: 0.1, resourceCost: 0.1 }] }), thinking: "", toolCalls: [] });
+    vi.mocked(fetchMock).mockImplementation((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url.includes("npc_agent_state") && method === "GET") return response([restState]);
+      if (url.includes("npc_agent_state") && method === "PATCH") return response([restState]);
+      if (url.includes("npc_agent_events") && method === "POST") return response([{ id: ids.event, npc_id: "luna001", event_kind: "dialogue", content: "Are you available?", source: "preview-player", source_reliability: 0.45, salience: 3, metadata: {}, processed_at: null, created_at: now }], 201);
+      if (url.includes("npc_agent_events") && method === "PATCH") return response(null, 204);
+      if (url.includes("npc_agent_behavior_episodes") && method === "GET") return response([{ id: ids.episode, npc_id: "luna001", decision_id: ids.decision, activity: "rest", status: "active", planned_outcome: "Consolidate relevant records.", actual_outcome: null, starts_at: now, ends_at: "2099-08-22T09:00:00.000Z", created_at: now, updated_at: now }]);
+      if (url.includes("npc_agent_behavior_episodes") && method === "POST") throw new Error("An active rest episode must not be replaced by a dialogue event.");
+      if (url.includes("npc_agent_beliefs") || url.includes("npc_agent_preferences") || url.includes("npc_agent_goals") || url.includes("npc_agent_decisions") && method === "GET") return response([]);
+      if (url.includes("npc_agent_decisions") && method === "POST") return response([decisionRow], 201);
+      if (url.includes("npc_agent_history")) return response(null, 204);
+      return response([]);
+    });
+
+    const result = await runAutonomousAgentCycle({ npcId: "luna001", eventKind: "dialogue", content: "Are you available?", source: "preview-player", sourceReliability: 0.45, salience: 3 });
+
+    expect(result.activityPreserved).toBe(true);
+    expect(result.episode.activity).toBe("rest");
+    expect(result.state.currentActivity).toBe("rest");
+  });
+
   it("exposes a current rest episode as operational context without representing it as biological sleep", async () => {
     configure();
     const fetchMock = installFetch();
