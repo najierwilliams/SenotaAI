@@ -17,6 +17,7 @@ import { buildNpcDialogueSystemPrompt } from "./npcMemory/dialoguePrompt";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./npcMemory/dialogueFormat";
 import { addCognitiveBelief, addCognitiveGoal, addCognitiveMemory, addCognitiveObservation, buildCognitiveDialogueContext, getNpcCognitiveState, getNpcSelfAwarenessPercent, listCognitiveBeliefs, listCognitiveGoals, listCognitiveMemories, listCognitiveObservations, listCognitiveReflections, listCognitiveRelationships, proposeCognitiveConsolidation, proposeCognitiveDevelopment, proposeCognitiveReflection, resolveCognitiveReflection, updateNpcCognitiveState, upsertCognitiveRelationship } from "./npcMemory/cognitiveState";
 import { getNpcReflectionSchedule, runNpcReflectionSchedule } from "./npcMemory/reflectionScheduler";
+import { decayNanites } from "./npcMemory/nanites";
 import { verifyGitHubActionsReflectionToken } from "./npcMemory/reflectionSchedulerAuth";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
