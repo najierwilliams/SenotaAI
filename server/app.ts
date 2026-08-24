@@ -348,6 +348,7 @@ export function createApp() {
           ? cronUser.taskUid
           : null;
       if (!taskUid) return res.status(403).json({ error: "scheduled-trigger-only" });
+      await decayNanites().catch(() => {});
       const result = await runNpcReflectionSchedule(taskUid);
       if ("reflectionId" in result && typeof result.reflectionId === "string") await recordNpcAdminAudit("scheduled-review-proposal", "cognitive-reflection", result.reflectionId, ["review-only", "administrator-approval-required"]);
       return res.json(result);
