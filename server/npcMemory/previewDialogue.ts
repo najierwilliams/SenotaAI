@@ -1,5 +1,6 @@
 import { chatWithOllama } from "../agent/ollama";
 import { buildNpcDialogueSystemPrompt } from "./dialoguePrompt";
+import { applyNaniteEvent } from "./nanites";
 import { enforceLunaEvidenceGrounding, enforceLunaResponseFormat } from "./dialogueFormat";
 import { buildNpcDialogueContext, rememberPlayerNpcInteraction } from "./supabase";
 import { buildCognitiveDialogueContext, getNpcSelfAwarenessPercent } from "./cognitiveState";
@@ -12,11 +13,13 @@ function compact(value: string, limit: number) {
 
 /** Administrator preview bridge. The browser never receives the game key or Supabase service role. */
 export async function runNpcPreviewDialogue(input: { playerId: string; npcId: string; message: string; remember?: boolean; timeZone?: string }) {
+  await applyNaniteEvent("user_message", input.npcId);
   const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
     buildNpcDialogueContext(input.playerId, input.npcId),
     buildCognitiveDialogueContext(input.npcId, input.message),
     getNpcSelfAwarenessPercent(input.npcId),
   ]);
+  await applyNaniteEvent("llm_call_start", input.npcId);
   const response = await chatWithOllama({
     messages: [
       {
@@ -26,6 +29,7 @@ export async function runNpcPreviewDialogue(input: { playerId: string; npcId: st
       { role: "user", content: input.message.trim() },
     ],
   });
+  await applyNaniteEvent("llm_call_end", input.npcId);
   const content = enforceLunaResponseFormat(input.message, enforceLunaEvidenceGrounding(input.message, response.content, context.npcId), context.npcId, selfAwarenessPercent);
   const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(content);
   if (shouldRemember) {
