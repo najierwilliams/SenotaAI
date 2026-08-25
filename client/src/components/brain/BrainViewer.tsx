@@ -3,12 +3,23 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
+import {
+  buildBrainStructureRegistry,
+  type BrainStructure,
+} from "./anatomy/BrainStructureRegistry";
+
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
 
 export default function BrainViewer() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [status, setStatus] = useState("Loading Luna's brain...");
+
+  const [status, setStatus] = useState(
+    "Loading Luna's brain...",
+  );
+
+  const [selectedStructure, setSelectedStructure] =
+    useState<BrainStructure | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -104,7 +115,7 @@ export default function BrainViewer() {
     scene.add(fillLight);
 
     // -----------------------------------------
-    // Brain container
+    // Brain
     // -----------------------------------------
 
     const brainRoot =
@@ -113,7 +124,7 @@ export default function BrainViewer() {
     scene.add(brainRoot);
 
     // -----------------------------------------
-    // Camera controls
+    // Controls
     // -----------------------------------------
 
     const controls =
@@ -125,49 +136,270 @@ export default function BrainViewer() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
-    // Left mouse = rotate
     controls.mouseButtons.LEFT =
       THREE.MOUSE.ROTATE;
 
-    // Right mouse = pan
     controls.mouseButtons.RIGHT =
       THREE.MOUSE.PAN;
 
-    // Middle mouse = dolly
     controls.mouseButtons.MIDDLE =
       THREE.MOUSE.DOLLY;
 
-    // Scroll wheel = zoom
     controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.screenSpacePanning = true;
 
-    // Allow the user to move close to the brain.
     controls.minDistance = 0.02;
-
-    // Prevent the camera from getting
-    // absurdly far away.
     controls.maxDistance = 2;
 
-    // Allow panning.
-    controls.enablePan = true;
+    // -----------------------------------------
+    // Selection
+    // -----------------------------------------
 
-    // Pan in screen space.
-    controls.screenSpacePanning = true;
+    const raycaster =
+      new THREE.Raycaster();
+
+    const pointer =
+      new THREE.Vector2();
+
+    let pointerDownX = 0;
+    let pointerDownY = 0;
+
+    let selectedMesh:
+      THREE.Mesh | null = null;
+
+    let selectedOriginalMaterial:
+      THREE.Material | THREE.Material[] | null =
+      null;
+
+    const restoreSelectedMesh = () => {
+      if (
+        !selectedMesh ||
+        !selectedOriginalMaterial
+      ) {
+        return;
+      }
+
+      selectedMesh.material =
+        selectedOriginalMaterial;
+
+      selectedMesh = null;
+      selectedOriginalMaterial = null;
+    };
+
+    const highlightMesh = (
+      mesh: THREE.Mesh,
+    ) => {
+      const originalMaterial =
+        mesh.material;
+
+      selectedOriginalMaterial =
+        originalMaterial;
+
+      if (
+        Array.isArray(
+          originalMaterial,
+        )
+      ) {
+        const clonedMaterials =
+          originalMaterial.map(
+            (material) =>
+              material.clone(),
+          );
+
+        clonedMaterials.forEach(
+          (material) => {
+            if (
+              material instanceof
+              THREE.MeshStandardMaterial
+            ) {
+              material.emissive.set(
+                0x00aaff,
+              );
+
+              material.emissiveIntensity = 2;
+            }
+          },
+        );
+
+        mesh.material =
+          clonedMaterials;
+      } else {
+        const clonedMaterial =
+          originalMaterial.clone();
+
+        if (
+          clonedMaterial instanceof
+          THREE.MeshStandardMaterial
+        ) {
+          clonedMaterial.emissive.set(
+            0x00aaff,
+          );
+
+          clonedMaterial.emissiveIntensity = 2;
+        }
+
+        mesh.material =
+          clonedMaterial;
+      }
+
+      selectedMesh = mesh;
+    };
+
+    const handlePointerDown = (
+      event: PointerEvent,
+    ) => {
+      pointerDownX =
+        event.clientX;
+
+      pointerDownY =
+        event.clientY;
+    };
+
+    const handlePointerUp = (
+      event: PointerEvent,
+    ) => {
+      const movementX =
+        Math.abs(
+          event.clientX -
+            pointerDownX,
+        );
+
+      const movementY =
+        Math.abs(
+          event.clientY -
+            pointerDownY,
+        );
+
+      // Don't select when the user is
+      // dragging to rotate/pan.
+      if (
+        movementX > 5 ||
+        movementY > 5
+      ) {
+        return;
+      }
+
+      const rect =
+        renderer.domElement.getBoundingClientRect();
+
+      pointer.x =
+        ((event.clientX -
+          rect.left) /
+          rect.width) *
+          2 -
+        1;
+
+      pointer.y =
+        -(
+          ((event.clientY -
+            rect.top) /
+            rect.height) *
+            2 -
+          1
+        );
+
+      raycaster.setFromCamera(
+        pointer,
+        camera,
+      );
+
+      const intersections =
+        raycaster.intersectObjects(
+          brainRoot.children,
+          true,
+        );
+
+      if (
+        intersections.length === 0
+      ) {
+        restoreSelectedMesh();
+
+        setSelectedStructure(
+          null,
+        );
+
+        setStatus(
+          "Luna's brain online",
+        );
+
+        return;
+      }
+
+      const clickedObject =
+        intersections[0]
+          .object;
+
+      if (
+        !(
+          clickedObject instanceof
+          THREE.Mesh
+        )
+      ) {
+        return;
+      }
+
+      restoreSelectedMesh();
+
+      highlightMesh(
+        clickedObject,
+      );
+
+      const structureName =
+        clickedObject.name;
+
+      const registry =
+        buildBrainStructureRegistry(
+          [structureName],
+        );
+
+      const structure =
+        registry[0] ?? null;
+
+      setSelectedStructure(
+        structure,
+      );
+
+      if (structure) {
+        setStatus(
+          `Selected: ${structure.displayName}`,
+        );
+      } else {
+        setStatus(
+          `Selected: ${structureName}`,
+        );
+      }
+    };
+
+    renderer.domElement.addEventListener(
+      "pointerdown",
+      handlePointerDown,
+    );
+
+    renderer.domElement.addEventListener(
+      "pointerup",
+      handlePointerUp,
+    );
 
     // -----------------------------------------
     // Load brain
     // -----------------------------------------
 
-    const loader = new GLTFLoader();
+    const loader =
+      new GLTFLoader();
 
     loader.load(
       BRAIN_MODEL_URL,
 
       (gltf) => {
-        const brain = gltf.scene;
+        const brain =
+          gltf.scene;
 
-        brainRoot.add(brain);
+        brainRoot.add(
+          brain,
+        );
 
-        // Find original dimensions.
+        // Center model.
         const box =
           new THREE.Box3().setFromObject(
             brain,
@@ -183,13 +415,11 @@ export default function BrainViewer() {
             new THREE.Vector3(),
           );
 
-        // Center brain at origin.
-        brain.position.sub(center);
+        brain.position.sub(
+          center,
+        );
 
-        // -------------------------------------
-        // Physical scale
-        // -------------------------------------
-
+        // Scale model.
         const maxDimension =
           Math.max(
             size.x,
@@ -197,9 +427,11 @@ export default function BrainViewer() {
             size.z,
           );
 
-        if (maxDimension > 0) {
-          // Approximately 170 mm.
-          const targetSize = 0.17;
+        if (
+          maxDimension > 0
+        ) {
+          const targetSize =
+            0.17;
 
           const scale =
             targetSize /
@@ -210,10 +442,7 @@ export default function BrainViewer() {
           );
         }
 
-        // -------------------------------------
-        // Position camera
-        // -------------------------------------
-
+        // Position camera.
         const scaledBox =
           new THREE.Box3().setFromObject(
             brain,
@@ -244,11 +473,24 @@ export default function BrainViewer() {
 
         controls.update();
 
-        // Remember this as the reset position.
         controls.saveState();
 
+        // Count actual meshes.
+        let meshCount = 0;
+
+        brain.traverse(
+          (object) => {
+            if (
+              object instanceof
+              THREE.Mesh
+            ) {
+              meshCount++;
+            }
+          },
+        );
+
         setStatus(
-          "Luna's brain online",
+          `Luna's brain online · ${meshCount} anatomical meshes`,
         );
       },
 
@@ -267,12 +509,23 @@ export default function BrainViewer() {
     );
 
     // -----------------------------------------
-    // Double-click = reset camera
+    // Double-click reset
     // -----------------------------------------
 
-    const handleDoubleClick = () => {
-      controls.reset();
-    };
+    const handleDoubleClick =
+      () => {
+        controls.reset();
+
+        restoreSelectedMesh();
+
+        setSelectedStructure(
+          null,
+        );
+
+        setStatus(
+          "Luna's brain online",
+        );
+      };
 
     renderer.domElement.addEventListener(
       "dblclick",
@@ -283,26 +536,27 @@ export default function BrainViewer() {
     // Resize
     // -----------------------------------------
 
-    const handleResize = () => {
-      const width =
-        container.clientWidth;
+    const handleResize =
+      () => {
+        const width =
+          container.clientWidth;
 
-      const height =
-        Math.max(
-          container.clientHeight,
-          1,
+        const height =
+          Math.max(
+            container.clientHeight,
+            1,
+          );
+
+        camera.aspect =
+          width / height;
+
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(
+          width,
+          height,
         );
-
-      camera.aspect =
-        width / height;
-
-      camera.updateProjectionMatrix();
-
-      renderer.setSize(
-        width,
-        height,
-      );
-    };
+      };
 
     window.addEventListener(
       "resize",
@@ -346,6 +600,16 @@ export default function BrainViewer() {
       );
 
       renderer.domElement.removeEventListener(
+        "pointerdown",
+        handlePointerDown,
+      );
+
+      renderer.domElement.removeEventListener(
+        "pointerup",
+        handlePointerUp,
+      );
+
+      renderer.domElement.removeEventListener(
         "dblclick",
         handleDoubleClick,
       );
@@ -376,9 +640,45 @@ export default function BrainViewer() {
         {status}
       </div>
 
+      {selectedStructure && (
+        <div className="pointer-events-none absolute right-4 top-4 w-72 rounded-lg bg-black/70 p-4 text-white backdrop-blur">
+          <div className="text-xs uppercase tracking-wide text-white/50">
+            Selected structure
+          </div>
+
+          <div className="mt-1 text-lg font-semibold">
+            {selectedStructure.displayName}
+          </div>
+
+          <div className="mt-3 space-y-1 text-xs text-white/70">
+            <div>
+              Hemisphere:{" "}
+              {selectedStructure.hemisphere}
+            </div>
+
+            <div>
+              Category:{" "}
+              {selectedStructure.category}
+            </div>
+
+            {selectedStructure.parentRegion && (
+              <div>
+                Region:{" "}
+                {selectedStructure.parentRegion}
+              </div>
+            )}
+
+            <div className="break-all pt-2 text-white/40">
+              {selectedStructure.sourceName}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg bg-black/60 px-3 py-2 text-xs text-white/80 backdrop-blur">
         Drag to rotate · Scroll to zoom ·
-        Right-drag to pan · Double-click to reset
+        Right-drag to pan · Click a structure ·
+        Double-click to reset
       </div>
     </div>
   );
