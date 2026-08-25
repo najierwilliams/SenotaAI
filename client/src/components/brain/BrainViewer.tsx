@@ -29,6 +29,22 @@ import {
   navigateNanobot,
 } from "./anatomy/NanobotNavigation";
 
+import {
+  nanobotMissionEngine,
+} from "./anatomy/NanobotMissionEngine";
+
+import {
+  resolveNanobotTarget,
+} from "./anatomy/NanobotTargetResolver";
+
+import {
+  createNanobotObservationEnvironment,
+  disposeNanobotObservationEnvironment,
+  setNanobotObservationEnvironmentScale,
+  updateNanobotObservationEnvironment,
+  type NanobotObservationEnvironment,
+} from "./anatomy/NanobotObservationEnvironment";
+
 import type {
   Nanobot,
   NanobotPosition,
@@ -106,6 +122,9 @@ export default function BrainViewer() {
   const nanobotRootRef =
     useRef<THREE.Group | null>(null);
 
+  const nanobotObservationEnvironmentRef =
+    useRef<NanobotObservationEnvironment | null>(null);
+
   const nanobotVisualsRef =
     useRef<Map<string, NanobotVisual>>(new Map());
 
@@ -172,6 +191,11 @@ export default function BrainViewer() {
   const [nanobots, setNanobots] =
     useState<Nanobot[]>([]);
 
+  const [missionHistory, setMissionHistory] =
+    useState(
+      nanobotRegistry.getMissionHistory(),
+    );
+
   const [selectedNanobotId, setSelectedNanobotId] =
     useState<string | null>(null);
 
@@ -201,14 +225,9 @@ export default function BrainViewer() {
     });
 
   useEffect(() => {
-    nanobotRegistry.updateObservationContext({
-      scale: observationContext.scale,
-      datasetId:
-        observationContext.datasetId,
-      status: observationContext.status,
-      scientificStatus:
-        observationContext.scientificStatus,
-    });
+    nanobotRegistry.updateViewerScale(
+      observationContext.scale,
+    );
 
     if (nanobotRegistry.getAll().length) {
       setNanobots(
@@ -540,41 +559,31 @@ export default function BrainViewer() {
     };
 
   const getStructureTargetPosition =
-    (structure: BrainStructure): NanobotPosition => {
+    (structure: BrainStructure): NanobotPosition | null => {
       const mesh =
         brainMeshMapRef.current.get(
           structure.id,
         );
 
-      if (mesh) {
-        const box =
-          new THREE.Box3().setFromObject(mesh);
-
-        const center =
-          box.getCenter(new THREE.Vector3());
-
-        return {
-          x: center.x,
-          y: center.y,
-          z: center.z,
-        };
+      if (!mesh) {
+        return null;
       }
 
-      const bounds =
-        brainBoundsRef.current;
+      const box =
+        new THREE.Box3().setFromObject(mesh);
 
-      if (bounds) {
-        const center =
-          bounds.getCenter(new THREE.Vector3());
-
-        return {
-          x: center.x,
-          y: center.y,
-          z: center.z,
-        };
+      if (box.isEmpty()) {
+        return null;
       }
 
-      return { x: 0, y: 0, z: 0 };
+      const center =
+        box.getCenter(new THREE.Vector3());
+
+      return {
+        x: center.x,
+        y: center.y,
+        z: center.z,
+      };
     };
 
   const getNanobotStartPosition =
@@ -645,6 +654,9 @@ export default function BrainViewer() {
       setNanobots(
         nanobotRegistry.getAll(),
       );
+      setMissionHistory(
+        nanobotRegistry.getMissionHistory(),
+      );
     };
 
   const deployNanobot =
@@ -653,69 +665,74 @@ export default function BrainViewer() {
         setStatus(
           "Select a brain structure before deploying a nanobot",
         );
-
         return;
       }
 
-      const nanobot =
-        nanobotRegistry.create(type);
+      const macroPosition =
+        activeScale === "macro"
+          ? getStructureTargetPosition(selectedStructure)
+          : null;
 
-      nanobot.position =
-        getNanobotStartPosition();
+      const resolution = resolveNanobotTarget({
+        structure: selectedStructure,
+        observationScale: observationContext.scale,
+        macroPosition,
+        hasDatasetBackedCoordinates: false,
+      });
 
-      nanobot.deploymentPosition = {
-        ...nanobot.position,
-      };
+      const previewTarget = {
+        scale: observationContext.scale,
+        datasetId: observationContext.datasetId,
+        status: observationContext.status,
+        scientificStatus: observationContext.scientificStatus,
+        contextLabel: getObservationContextLabel(observationContext),
+        targetPosition: resolution.position,
+        targetResolution: resolution.resolution,
+        spatialStatus: resolution.spatialStatus,
+        spatialMessage: resolution.message,
+      } as const;
 
+      const nanobot = nanobotRegistry.create(type);
+      nanobot.position = getNanobotStartPosition();
+      nanobot.deploymentPosition = { ...nanobot.position };
       nanobotRegistry.register(nanobot);
 
-      nanobotRegistry.setState(
-        nanobot.id,
-        "deploying",
-      );
-
-      nanobotRegistry.targetStructure(
+      const assigned = nanobotRegistry.assignTarget(
         nanobot.id,
         selectedStructure,
-        {
-          scale: observationContext.scale,
-          datasetId:
-            observationContext.datasetId,
-          status:
-            observationContext.status,
-          scientificStatus:
-            observationContext.scientificStatus,
-        },
+        previewTarget,
       );
 
-      const visual =
-        createNanobotVisual(nanobot);
+      const permission = nanobotMissionEngine.canDeploy(
+        assigned?.target ?? null,
+      );
 
-      const nanobotRoot =
-        nanobotRootRef.current;
-
-      if (nanobotRoot) {
-        nanobotRoot.add(visual.root);
+      if (!assigned?.target || !permission.allowed) {
+        nanobotRegistry.remove(nanobot.id);
+        setStatus(permission.reason);
+        syncNanobotState();
+        return;
       }
 
-      nanobotVisualsRef.current.set(
-        nanobot.id,
-        visual,
+      nanobotMissionEngine.start(
+        assigned,
+        assigned.target,
+        performance.now(),
       );
 
-      nanobotPositionsRef.current.set(
-        nanobot.id,
-        { ...nanobot.position },
-      );
+      const visual = createNanobotVisual(assigned);
+      const nanobotRoot = nanobotRootRef.current;
 
-      setSelectedNanobotId(
-        nanobot.id,
-      );
+      if (nanobotRoot) nanobotRoot.add(visual.root);
 
+      nanobotVisualsRef.current.set(assigned.id, visual);
+      nanobotPositionsRef.current.set(assigned.id, {
+        ...assigned.position,
+      });
+      setSelectedNanobotId(assigned.id);
       syncNanobotState();
-
       setStatus(
-        `${nanobot.metadata.label} deployed toward ${selectedStructure.displayName}`,
+        `${assigned.metadata.label} deployed toward ${selectedStructure.displayName} · simulation mission`,
       );
     };
 
@@ -727,68 +744,43 @@ export default function BrainViewer() {
 
   const pauseNanobots =
     () => {
-      nanobotRegistry
-        .getAll()
-        .forEach((nanobot) => {
-          if (
-            nanobot.state === "navigating" ||
-            nanobot.state === "deploying"
-          ) {
-            nanobotRegistry.setState(
-              nanobot.id,
-              "paused",
-            );
-          }
-        });
-
+      let paused = 0;
+      nanobotRegistry.getAll().forEach((nanobot) => {
+        if (nanobotMissionEngine.pause(nanobot)) paused += 1;
+      });
       syncNanobotState();
-      setStatus("Nanobot navigation paused");
+      setStatus(
+        paused
+          ? `${paused} nanobot mission${paused === 1 ? "" : "s"} paused`
+          : "No active nanobot mission can be paused",
+      );
     };
 
   const resumeNanobots =
     () => {
-      nanobotRegistry
-        .getAll()
-        .forEach((nanobot) => {
-          if (nanobot.state === "paused") {
-            nanobotRegistry.setState(
-              nanobot.id,
-              "navigating",
-            );
-          }
-        });
-
+      let resumed = 0;
+      nanobotRegistry.getAll().forEach((nanobot) => {
+        if (nanobotMissionEngine.resume(nanobot)) resumed += 1;
+      });
       syncNanobotState();
-      setStatus("Nanobot navigation resumed");
+      setStatus(
+        resumed
+          ? `${resumed} nanobot mission${resumed === 1 ? "" : "s"} resumed`
+          : "No paused nanobot mission to resume",
+      );
     };
 
   const returnNanobots =
     () => {
-      const now =
-        performance.now();
-
-      nanobotRegistry
-        .getAll()
-        .forEach((nanobot) => {
-          if (
-            nanobot.state !== "completed" &&
-            nanobot.state !== "returning"
-          ) {
-            nanobotReturnStartedRef.current.set(
-              nanobot.id,
-              now,
-            );
-
-            nanobotRegistry.setState(
-              nanobot.id,
-              "returning",
-            );
-          }
-        });
-
+      let returning = 0;
+      nanobotRegistry.getAll().forEach((nanobot) => {
+        if (nanobotMissionEngine.requestReturn(nanobot)) returning += 1;
+      });
       syncNanobotState();
       setStatus(
-        "Nanobots returning to deployment point",
+        returning
+          ? "Nanobots returning to deployment point"
+          : "No active nanobot mission can return",
       );
     };
 
@@ -921,6 +913,8 @@ export default function BrainViewer() {
 
     const observationAssetRoot =
       observationAssetRootRef.current;
+    const nanobotEnvironment =
+      nanobotObservationEnvironmentRef.current;
 
     if (!brainRoot || !observationAssetRoot) {
       return;
@@ -938,6 +932,12 @@ export default function BrainViewer() {
 
     if (activeScale === "macro") {
       brainRoot.visible = true;
+      if (nanobotEnvironment) {
+        setNanobotObservationEnvironmentScale(
+          nanobotEnvironment,
+          "macro",
+        );
+      }
       return;
     }
 
@@ -945,8 +945,29 @@ export default function BrainViewer() {
       !scaleAsset?.available ||
       !scaleAsset.url
     ) {
-      brainRoot.visible = true;
+      brainRoot.visible = false;
+      if (nanobotEnvironment) {
+        setNanobotObservationEnvironmentScale(
+          nanobotEnvironment,
+          activeScale,
+        );
+      }
+
+      const camera = cameraRef.current;
+      const controls = controlsRef.current;
+      if (camera && controls) {
+        camera.position.set(0, 0.03, 0.16);
+        controls.target.set(0, 0, 0);
+        controls.update();
+      }
       return;
+    }
+
+    if (nanobotEnvironment) {
+      setNanobotObservationEnvironmentScale(
+        nanobotEnvironment,
+        "macro",
+      );
     }
 
     let cancelled = false;
@@ -1318,6 +1339,17 @@ export default function BrainViewer() {
     observationAssetRootRef.current =
       observationAssetRoot;
 
+    const nanobotObservationEnvironment =
+      createNanobotObservationEnvironment();
+
+    nanobotObservationEnvironment.root.name =
+      "luna-nanobot-observation-environment";
+    scene.add(
+      nanobotObservationEnvironment.root,
+    );
+    nanobotObservationEnvironmentRef.current =
+      nanobotObservationEnvironment;
+
     const nanobotRoot =
       new THREE.Group();
 
@@ -1659,213 +1691,66 @@ export default function BrainViewer() {
         nanobotRegistry
           .getAll()
           .forEach((nanobot) => {
-            if (
-              nanobot.state === "navigating" &&
-              nanobot.target
-            ) {
-              const targetStructure =
-                brainStructuresRef.current.find(
-                  (structure) =>
-                    structure.id ===
-                    nanobot.target?.structureId,
-                );
-
-              if (targetStructure) {
-                const target =
-                  getStructureTargetPosition(
-                    targetStructure,
-                  );
-
-                const result =
-                  navigateNanobot(
-                    nanobot,
-                    {
-                      position: target,
-                      radius: 0.003,
-                    },
-                    delta,
-                  );
-
-                nanobot.position =
-                  result.position;
-
-                nanobot.progress =
-                  result.progress;
-
-                nanobot.updatedAt =
-                  Date.now();
-
-                if (result.arrived) {
-                  nanobot.progress = 1;
-
-                  nanobotRegistry.setState(
-                    nanobot.id,
-                    "arrived",
-                  );
-                }
-              }
-            } else if (
-              nanobot.state === "arrived"
-            ) {
-              nanobot.progress = 1;
-
-              if (
-                !nanobotWorkStartedRef.current.has(
-                  nanobot.id,
-                )
-              ) {
-                nanobotWorkStartedRef.current.set(
-                  nanobot.id,
-                  performance.now(),
-                );
-              }
-
-              nanobotRegistry.setState(
-                nanobot.id,
-                "working",
+            const missionTick =
+              nanobotMissionEngine.tick(
+                nanobot,
+                {
+                  deltaSeconds: delta,
+                  now: Date.now(),
+                },
               );
-            } else if (
-              nanobot.state === "working"
-            ) {
-              const started =
-                nanobotWorkStartedRef.current.get(
-                  nanobot.id,
-                ) ?? performance.now();
 
-              const duration =
-                getNanobotWorkDuration(
-                  nanobot.type,
-                );
-
-              const workProgress =
-                Math.min(
-                  1,
-                  Math.max(
-                    0,
-                    (performance.now() - started) /
-                      (duration * 1000),
-                  ),
-                );
-
-              nanobot.progress =
-                workProgress;
-
-              nanobot.updatedAt =
-                Date.now();
-
-              if (workProgress >= 1) {
-                nanobot.progress = 1;
-
-                nanobotWorkStartedRef.current.delete(
-                  nanobot.id,
-                );
-
-                nanobotReturnStartedRef.current.set(
-                  nanobot.id,
-                  performance.now(),
-                );
-
-                nanobotRegistry.setState(
-                  nanobot.id,
-                  "returning",
-                );
-
-                setStatus(
-                  `${nanobot.metadata.label} completed ${nanobot.type} operation`,
-                );
-              }
-            } else if (
-              nanobot.state === "returning"
-            ) {
-              const start =
-                getNanobotStartPosition();
-
-              const result =
-                navigateNanobot(
-                  nanobot,
-                  {
-                    position: start,
-                    radius: 0.003,
-                  },
-                  delta,
-                );
-
-              nanobot.position =
-                result.position;
-
-              const returnProgress =
-                getNanobotReturnProgress(
-                  nanobot,
-                );
-
-              nanobot.progress =
-                returnProgress;
-
-              nanobot.updatedAt =
-                Date.now();
-
-              if (result.arrived) {
-                nanobot.progress = 1;
-
-                nanobotReturnStartedRef.current.delete(
-                  nanobot.id,
-                );
-
-                nanobotRegistry.setState(
-                  nanobot.id,
-                  "completed",
-                );
-
-                setStatus(
-                  `${nanobot.metadata.label} mission complete`,
-                );
-              }
+            if (missionTick.completedResult) {
+              nanobotRegistry.recordMissionResult(
+                nanobot.id,
+                missionTick.completedResult,
+              );
+              setMissionHistory(
+                nanobotRegistry.getMissionHistory(),
+              );
+              setStatus(
+                `${nanobot.metadata.label} completed simulated ${nanobot.type} verification`,
+              );
             }
 
-            const visual =
+            const engineVisual =
               nanobotVisualsRef.current.get(
                 nanobot.id,
               );
 
-            if (visual) {
+            if (engineVisual) {
               updateNanobotVisual(
-                visual,
+                engineVisual,
                 nanobot,
                 elapsed,
               );
 
-              visual.root.traverse(
+              engineVisual.root.traverse(
                 (object) => {
-                  if (!(object instanceof THREE.Mesh)) {
-                    return;
-                  }
-
-                  const materials =
-                    Array.isArray(object.material)
-                      ? object.material
-                      : [object.material];
-
+                  if (!(object instanceof THREE.Mesh)) return;
+                  const materials = Array.isArray(object.material)
+                    ? object.material
+                    : [object.material];
                   materials.forEach((material) => {
-                    if (
-                      !(
-                        material instanceof
-                        THREE.MeshStandardMaterial
-                      )
-                    ) {
-                      return;
-                    }
-
+                    if (!(material instanceof THREE.MeshStandardMaterial)) return;
                     material.color.set(0xff2b2b);
                     material.emissive.set(0xff0000);
-                    material.emissiveIntensity =
-                      nanobot.state === "error"
-                        ? 2.4
-                        : 1.6;
+                    material.emissiveIntensity = nanobot.state === "error" ? 2.4 : 1.6;
                   });
                 },
               );
             }
+
+            return;
+
           });
+
+        if (nanobotObservationEnvironmentRef.current) {
+          updateNanobotObservationEnvironment(
+            nanobotObservationEnvironmentRef.current,
+            elapsed,
+          );
+        }
 
         controls.update();
 
@@ -1929,6 +1814,12 @@ export default function BrainViewer() {
       brainRootRef.current = null;
       observationAssetRootRef.current =
         null;
+      if (nanobotObservationEnvironmentRef.current) {
+        disposeNanobotObservationEnvironment(
+          nanobotObservationEnvironmentRef.current,
+        );
+      }
+      nanobotObservationEnvironmentRef.current = null;
       nanobotRootRef.current = null;
       cameraRef.current = null;
       controlsRef.current = null;
@@ -1945,6 +1836,23 @@ export default function BrainViewer() {
     };
   }, []);
 
+  const canDeployNanobot = Boolean(
+    selectedStructure &&
+      activeScale === "macro" &&
+      observationContext.available &&
+      getStructureTargetPosition(selectedStructure),
+  );
+
+  const nanobotDeploymentReason = !selectedStructure
+    ? "Select a brain structure to resolve a Macro target."
+    : activeScale !== "macro"
+      ? "Operation not supported: no coordinate-resolved mission data at this scale."
+      : !observationContext.available
+        ? "Macro anatomy asset is not available."
+        : !getStructureTargetPosition(selectedStructure)
+          ? "Target coordinate is not yet resolved from the loaded anatomy mesh."
+          : "Macro simulation only: real viewer-mesh navigation with no clinical or physical claim.";
+
   return (
     <BrainWorkspace>
       <div className="relative h-full min-h-[600px] w-full overflow-hidden rounded-xl bg-black">
@@ -1959,6 +1867,8 @@ export default function BrainViewer() {
           activeScale={activeScale}
           selectedStructure={selectedStructure}
           nanobotCount={nanobots.length}
+          canDeployNanobot={canDeployNanobot}
+          deploymentReason={nanobotDeploymentReason}
           onScaleChange={handleScaleChange}
           onDeployMission={deployMission}
           onPauseNanobots={pauseNanobots}
@@ -1995,6 +1905,9 @@ export default function BrainViewer() {
             </div>
             {observationContext.scale !== "macro" && (
               <div className="mt-1 text-[10px] leading-relaxed text-white/50">
+                <span className="block text-red-100/70">
+                  Simulation visualization — no coordinate-resolved dataset.
+                </span>
                 {observationContext.message}
                 {observationContext.datasetLabel && (
                   <span className="mt-1 block text-white/35">
@@ -2083,6 +1996,12 @@ export default function BrainViewer() {
                   onScaleChange={handleScaleChange}
                   observationContext={observationContext}
                   onReturnToMacro={returnToMacro}
+                  activeNanobots={nanobots.filter((nanobot) =>
+                    nanobot.target?.structureId === selectedStructure?.id &&
+                    nanobot.state !== "completed" &&
+                    nanobot.state !== "error",
+                  )}
+                  onSelectNanobot={selectNanobot}
                   isIsolated={isolationMode}
                   interiorMode={interiorMode}
                   interiorOpacity={interiorOpacity}
@@ -2173,6 +2092,7 @@ export default function BrainViewer() {
               <div className="pointer-events-auto h-full">
                 <NanobotPanel
                   nanobots={nanobots}
+                  missionHistory={missionHistory}
                   selectedNanobotId={selectedNanobotId}
                   selectedStructure={selectedStructure}
                   observationContext={observationContext}

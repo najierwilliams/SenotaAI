@@ -23,6 +23,8 @@ interface BrainWorkspaceBarProps {
   activeScale: BrainScale;
   selectedStructure: BrainStructure | null;
   nanobotCount: number;
+  canDeployNanobot: boolean;
+  deploymentReason: string;
   onScaleChange: (
     scale: BrainScale,
   ) => void;
@@ -158,6 +160,8 @@ export default function BrainWorkspaceBar({
   activeScale,
   selectedStructure,
   nanobotCount,
+  canDeployNanobot,
+  deploymentReason,
   onScaleChange,
   onDeployMission,
   onPauseNanobots,
@@ -436,6 +440,9 @@ export default function BrainWorkspaceBar({
                     <div className="mt-1 text-xs text-white/75">
                       Neural micro-agents
                     </div>
+                    <div className="mt-1 max-w-44 text-[9px] leading-relaxed text-red-100/55">
+                      {deploymentReason}
+                    </div>
                   </div>
 
                   <span className="rounded-full bg-red-500/10 px-2 py-1 text-[8px] text-red-200">
@@ -478,7 +485,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Deploy Scout"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() =>
                   onDeployMission("scout")
                 }
@@ -486,7 +493,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Deploy Diagnostic"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() =>
                   onDeployMission(
                     "diagnostic",
@@ -496,7 +503,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Deploy Repair"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() =>
                   onDeployMission("repair")
                 }
@@ -504,7 +511,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Deploy Delivery"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() =>
                   onDeployMission(
                     "delivery",
@@ -514,7 +521,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Deploy Monitor"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() =>
                   onDeployMission("monitor")
                 }
@@ -676,11 +683,14 @@ export default function BrainWorkspaceBar({
                 <div className="mt-1 text-xs text-white/75">
                   Deploy and manage agents
                 </div>
+                <div className="mt-1 text-[9px] leading-relaxed text-red-100/55">
+                  {deploymentReason}
+                </div>
               </div>
 
               <MenuItem
                 label="Scout Mission"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() => {
                   onDeployMission(
                     "scout",
@@ -692,7 +702,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Diagnostic Mission"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() => {
                   onDeployMission(
                     "diagnostic",
@@ -704,7 +714,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Repair Mission"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() => {
                   onDeployMission(
                     "repair",
@@ -716,7 +726,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Delivery Mission"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() => {
                   onDeployMission(
                     "delivery",
@@ -728,7 +738,7 @@ export default function BrainWorkspaceBar({
 
               <MenuItem
                 label="Monitor Mission"
-                disabled={!selectedStructure}
+                disabled={!canDeployNanobot}
                 onClick={() => {
                   onDeployMission(
                     "monitor",

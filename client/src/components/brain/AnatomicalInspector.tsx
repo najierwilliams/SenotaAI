@@ -11,6 +11,10 @@ import type {
   BrainObservationContext,
 } from "./anatomy/BrainObservationContext";
 
+import type {
+  Nanobot,
+} from "./anatomy/NanobotTypes";
+
 import {
   getDatasetStatusLabel,
 } from "@shared/brainScience";
@@ -43,6 +47,8 @@ interface AnatomicalInspectorProps {
   ) => void;
   observationContext: BrainObservationContext;
   onReturnToMacro: () => void;
+  activeNanobots: Nanobot[];
+  onSelectNanobot: (id: string) => void;
 }
 
 export default function AnatomicalInspector({
@@ -65,6 +71,8 @@ export default function AnatomicalInspector({
   onScaleChange,
   observationContext,
   onReturnToMacro,
+  activeNanobots,
+  onSelectNanobot,
 }: AnatomicalInspectorProps) {
   if (!structure) {
     return (
@@ -253,6 +261,31 @@ export default function AnatomicalInspector({
                 </div>
               </div>
             )}
+
+            <div className="rounded-lg border border-red-500/15 bg-red-500/5 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-[10px] uppercase tracking-wider text-red-100/70">
+                  Target-linked nanobots
+                </div>
+                <div className="rounded-full bg-red-500/15 px-2 py-0.5 text-[9px] text-red-100/75">
+                  {activeNanobots.length}
+                </div>
+              </div>
+              {activeNanobots.length ? (
+                <div className="mt-2 space-y-1">
+                  {activeNanobots.map((nanobot) => (
+                    <button key={nanobot.id} type="button" onClick={() => onSelectNanobot(nanobot.id)} className="flex w-full items-center justify-between rounded-md border border-white/5 bg-black/10 px-2 py-1.5 text-left text-[10px] text-white/65 transition hover:bg-red-500/10 hover:text-white">
+                      <span className="truncate">{nanobot.metadata.label} · {nanobot.type}</span>
+                      <span className="ml-2 text-[9px] text-red-100/60">{nanobot.state}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-2 text-[10px] leading-relaxed text-white/40">
+                  No current fleet member is targeted to this canonical structure ID.
+                </div>
+              )}
+            </div>
 
             <div className="rounded-lg border border-white/10 bg-white/5 p-3">
               <div className="text-[10px] uppercase tracking-wider text-white/40">

@@ -1,3 +1,7 @@
+import {
+  useState,
+} from "react";
+
 import type {
   BrainStructure,
 } from "./anatomy/BrainStructureRegistry";
@@ -5,6 +9,7 @@ import type {
 import type {
   Nanobot,
   NanobotMissionPhase,
+  NanobotMissionResult,
   NanobotType,
 } from "./anatomy/NanobotTypes";
 
@@ -14,6 +19,7 @@ import type {
 
 interface NanobotPanelProps {
   nanobots: Nanobot[];
+  missionHistory: NanobotMissionResult[];
   selectedNanobotId: string | null;
   selectedStructure: BrainStructure | null;
   observationContext: BrainObservationContext;
@@ -53,6 +59,7 @@ function missionPhaseLabel(
 
 export default function NanobotPanel({
   nanobots,
+  missionHistory,
   selectedNanobotId,
   selectedStructure,
   observationContext,
@@ -63,6 +70,9 @@ export default function NanobotPanel({
   onClear,
   onSelectNanobot,
 }: NanobotPanelProps) {
+  const [showAllHistory, setShowAllHistory] =
+    useState(false);
+
   const activeCount =
     nanobots.filter(
       (nanobot) =>
@@ -90,6 +100,18 @@ export default function NanobotPanel({
     Boolean(selectedStructure) &&
     observationContext.scale === "macro" &&
     observationContext.available;
+
+  const deploymentReason = !selectedStructure
+    ? "Select a structure to resolve a Macro target."
+    : observationContext.scale !== "macro"
+      ? "Operation not supported: this scale has no coordinate-resolved mission data."
+      : !observationContext.available
+        ? "Macro anatomy asset is not available."
+        : "Macro simulation mission uses a real viewer-mesh target and a simulated lifecycle.";
+
+  const visibleHistory = showAllHistory
+    ? missionHistory
+    : missionHistory.slice(0, 5);
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-red-500/25 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
@@ -149,6 +171,10 @@ export default function NanobotPanel({
               Dataset: {observationContext.datasetLabel}
             </div>
           )}
+
+          <div className="mt-2 text-[9px] leading-relaxed text-white/40">
+            {deploymentReason}
+          </div>
         </div>
 
         {observationContext.scale !== "macro" && (
@@ -319,9 +345,49 @@ export default function NanobotPanel({
                   {labelize(
                     selectedNanobot
                       .target
-                      .scale,
+                      .observationScale,
                   )}
                 </div>
+              </div>
+            )}
+
+            {selectedNanobot.target && (
+              <div className="mt-3 space-y-1 rounded-md border border-white/5 bg-black/10 p-2 text-[9px] leading-relaxed text-white/45">
+                <div>
+                  Original observation: {labelize(selectedNanobot.target.observationScale)} · {selectedNanobot.target.observationContextLabel}
+                </div>
+                <div>
+                  Spatial status: {labelize(selectedNanobot.target.spatialStatus)}{selectedNanobot.target.targetResolution ? ` · ${selectedNanobot.target.targetResolution}` : ""}
+                </div>
+                <div>{selectedNanobot.target.spatialMessage}</div>
+                <div>
+                  Viewer presentation: {labelize(selectedNanobot.presentation.viewerScale)} · {selectedNanobot.presentation.contextLabel}
+                </div>
+                {selectedNanobot.presentation.transition && (
+                  <div className="text-red-100/65">
+                    View-only transition: {selectedNanobot.presentation.transition.message}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mt-3 grid grid-cols-2 gap-2 text-[9px] text-white/45">
+              <div>Distance to target: {selectedNanobot.telemetry.distanceToTarget.toFixed(3)}</div>
+              <div>Elapsed: {selectedNanobot.mission.totalElapsedSeconds.toFixed(1)}s</div>
+              <div>Mode: {labelize(selectedNanobot.mission.operationMode)}</div>
+              <div>Verification: {labelize(selectedNanobot.mission.verificationStatus)}</div>
+            </div>
+
+            {selectedNanobot.mission.result && (
+              <div className="mt-3 rounded-md border border-red-500/15 bg-red-500/5 p-2 text-[9px] leading-relaxed text-red-50/70">
+                <div className="font-medium text-red-100">Mission result · {selectedNanobot.mission.result.success ? "completed" : "failed"}</div>
+                <div className="mt-1">{selectedNanobot.mission.result.summary}</div>
+                {selectedNanobot.mission.result.findings.map((finding) => (
+                  <div key={finding.id} className="mt-1 text-white/55">{finding.title}: {finding.detail}</div>
+                ))}
+                {selectedNanobot.mission.result.warnings.map((warning) => (
+                  <div key={warning} className="mt-1 text-amber-100/70">Warning: {warning}</div>
+                ))}
               </div>
             )}
 
@@ -449,6 +515,33 @@ export default function NanobotPanel({
                   </button>
                 ),
               )}
+            </div>
+          </div>
+        )}
+
+        {missionHistory.length > 0 && (
+          <div className="rounded-lg border border-red-500/15 bg-red-500/5 p-3">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-wider text-red-100/70">
+                Mission history · {missionHistory.length}
+              </div>
+              {missionHistory.length > 5 && (
+                <button type="button" onClick={() => setShowAllHistory((value) => !value)} className="text-[9px] text-red-200/65 hover:text-red-100">
+                  {showAllHistory ? "Show latest" : "Show all"}
+                </button>
+              )}
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {visibleHistory.map((result) => (
+                <div key={result.missionId} className="rounded border border-white/5 bg-black/10 p-2 text-[9px] leading-relaxed text-white/50">
+                  <div className="flex justify-between gap-2 text-white/70">
+                    <span>#{result.missionNumber} · {labelize(result.mission)}</span>
+                    <span>{result.success ? "Verified" : result.status}</span>
+                  </div>
+                  <div>{result.target.structureName} · original {labelize(result.originalScale)} · {labelize(result.operationMode)}</div>
+                  <div>{result.summary}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}

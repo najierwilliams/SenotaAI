@@ -31,8 +31,8 @@ export function createNanobotVisual(
 
   const bodyMaterial =
     new THREE.MeshStandardMaterial({
-      color: 0x0088ff,
-      emissive: 0x0066ff,
+      color: 0xff2b2b,
+      emissive: 0xff0000,
       emissiveIntensity: 2,
       metalness: 0.35,
       roughness: 0.25,
@@ -58,7 +58,7 @@ export function createNanobotVisual(
 
   const glowMaterial =
     new THREE.MeshBasicMaterial({
-      color: 0x0088ff,
+      color: 0xff3030,
       transparent: true,
       opacity: 0.12,
       depthWrite: false,
@@ -87,7 +87,7 @@ export function createNanobotVisual(
 
   const ringMaterial =
     new THREE.MeshBasicMaterial({
-      color: 0x33aaff,
+      color: 0xff6b6b,
       transparent: true,
       opacity: 0.8,
     });
@@ -108,6 +108,11 @@ export function createNanobotVisual(
 
   root.userData.nanobotId =
     nanobot.id;
+  root.userData.observationScale =
+    nanobot.presentation.viewerScale;
+  root.scale.setScalar(
+    nanobot.presentation.visualScale,
+  );
 
   return {
     root,
@@ -122,11 +127,21 @@ export function updateNanobotVisual(
   nanobot: Nanobot,
   elapsedTime: number,
 ): void {
+  const displayPosition =
+    nanobot.presentation.transition
+      ? { x: 0, y: 0, z: 0 }
+      : nanobot.position;
+
   visual.root.position.set(
-    nanobot.position.x,
-    nanobot.position.y,
-    nanobot.position.z,
+    displayPosition.x,
+    displayPosition.y,
+    displayPosition.z,
   );
+  visual.root.scale.setScalar(
+    nanobot.presentation.visualScale,
+  );
+  visual.root.userData.observationScale =
+    nanobot.presentation.viewerScale;
 
   const pulse =
     1 +
