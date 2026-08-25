@@ -1,64 +1,53 @@
 import type { ReactNode } from "react";
 
 import type {
-  BrainWorkspaceContextValue,
   BrainWorkspacePanelId,
 } from "./BrainWorkspace";
 
 interface BrainWorkspacePanelProps {
   id: BrainWorkspacePanelId;
   title: string;
-  workspace: BrainWorkspaceContextValue;
+  subtitle?: string;
   children: ReactNode;
+  onMinimize: () => void;
+  onClose: () => void;
   className?: string;
-  position?: string;
 }
 
 export default function BrainWorkspacePanel({
-  id,
   title,
-  workspace,
+  subtitle,
   children,
+  onMinimize,
+  onClose,
   className = "",
-  position = "",
 }: BrainWorkspacePanelProps) {
-  if (!workspace.isOpen(id) || workspace.isMinimized(id)) {
-    return null;
-  }
-
-  const accent =
-    id === "nanobots"
-      ? "border-red-500/30 ring-red-500/10"
-      : "border-white/10 ring-white/10";
-
   return (
     <section
+      data-brain-workspace
       className={[
-        "pointer-events-auto absolute z-50 flex max-h-[calc(100%-4rem)] min-h-0 w-80 max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border bg-[#05080d]/92 text-white shadow-2xl backdrop-blur-2xl",
-        accent,
-        position || "right-4 top-16",
-        workspace.activePanel === id
-          ? "ring-1"
-          : "",
+        "relative overflow-hidden rounded-xl border border-white/10 bg-black/80 text-white shadow-2xl backdrop-blur-2xl",
         className,
       ].join(" ")}
-      aria-label={title}
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3">
+      <header className="flex h-10 items-center justify-between border-b border-white/10 bg-white/[0.03] px-3">
         <div className="min-w-0">
-          <div className="truncate text-[9px] font-medium uppercase tracking-[0.2em] text-white/40">
-            Luna Brain
-          </div>
-          <div className="mt-1 truncate text-sm font-semibold text-white/90">
+          <div className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/70">
             {title}
           </div>
+
+          {subtitle && (
+            <div className="truncate text-[8px] text-white/25">
+              {subtitle}
+            </div>
+          )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="ml-2 flex shrink-0 items-center gap-1">
           <button
             type="button"
-            onClick={() => workspace.minimizePanel(id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-sm text-white/45 transition hover:bg-white/10 hover:text-white"
+            onClick={onMinimize}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-xs text-white/45 transition hover:bg-white/10 hover:text-white"
             aria-label={`Minimize ${title}`}
             title="Minimize"
           >
@@ -67,17 +56,17 @@ export default function BrainWorkspacePanel({
 
           <button
             type="button"
-            onClick={() => workspace.closePanel(id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 text-sm text-white/45 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-white"
+            onClick={onClose}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-xs text-white/45 transition hover:bg-red-500/15 hover:text-white"
             aria-label={`Close ${title}`}
             title="Close"
           >
             ×
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="min-h-0 overflow-y-auto">
         {children}
       </div>
     </section>

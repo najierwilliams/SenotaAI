@@ -69,182 +69,96 @@ export default function BrainViewer() {
     useRef<THREE.Mesh | null>(null);
 
   const selectedOriginalMaterialRef =
-    useRef<
-      THREE.Material |
-      THREE.Material[] |
-      null
-    >(null);
+    useRef<THREE.Material | THREE.Material[] | null>(null);
 
   const brainRootRef =
     useRef<THREE.Group | null>(null);
 
   const cameraRef =
-    useRef<THREE.PerspectiveCamera | null>(
-      null,
-    );
+    useRef<THREE.PerspectiveCamera | null>(null);
 
   const controlsRef =
-    useRef<OrbitControls | null>(
-      null,
-    );
+    useRef<OrbitControls | null>(null);
 
   const brainMeshMapRef =
-    useRef<Map<string, THREE.Mesh>>(
+    useRef<Map<string, THREE.Mesh>>(new Map());
+
+  const interiorOriginalMaterialsRef =
+    useRef<Map<THREE.Mesh, THREE.Material | THREE.Material[]>>(
       new Map(),
     );
 
-  const interiorOriginalMaterialsRef =
-    useRef<
-      Map<
-        THREE.Mesh,
-        THREE.Material |
-          THREE.Material[]
-      >
-    >(new Map());
-
   const brainBoundsRef =
-    useRef<THREE.Box3 | null>(
-      null,
-    );
+    useRef<THREE.Box3 | null>(null);
 
   const nanobotRootRef =
-    useRef<THREE.Group | null>(
-      null,
-    );
+    useRef<THREE.Group | null>(null);
 
   const nanobotVisualsRef =
-    useRef<
-      Map<
-        string,
-        NanobotVisual
-      >
-    >(new Map());
+    useRef<Map<string, NanobotVisual>>(new Map());
 
   const nanobotPositionsRef =
-    useRef<
-      Map<
-        string,
-        NanobotPosition
-      >
-    >(new Map());
+    useRef<Map<string, NanobotPosition>>(new Map());
 
   const nanobotClockRef =
-    useRef(
-      new THREE.Clock(),
-    );
+    useRef(new THREE.Clock());
 
   const nanobotWorkStartedRef =
-    useRef<
-      Map<string, number>
-    >(new Map());
+    useRef<Map<string, number>>(new Map());
 
   const nanobotReturnStartedRef =
-    useRef<
-      Map<string, number>
-    >(new Map());
+    useRef<Map<string, number>>(new Map());
 
   const [status, setStatus] =
-    useState(
-      "Loading Luna's brain...",
-    );
+    useState("Loading Luna's brain...");
 
-  const [
-    selectedStructure,
-    setSelectedStructure,
-  ] =
-    useState<BrainStructure | null>(
-      null,
-    );
+  const [selectedStructure, setSelectedStructure] =
+    useState<BrainStructure | null>(null);
 
-  const [
-    isolationMode,
-    setIsolationMode,
-  ] = useState(false);
+  const [isolationMode, setIsolationMode] =
+    useState(false);
 
-  const [
-    interiorMode,
-    setInteriorMode,
-  ] = useState(false);
+  const [interiorMode, setInteriorMode] =
+    useState(false);
 
-  const [
-    interiorOpacity,
-    setInteriorOpacity,
-  ] = useState(0.12);
+  const [interiorOpacity, setInteriorOpacity] =
+    useState(0.12);
 
-  const [
-    cutawayDepth,
-    setCutawayDepth,
-  ] = useState(0);
+  const [cutawayDepth, setCutawayDepth] =
+    useState(0);
 
-  const [
-    crossSectionMode,
-    setCrossSectionMode,
-  ] = useState(false);
+  const [crossSectionMode, setCrossSectionMode] =
+    useState(false);
 
-  const [
-    crossSectionDepth,
-    setCrossSectionDepth,
-  ] = useState(0);
+  const [crossSectionDepth, setCrossSectionDepth] =
+    useState(0);
 
-  const [
-    brainStructures,
-    setBrainStructures,
-  ] = useState<BrainStructure[]>(
-    [],
-  );
+  const [brainStructures, setBrainStructures] =
+    useState<BrainStructure[]>([]);
 
   const brainStructuresRef =
-    useRef<BrainStructure[]>(
-      [],
-    );
+    useRef<BrainStructure[]>([]);
 
   brainStructuresRef.current =
     brainStructures;
 
-  const [
-    activeScale,
-    setActiveScale,
-  ] =
-    useState<BrainScale>(
-      "macro",
-    );
+  const [activeScale, setActiveScale] =
+    useState<BrainScale>("macro");
 
-  const [
-    scaleAsset,
-    setScaleAsset,
-  ] =
-    useState<BrainScaleAsset | null>(
-      null,
-    );
+  const [scaleAsset, setScaleAsset] =
+    useState<BrainScaleAsset | null>(null);
 
-  const [
-    scaleAssetLoading,
-    setScaleAssetLoading,
-  ] =
+  const [scaleAssetLoading, setScaleAssetLoading] =
     useState(false);
 
-  const [
-    scaleAssetError,
-    setScaleAssetError,
-  ] =
-    useState<string | null>(
-      null,
-    );
+  const [scaleAssetError, setScaleAssetError] =
+    useState<string | null>(null);
 
-  const [
-    nanobots,
-    setNanobots,
-  ] = useState<Nanobot[]>(
-    [],
-  );
+  const [nanobots, setNanobots] =
+    useState<Nanobot[]>([]);
 
-  const [
-    selectedNanobotId,
-    setSelectedNanobotId,
-  ] =
-    useState<string | null>(
-      null,
-    );
+  const [selectedNanobotId, setSelectedNanobotId] =
+    useState<string | null>(null);
 
   const workspace =
     useBrainWorkspaceState();
@@ -282,11 +196,7 @@ export default function BrainViewer() {
   const clippingPlaneRef =
     useRef(
       new THREE.Plane(
-        new THREE.Vector3(
-          1,
-          0,
-          0,
-        ),
+        new THREE.Vector3(1, 0, 0),
         0,
       ),
     );
@@ -294,12 +204,8 @@ export default function BrainViewer() {
   const restoreInteriorMode =
     () => {
       interiorOriginalMaterialsRef.current.forEach(
-        (
-          originalMaterial,
-          mesh,
-        ) => {
-          mesh.material =
-            originalMaterial;
+        (originalMaterial, mesh) => {
+          mesh.material = originalMaterial;
         },
       );
 
@@ -307,10 +213,7 @@ export default function BrainViewer() {
     };
 
   const applyInteriorMode =
-    (
-      selectedMesh:
-        THREE.Mesh | null,
-    ) => {
+    (selectedMesh: THREE.Mesh | null) => {
       const brainRoot =
         brainRootRef.current;
 
@@ -320,75 +223,48 @@ export default function BrainViewer() {
 
       interiorOriginalMaterialsRef.current.clear();
 
-      brainRoot.traverse(
-        (object) => {
-          if (
-            !(
-              object instanceof
-              THREE.Mesh
-            )
-          ) {
-            return;
-          }
+      brainRoot.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) {
+          return;
+        }
 
-          if (
-            object ===
-            selectedMesh
-          ) {
-            return;
-          }
+        if (object === selectedMesh) {
+          return;
+        }
 
-          const originalMaterial =
-            object.material;
+        const originalMaterial =
+          object.material;
 
-          interiorOriginalMaterialsRef.current.set(
-            object,
-            originalMaterial,
-          );
+        interiorOriginalMaterialsRef.current.set(
+          object,
+          originalMaterial,
+        );
 
-          if (
-            Array.isArray(
-              originalMaterial,
-            )
-          ) {
-            object.material =
-              originalMaterial.map(
-                (
-                  material,
-                ) => {
-                  const clone =
-                    material.clone();
+        if (Array.isArray(originalMaterial)) {
+          object.material =
+            originalMaterial.map((material) => {
+              const clone =
+                material.clone();
 
-                  clone.transparent =
-                    true;
+              clone.transparent = true;
+              clone.opacity =
+                interiorOpacityRef.current;
+              clone.depthWrite = false;
 
-                  clone.opacity =
-                    interiorOpacityRef.current;
+              return clone;
+            });
+        } else {
+          const clone =
+            originalMaterial.clone();
 
-                  clone.depthWrite =
-                    false;
+          clone.transparent = true;
+          clone.opacity =
+            interiorOpacityRef.current;
+          clone.depthWrite = false;
 
-                  return clone;
-                },
-              );
-          } else {
-            const clone =
-              originalMaterial.clone();
-
-            clone.transparent =
-              true;
-
-            clone.opacity =
-              interiorOpacityRef.current;
-
-            clone.depthWrite =
-              false;
-
-            object.material =
-              clone;
-          }
-        },
-      );
+          object.material = clone;
+        }
+      });
     };
 
   const restoreSelectedMesh =
@@ -399,10 +275,7 @@ export default function BrainViewer() {
       const originalMaterial =
         selectedOriginalMaterialRef.current;
 
-      if (
-        !mesh ||
-        !originalMaterial
-      ) {
+      if (!mesh || !originalMaterial) {
         return;
       }
 
@@ -417,10 +290,7 @@ export default function BrainViewer() {
     };
 
   const setBrainIsolation =
-    (
-      isolateMesh:
-        THREE.Mesh | null,
-    ) => {
+    (isolateMesh: THREE.Mesh | null) => {
       const brainRoot =
         brainRootRef.current;
 
@@ -428,19 +298,13 @@ export default function BrainViewer() {
         return;
       }
 
-      brainRoot.traverse(
-        (object) => {
-          if (
-            object instanceof
-            THREE.Mesh
-          ) {
-            object.visible =
-              !isolateMesh ||
-              object ===
-                isolateMesh;
-          }
-        },
-      );
+      brainRoot.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.visible =
+            !isolateMesh ||
+            object === isolateMesh;
+        }
+      });
     };
 
   const restoreBrainVisibility =
@@ -452,17 +316,17 @@ export default function BrainViewer() {
         return;
       }
 
-      brainRoot.traverse(
-        (object) => {
-          if (
-            object instanceof
-            THREE.Mesh
-          ) {
-            object.visible =
-              true;
-          }
-        },
-      );
+      brainRoot.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.visible = true;
+        }
+      });
+    };
+
+  const resetCamera =
+    () => {
+      controlsRef.current?.reset();
+      setStatus("Brain view reset");
     };
 
   const focusSelectedStructure =
@@ -476,53 +340,32 @@ export default function BrainViewer() {
       const controls =
         controlsRef.current;
 
-      if (
-        !mesh ||
-        !camera ||
-        !controls
-      ) {
+      if (!mesh || !camera || !controls) {
         return;
       }
 
       const box =
-        new THREE.Box3().setFromObject(
-          mesh,
-        );
+        new THREE.Box3().setFromObject(mesh);
 
       const center =
-        box.getCenter(
-          new THREE.Vector3(),
-        );
+        box.getCenter(new THREE.Vector3());
 
       const size =
-        box.getSize(
-          new THREE.Vector3(),
-        );
+        box.getSize(new THREE.Vector3());
 
       const maxSize =
-        Math.max(
-          size.x,
-          size.y,
-          size.z,
-        );
+        Math.max(size.x, size.y, size.z);
 
       const distance =
-        Math.max(
-          maxSize * 4,
-          0.025,
-        );
+        Math.max(maxSize * 4, 0.025);
 
       camera.position.set(
         center.x,
         center.y,
-        center.z +
-          distance,
+        center.z + distance,
       );
 
-      controls.target.copy(
-        center,
-      );
-
+      controls.target.copy(center);
       controls.update();
 
       setStatus(
@@ -534,19 +377,14 @@ export default function BrainViewer() {
     };
 
   const selectBrainStructure =
-    (
-      structure:
-        BrainStructure,
-    ) => {
+    (structure: BrainStructure) => {
       const mesh =
         brainMeshMapRef.current.get(
           structure.id,
         );
 
       if (!mesh) {
-        setSelectedStructure(
-          structure,
-        );
+        setSelectedStructure(structure);
 
         setStatus(
           `Structure not available: ${structure.displayName}`,
@@ -564,36 +402,23 @@ export default function BrainViewer() {
       selectedOriginalMaterialRef.current =
         mesh.material;
 
-      if (
-        Array.isArray(
-          mesh.material,
-        )
-      ) {
+      if (Array.isArray(mesh.material)) {
         mesh.material =
-          mesh.material.map(
-            (material) => {
-              const clone =
-                material.clone();
+          mesh.material.map((material) => {
+            const clone =
+              material.clone();
 
-              if (
-                clone instanceof
-                THREE.MeshStandardMaterial
-              ) {
-                clone.color.set(
-                  0x0088ff,
-                );
+            if (
+              clone instanceof
+              THREE.MeshStandardMaterial
+            ) {
+              clone.color.set(0x0088ff);
+              clone.emissive.set(0x0066ff);
+              clone.emissiveIntensity = 1.5;
+            }
 
-                clone.emissive.set(
-                  0x0066ff,
-                );
-
-                clone.emissiveIntensity =
-                  1.5;
-              }
-
-              return clone;
-            },
-          );
+            return clone;
+          });
       } else {
         const clone =
           mesh.material.clone();
@@ -602,20 +427,12 @@ export default function BrainViewer() {
           clone instanceof
           THREE.MeshStandardMaterial
         ) {
-          clone.color.set(
-            0x0088ff,
-          );
-
-          clone.emissive.set(
-            0x0066ff,
-          );
-
-          clone.emissiveIntensity =
-            1.5;
+          clone.color.set(0x0088ff);
+          clone.emissive.set(0x0066ff);
+          clone.emissiveIntensity = 1.5;
         }
 
-        mesh.material =
-          clone;
+        mesh.material = clone;
       }
 
       selectedMeshRef.current =
@@ -628,27 +445,17 @@ export default function BrainViewer() {
       setIsolationMode(false);
 
       const box =
-        new THREE.Box3().setFromObject(
-          mesh,
-        );
+        new THREE.Box3().setFromObject(mesh);
 
       const center =
-        box.getCenter(
-          new THREE.Vector3(),
-        );
+        box.getCenter(new THREE.Vector3());
 
       const size =
-        box.getSize(
-          new THREE.Vector3(),
-        );
+        box.getSize(new THREE.Vector3());
 
       const distance =
         Math.max(
-          Math.max(
-            size.x,
-            size.y,
-            size.z,
-          ) * 4,
+          Math.max(size.x, size.y, size.z) * 4,
           0.025,
         );
 
@@ -658,21 +465,14 @@ export default function BrainViewer() {
       const controls =
         controlsRef.current;
 
-      if (
-        camera &&
-        controls
-      ) {
+      if (camera && controls) {
         camera.position.set(
           center.x,
           center.y,
-          center.z +
-            distance,
+          center.z + distance,
         );
 
-        controls.target.copy(
-          center,
-        );
-
+        controls.target.copy(center);
         controls.update();
       }
 
@@ -682,10 +482,7 @@ export default function BrainViewer() {
     };
 
   const getStructureTargetPosition =
-    (
-      structure:
-        BrainStructure,
-    ): NanobotPosition => {
+    (structure: BrainStructure): NanobotPosition => {
       const mesh =
         brainMeshMapRef.current.get(
           structure.id,
@@ -693,14 +490,10 @@ export default function BrainViewer() {
 
       if (mesh) {
         const box =
-          new THREE.Box3().setFromObject(
-            mesh,
-          );
+          new THREE.Box3().setFromObject(mesh);
 
         const center =
-          box.getCenter(
-            new THREE.Vector3(),
-          );
+          box.getCenter(new THREE.Vector3());
 
         return {
           x: center.x,
@@ -714,9 +507,7 @@ export default function BrainViewer() {
 
       if (bounds) {
         const center =
-          bounds.getCenter(
-            new THREE.Vector3(),
-          );
+          bounds.getCenter(new THREE.Vector3());
 
         return {
           x: center.x,
@@ -725,11 +516,7 @@ export default function BrainViewer() {
         };
       }
 
-      return {
-        x: 0,
-        y: 0,
-        z: 0,
-      };
+      return { x: 0, y: 0, z: 0 };
     };
 
   const getNanobotStartPosition =
@@ -738,44 +525,27 @@ export default function BrainViewer() {
         brainBoundsRef.current;
 
       if (!bounds) {
-        return {
-          x: 0,
-          y: 0,
-          z: 0,
-        };
+        return { x: 0, y: 0, z: 0 };
       }
+
+      const size =
+        bounds.getSize(new THREE.Vector3());
 
       return {
         x:
           bounds.min.x -
-          Math.max(
-            bounds.getSize(
-              new THREE.Vector3(),
-            ).x *
-              0.2,
-            0.01,
-          ),
-
+          Math.max(size.x * 0.2, 0.01),
         y:
           bounds.min.y +
-          bounds.getSize(
-            new THREE.Vector3(),
-          ).y *
-            0.5,
-
+          size.y * 0.5,
         z:
           bounds.min.z +
-          bounds.getSize(
-            new THREE.Vector3(),
-          ).z *
-            0.5,
+          size.z * 0.5,
       };
     };
 
   const getNanobotWorkDuration =
-    (
-      type: NanobotType,
-    ): number => {
+    (type: NanobotType): number => {
       switch (type) {
         case "diagnostic":
           return 4;
@@ -792,9 +562,7 @@ export default function BrainViewer() {
     };
 
   const getNanobotReturnProgress =
-    (
-      nanobot: Nanobot,
-    ): number => {
+    (nanobot: Nanobot): number => {
       const start =
         nanobotReturnStartedRef.current.get(
           nanobot.id,
@@ -804,14 +572,12 @@ export default function BrainViewer() {
         return 0;
       }
 
-      const duration = 3;
-
       return Math.min(
         1,
         Math.max(
           0,
           (performance.now() - start) /
-            (duration * 1000),
+            3000,
         ),
       );
     };
@@ -824,12 +590,8 @@ export default function BrainViewer() {
     };
 
   const deployNanobot =
-    (
-      type: NanobotType,
-    ) => {
-      if (
-        !selectedStructure
-      ) {
+    (type: NanobotType) => {
+      if (!selectedStructure) {
         setStatus(
           "Select a brain structure before deploying a nanobot",
         );
@@ -838,16 +600,16 @@ export default function BrainViewer() {
       }
 
       const nanobot =
-        nanobotRegistry.create(
-          type,
-        );
+        nanobotRegistry.create(type);
 
       nanobot.position =
         getNanobotStartPosition();
 
-      nanobotRegistry.register(
-        nanobot,
-      );
+      nanobot.deploymentPosition = {
+        ...nanobot.position,
+      };
+
+      nanobotRegistry.register(nanobot);
 
       nanobotRegistry.setState(
         nanobot.id,
@@ -860,17 +622,13 @@ export default function BrainViewer() {
       );
 
       const visual =
-        createNanobotVisual(
-          nanobot,
-        );
+        createNanobotVisual(nanobot);
 
       const nanobotRoot =
         nanobotRootRef.current;
 
       if (nanobotRoot) {
-        nanobotRoot.add(
-          visual.root,
-        );
+        nanobotRoot.add(visual.root);
       }
 
       nanobotVisualsRef.current.set(
@@ -880,9 +638,7 @@ export default function BrainViewer() {
 
       nanobotPositionsRef.current.set(
         nanobot.id,
-        {
-          ...nanobot.position,
-        },
+        { ...nanobot.position },
       );
 
       setSelectedNanobotId(
@@ -896,56 +652,47 @@ export default function BrainViewer() {
       );
     };
 
+  const deployMission =
+    (type: NanobotType) => {
+      deployNanobot(type);
+      workspace.closeMenu();
+    };
+
   const pauseNanobots =
     () => {
       nanobotRegistry
         .getAll()
-        .forEach(
-          (nanobot) => {
-            if (
-              nanobot.state ===
-                "navigating" ||
-              nanobot.state ===
-                "deploying"
-            ) {
-              nanobotRegistry.setState(
-                nanobot.id,
-                "paused",
-              );
-            }
-          },
-        );
+        .forEach((nanobot) => {
+          if (
+            nanobot.state === "navigating" ||
+            nanobot.state === "deploying"
+          ) {
+            nanobotRegistry.setState(
+              nanobot.id,
+              "paused",
+            );
+          }
+        });
 
       syncNanobotState();
-
-      setStatus(
-        "Nanobot navigation paused",
-      );
+      setStatus("Nanobot navigation paused");
     };
 
   const resumeNanobots =
     () => {
       nanobotRegistry
         .getAll()
-        .forEach(
-          (nanobot) => {
-            if (
-              nanobot.state ===
-              "paused"
-            ) {
-              nanobotRegistry.setState(
-                nanobot.id,
-                "navigating",
-              );
-            }
-          },
-        );
+        .forEach((nanobot) => {
+          if (nanobot.state === "paused") {
+            nanobotRegistry.setState(
+              nanobot.id,
+              "navigating",
+            );
+          }
+        });
 
       syncNanobotState();
-
-      setStatus(
-        "Nanobot navigation resumed",
-      );
+      setStatus("Nanobot navigation resumed");
     };
 
   const returnNanobots =
@@ -955,29 +702,24 @@ export default function BrainViewer() {
 
       nanobotRegistry
         .getAll()
-        .forEach(
-          (nanobot) => {
-            if (
-              nanobot.state !==
-                "completed" &&
-              nanobot.state !==
-                "returning"
-            ) {
-              nanobotReturnStartedRef.current.set(
-                nanobot.id,
-                now,
-              );
+        .forEach((nanobot) => {
+          if (
+            nanobot.state !== "completed" &&
+            nanobot.state !== "returning"
+          ) {
+            nanobotReturnStartedRef.current.set(
+              nanobot.id,
+              now,
+            );
 
-              nanobotRegistry.setState(
-                nanobot.id,
-                "returning",
-              );
-            }
-          },
-        );
+            nanobotRegistry.setState(
+              nanobot.id,
+              "returning",
+            );
+          }
+        });
 
       syncNanobotState();
-
       setStatus(
         "Nanobots returning to deployment point",
       );
@@ -986,21 +728,15 @@ export default function BrainViewer() {
   const clearNanobots =
     () => {
       nanobotVisualsRef.current.forEach(
-        (
-          visual,
-        ) => {
+        (visual) => {
           const root =
             nanobotRootRef.current;
 
           if (root) {
-            root.remove(
-              visual.root,
-            );
+            root.remove(visual.root);
           }
 
-          disposeNanobotVisual(
-            visual,
-          );
+          disposeNanobotVisual(visual);
         },
       );
 
@@ -1012,10 +748,7 @@ export default function BrainViewer() {
       nanobotRegistry.clear();
 
       setNanobots([]);
-
-      setSelectedNanobotId(
-        null,
-      );
+      setSelectedNanobotId(null);
 
       setStatus(
         selectedStructure
@@ -1025,21 +758,15 @@ export default function BrainViewer() {
     };
 
   const selectNanobot =
-    (
-      id: string,
-    ) => {
+    (id: string) => {
       const nanobot =
-        nanobotRegistry.get(
-          id,
-        );
+        nanobotRegistry.get(id);
 
       if (!nanobot) {
         return;
       }
 
-      setSelectedNanobotId(
-        id,
-      );
+      setSelectedNanobotId(id);
 
       setStatus(
         `${nanobot.metadata.label} · ${nanobot.state}${
@@ -1051,25 +778,15 @@ export default function BrainViewer() {
     };
 
   const handleScaleChange =
-    (
-      scale: BrainScale,
-    ) => {
+    (scale: BrainScale) => {
       setActiveScale(scale);
 
-      const labels: Record<
-        BrainScale,
-        string
-      > = {
-        macro:
-          "Macro anatomy",
-        tissue:
-          "Tissue scale",
-        cellular:
-          "Cellular scale",
-        subcellular:
-          "Subcellular scale",
-        molecular:
-          "Molecular scale",
+      const labels: Record<BrainScale, string> = {
+        macro: "Macro anatomy",
+        tissue: "Tissue scale",
+        cellular: "Cellular scale",
+        subcellular: "Subcellular scale",
+        molecular: "Molecular scale",
       };
 
       setStatus(
@@ -1079,32 +796,19 @@ export default function BrainViewer() {
 
   const handleScaleAssetStateChange =
     useCallback(
-      (
-        state: {
-          loading: boolean;
-          error: string | null;
-          asset:
-            | BrainScaleAsset
-            | null;
-        },
-      ) => {
-        setScaleAssetLoading(
-          state.loading,
-        );
-
-        setScaleAssetError(
-          state.error,
-        );
-
-        setScaleAsset(
-          state.asset,
-        );
+      (state: {
+        loading: boolean;
+        error: string | null;
+        asset: BrainScaleAsset | null;
+      }) => {
+        setScaleAssetLoading(state.loading);
+        setScaleAssetError(state.error);
+        setScaleAsset(state.asset);
 
         if (state.loading) {
           setStatus(
             "Loading selected brain scale...",
           );
-
           return;
         }
 
@@ -1112,7 +816,6 @@ export default function BrainViewer() {
           setStatus(
             `Scale layer error: ${state.error}`,
           );
-
           return;
         }
 
@@ -1129,6 +832,193 @@ export default function BrainViewer() {
       [],
     );
 
+  const updateInteriorOpacity =
+    (value: number) => {
+      const next =
+        Math.min(
+          0.5,
+          Math.max(0.03, value),
+        );
+
+      interiorOpacityRef.current = next;
+      setInteriorOpacity(next);
+
+      if (!interiorMode) {
+        return;
+      }
+
+      interiorOriginalMaterialsRef.current.forEach(
+        (_original, mesh) => {
+          const material =
+            mesh.material;
+
+          if (Array.isArray(material)) {
+            material.forEach((item) => {
+              item.opacity = next;
+              item.transparent = true;
+              item.depthWrite = false;
+            });
+          } else {
+            material.opacity = next;
+            material.transparent = true;
+            material.depthWrite = false;
+          }
+        },
+      );
+    };
+
+  const updateCutawayDepth =
+    (value: number) => {
+      const next =
+        Math.min(
+          1,
+          Math.max(0, value),
+        );
+
+      setCutawayDepth(next);
+      cutawayDepthRef.current = next;
+    };
+
+  const toggleInteriorMode =
+    () => {
+      const mesh =
+        selectedMeshRef.current;
+
+      if (!mesh) {
+        setStatus(
+          "Select a brain structure first",
+        );
+        return;
+      }
+
+      if (interiorMode) {
+        restoreInteriorMode();
+        setInteriorMode(false);
+
+        setStatus(
+          `Selected: ${
+            selectedStructure?.displayName ??
+            mesh.name
+          }`,
+        );
+        return;
+      }
+
+      applyInteriorMode(mesh);
+      setInteriorMode(true);
+
+      setStatus(
+        `Interior view: ${
+          selectedStructure?.displayName ??
+          mesh.name
+        }`,
+      );
+    };
+
+  const toggleCrossSectionMode =
+    () => {
+      const brainRoot =
+        brainRootRef.current;
+
+      const bounds =
+        brainBoundsRef.current;
+
+      if (!brainRoot || !bounds) {
+        return;
+      }
+
+      if (crossSectionMode) {
+        brainRoot.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) {
+            return;
+          }
+
+          const material =
+            object.material;
+
+          if (Array.isArray(material)) {
+            material.forEach((item) => {
+              item.clippingPlanes = [];
+            });
+          } else {
+            material.clippingPlanes = [];
+          }
+        });
+
+        setCrossSectionMode(false);
+        return;
+      }
+
+      const position =
+        THREE.MathUtils.lerp(
+          bounds.min.x,
+          bounds.max.x,
+          crossSectionDepth,
+        );
+
+      clippingPlaneRef.current.set(
+        new THREE.Vector3(1, 0, 0),
+        -position,
+      );
+
+      brainRoot.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) {
+          return;
+        }
+
+        const material =
+          object.material;
+
+        if (Array.isArray(material)) {
+          material.forEach((item) => {
+            item.clippingPlanes = [
+              clippingPlaneRef.current,
+            ];
+          });
+        } else {
+          material.clippingPlanes = [
+            clippingPlaneRef.current,
+          ];
+        }
+      });
+
+      setCrossSectionMode(true);
+    };
+
+  const updateCrossSectionDepth =
+    (value: number) => {
+      setCrossSectionDepth(value);
+      crossSectionDepthRef.current = value;
+
+      if (crossSectionMode) {
+        toggleCrossSectionMode();
+
+        window.setTimeout(
+          () => toggleCrossSectionMode(),
+          0,
+        );
+      }
+    };
+
+  const handleViewReset =
+    () => {
+      controlsRef.current?.reset();
+      setStatus("Brain view reset");
+      workspace.closeMenu();
+    };
+
+  const handleViewCrossSection =
+    () => {
+      toggleCrossSectionMode();
+      workspace.closeMenu();
+    };
+
+  const handleViewInterior =
+    () => {
+      toggleInteriorMode();
+      workspace.closeMenu();
+    };
+
   useEffect(() => {
     const container =
       containerRef.current;
@@ -1141,24 +1031,18 @@ export default function BrainViewer() {
       new THREE.Scene();
 
     scene.background =
-      new THREE.Color(
-        0x080b10,
-      );
+      new THREE.Color(0x080b10);
 
     const camera =
       new THREE.PerspectiveCamera(
         45,
         container.clientWidth /
-          Math.max(
-            container.clientHeight,
-            1,
-          ),
+          Math.max(container.clientHeight, 1),
         0.000001,
         1000,
       );
 
-    cameraRef.current =
-      camera;
+    cameraRef.current = camera;
 
     const renderer =
       new THREE.WebGLRenderer({
@@ -1166,25 +1050,18 @@ export default function BrainViewer() {
       });
 
     renderer.setPixelRatio(
-      Math.min(
-        window.devicePixelRatio,
-        2,
-      ),
+      Math.min(window.devicePixelRatio, 2),
     );
 
     renderer.setSize(
       container.clientWidth,
-      Math.max(
-        container.clientHeight,
-        1,
-      ),
+      Math.max(container.clientHeight, 1),
     );
 
     renderer.outputColorSpace =
       THREE.SRGBColorSpace;
 
-    renderer.localClippingEnabled =
-      true;
+    renderer.localClippingEnabled = true;
 
     container.appendChild(
       renderer.domElement,
@@ -1196,9 +1073,7 @@ export default function BrainViewer() {
         2.5,
       );
 
-    scene.add(
-      ambientLight,
-    );
+    scene.add(ambientLight);
 
     const keyLight =
       new THREE.DirectionalLight(
@@ -1206,15 +1081,8 @@ export default function BrainViewer() {
         3,
       );
 
-    keyLight.position.set(
-      2,
-      3,
-      4,
-    );
-
-    scene.add(
-      keyLight,
-    );
+    keyLight.position.set(2, 3, 4);
+    scene.add(keyLight);
 
     const fillLight =
       new THREE.DirectionalLight(
@@ -1222,28 +1090,15 @@ export default function BrainViewer() {
         1.5,
       );
 
-    fillLight.position.set(
-      -3,
-      1,
-      2,
-    );
-
-    scene.add(
-      fillLight,
-    );
+    fillLight.position.set(-3, 1, 2);
+    scene.add(fillLight);
 
     const brainRoot =
       new THREE.Group();
 
-    brainRoot.name =
-      "luna-brain";
-
-    scene.add(
-      brainRoot,
-    );
-
-    brainRootRef.current =
-      brainRoot;
+    brainRoot.name = "luna-brain";
+    scene.add(brainRoot);
+    brainRootRef.current = brainRoot;
 
     const nanobotRoot =
       new THREE.Group();
@@ -1251,10 +1106,7 @@ export default function BrainViewer() {
     nanobotRoot.name =
       "luna-nanobots";
 
-    scene.add(
-      nanobotRoot,
-    );
-
+    scene.add(nanobotRoot);
     nanobotRootRef.current =
       nanobotRoot;
 
@@ -1264,38 +1116,20 @@ export default function BrainViewer() {
         renderer.domElement,
       );
 
-    controlsRef.current =
-      controls;
-
-    controls.enableDamping =
-      true;
-
-    controls.dampingFactor =
-      0.05;
-
+    controlsRef.current = controls;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
     controls.mouseButtons.LEFT =
       THREE.MOUSE.ROTATE;
-
     controls.mouseButtons.RIGHT =
       THREE.MOUSE.PAN;
-
     controls.mouseButtons.MIDDLE =
       THREE.MOUSE.DOLLY;
-
-    controls.enableZoom =
-      true;
-
-    controls.enablePan =
-      true;
-
-    controls.screenSpacePanning =
-      true;
-
-    controls.minDistance =
-      0.02;
-
-    controls.maxDistance =
-      2;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.screenSpacePanning = true;
+    controls.minDistance = 0.02;
+    controls.maxDistance = 2;
 
     const raycaster =
       new THREE.Raycaster();
@@ -1307,47 +1141,30 @@ export default function BrainViewer() {
     let pointerDownY = 0;
 
     const highlightMesh =
-      (
-        mesh: THREE.Mesh,
-      ) => {
+      (mesh: THREE.Mesh) => {
         const original =
           mesh.material;
 
         selectedOriginalMaterialRef.current =
           original;
 
-        if (
-          Array.isArray(
-            original,
-          )
-        ) {
+        if (Array.isArray(original)) {
           mesh.material =
-            original.map(
-              (
-                material,
-              ) => {
-                const clone =
-                  material.clone();
+            original.map((material) => {
+              const clone =
+                material.clone();
 
-                if (
-                  clone instanceof
-                  THREE.MeshStandardMaterial
-                ) {
-                  clone.color.set(
-                    0x0088ff,
-                  );
+              if (
+                clone instanceof
+                THREE.MeshStandardMaterial
+              ) {
+                clone.color.set(0x0088ff);
+                clone.emissive.set(0x0066ff);
+                clone.emissiveIntensity = 1.5;
+              }
 
-                  clone.emissive.set(
-                    0x0066ff,
-                  );
-
-                  clone.emissiveIntensity =
-                    1.5;
-                }
-
-                return clone;
-              },
-            );
+              return clone;
+            });
         } else {
           const clone =
             original.clone();
@@ -1356,20 +1173,12 @@ export default function BrainViewer() {
             clone instanceof
             THREE.MeshStandardMaterial
           ) {
-            clone.color.set(
-              0x0088ff,
-            );
-
-            clone.emissive.set(
-              0x0066ff,
-            );
-
-            clone.emissiveIntensity =
-              1.5;
+            clone.color.set(0x0088ff);
+            clone.emissive.set(0x0066ff);
+            clone.emissiveIntensity = 1.5;
           }
 
-          mesh.material =
-            clone;
+          mesh.material = clone;
         }
 
         selectedMeshRef.current =
@@ -1377,36 +1186,20 @@ export default function BrainViewer() {
       };
 
     const handlePointerDown =
-      (
-        event: PointerEvent,
-      ) => {
-        pointerDownX =
-          event.clientX;
-
-        pointerDownY =
-          event.clientY;
+      (event: PointerEvent) => {
+        pointerDownX = event.clientX;
+        pointerDownY = event.clientY;
       };
 
     const handlePointerUp =
-      (
-        event: PointerEvent,
-      ) => {
+      (event: PointerEvent) => {
         const movementX =
-          Math.abs(
-            event.clientX -
-              pointerDownX,
-          );
+          Math.abs(event.clientX - pointerDownX);
 
         const movementY =
-          Math.abs(
-            event.clientY -
-              pointerDownY,
-          );
+          Math.abs(event.clientY - pointerDownY);
 
-        if (
-          movementX > 5 ||
-          movementY > 5
-        ) {
+        if (movementX > 5 || movementY > 5) {
           return;
         }
 
@@ -1414,25 +1207,20 @@ export default function BrainViewer() {
           renderer.domElement.getBoundingClientRect();
 
         pointer.x =
-          ((event.clientX -
-            rect.left) /
+          ((event.clientX - rect.left) /
             rect.width) *
             2 -
           1;
 
         pointer.y =
           -(
-            ((event.clientY -
-              rect.top) /
+            ((event.clientY - rect.top) /
               rect.height) *
               2 -
             1
           );
 
-        raycaster.setFromCamera(
-          pointer,
-          camera,
-        );
+        raycaster.setFromCamera(pointer, camera);
 
         const intersections =
           raycaster.intersectObjects(
@@ -1440,41 +1228,22 @@ export default function BrainViewer() {
             true,
           );
 
-        if (
-          intersections.length ===
-          0
-        ) {
+        if (intersections.length === 0) {
           restoreSelectedMesh();
-
-          setSelectedStructure(
-            null,
-          );
-
-          setStatus(
-            "Luna's brain online",
-          );
-
+          setSelectedStructure(null);
+          setStatus("Luna's brain online");
           return;
         }
 
         const object =
-          intersections[0]
-            .object;
+          intersections[0].object;
 
-        if (
-          !(
-            object instanceof
-            THREE.Mesh
-          )
-        ) {
+        if (!(object instanceof THREE.Mesh)) {
           return;
         }
 
         restoreSelectedMesh();
-
-        highlightMesh(
-          object,
-        );
+        highlightMesh(object);
 
         const registry =
           buildBrainStructureRegistry([
@@ -1482,14 +1251,10 @@ export default function BrainViewer() {
           ]);
 
         const structure =
-          registry[0] ??
-          null;
+          registry[0] ?? null;
 
         if (structure) {
-          setSelectedStructure(
-            structure,
-          );
-
+          setSelectedStructure(structure);
           setStatus(
             `Selected: ${structure.displayName}`,
           );
@@ -1519,28 +1284,18 @@ export default function BrainViewer() {
         const brain =
           gltf.scene;
 
-        brainRoot.add(
-          brain,
-        );
+        brainRoot.add(brain);
 
         const box =
-          new THREE.Box3().setFromObject(
-            brain,
-          );
+          new THREE.Box3().setFromObject(brain);
 
         const center =
-          box.getCenter(
-            new THREE.Vector3(),
-          );
+          box.getCenter(new THREE.Vector3());
 
         const size =
-          box.getSize(
-            new THREE.Vector3(),
-          );
+          box.getSize(new THREE.Vector3());
 
-        brain.position.sub(
-          center,
-        );
+        brain.position.sub(center);
 
         const maxDimension =
           Math.max(
@@ -1549,90 +1304,60 @@ export default function BrainViewer() {
             size.z,
           );
 
-        if (
-          maxDimension > 0
-        ) {
+        if (maxDimension > 0) {
           brain.scale.setScalar(
-            0.17 /
-              maxDimension,
+            0.17 / maxDimension,
           );
         }
 
         const scaledBox =
-          new THREE.Box3().setFromObject(
-            brain,
-          );
+          new THREE.Box3().setFromObject(brain);
 
         brainBoundsRef.current =
           scaledBox.clone();
 
         const scaledSize =
-          scaledBox.getSize(
-            new THREE.Vector3(),
-          );
+          scaledBox.getSize(new THREE.Vector3());
 
         camera.position.set(
           0,
           0,
-          Math.max(
-            scaledSize.z * 2.5,
-            0.3,
-          ),
+          Math.max(scaledSize.z * 2.5, 0.3),
         );
 
-        controls.target.set(
-          0,
-          0,
-          0,
-        );
-
+        controls.target.set(0, 0, 0);
         controls.update();
-
         controls.saveState();
 
-        const meshNames: string[] =
-          [];
-
+        const meshNames: string[] = [];
         const meshMap =
-          new Map<
-            string,
-            THREE.Mesh
-          >();
+          new Map<string, THREE.Mesh>();
 
         let meshCount = 0;
 
-        brain.traverse(
-          (object) => {
-            if (
-              object instanceof
-              THREE.Mesh
-            ) {
-              meshCount++;
+        brain.traverse((object) => {
+          if (!(object instanceof THREE.Mesh)) {
+            return;
+          }
 
-              if (
-                object.name
-              ) {
-                meshNames.push(
-                  object.name,
-                );
+          meshCount++;
 
-                const structure =
-                  buildBrainStructureRegistry([
-                    object.name,
-                  ])[0];
+          if (object.name) {
+            meshNames.push(object.name);
 
-                if (
-                  structure
-                ) {
-                  meshMap.set(
-                    structure.id,
-                    object,
-                  );
-                }
-              }
+            const structure =
+              buildBrainStructureRegistry([
+                object.name,
+              ])[0];
+
+            if (structure) {
+              meshMap.set(
+                structure.id,
+                object,
+              );
             }
-          },
-        );
+          }
+        });
 
         brainMeshMapRef.current =
           meshMap;
@@ -1663,16 +1388,9 @@ export default function BrainViewer() {
     const handleDoubleClick =
       () => {
         controls.reset();
-
         restoreSelectedMesh();
-
-        setSelectedStructure(
-          null,
-        );
-
-        setStatus(
-          "Luna's brain online",
-        );
+        setSelectedStructure(null);
+        setStatus("Luna's brain online");
       };
 
     renderer.domElement.addEventListener(
@@ -1696,10 +1414,7 @@ export default function BrainViewer() {
 
         camera.updateProjectionMatrix();
 
-        renderer.setSize(
-          width,
-          height,
-        );
+        renderer.setSize(width, height);
       };
 
     window.addEventListener(
@@ -1712,9 +1427,7 @@ export default function BrainViewer() {
     const animate =
       () => {
         animationFrame =
-          requestAnimationFrame(
-            animate,
-          );
+          requestAnimationFrame(animate);
 
         const delta =
           Math.min(
@@ -1727,154 +1440,30 @@ export default function BrainViewer() {
 
         nanobotRegistry
           .getAll()
-          .forEach(
-            (
-              nanobot,
-            ) => {
-              if (
-                nanobot.state ===
-                  "navigating" &&
-                nanobot.target
-              ) {
-                const targetStructure =
-                  brainStructuresRef.current.find(
-                    (structure) =>
-                      structure.id ===
-                      nanobot
-                        .target
-                        ?.structureId,
-                  );
-
-                if (
-                  targetStructure
-                ) {
-                  const target =
-                    getStructureTargetPosition(
-                      targetStructure,
-                    );
-
-                  const result =
-                    navigateNanobot(
-                      nanobot,
-                      {
-                        position:
-                          target,
-                        radius:
-                          0.003,
-                      },
-                      delta,
-                    );
-
-                  nanobot.position =
-                    result.position;
-
-                  nanobot.progress =
-                    result.progress;
-
-                  nanobot.updatedAt =
-                    Date.now();
-
-                  if (
-                    result.arrived
-                  ) {
-                    nanobot.progress = 1;
-
-                    nanobotRegistry.setState(
-                      nanobot.id,
-                      "arrived",
-                    );
-                  }
-                }
-              } else if (
-                nanobot.state ===
-                "arrived"
-              ) {
-                nanobot.progress = 1;
-
-                if (
-                  !nanobotWorkStartedRef.current.has(
-                    nanobot.id,
-                  )
-                ) {
-                  nanobotWorkStartedRef.current.set(
-                    nanobot.id,
-                    performance.now(),
-                  );
-                }
-
-                nanobotRegistry.setState(
-                  nanobot.id,
-                  "working",
+          .forEach((nanobot) => {
+            if (
+              nanobot.state === "navigating" &&
+              nanobot.target
+            ) {
+              const targetStructure =
+                brainStructuresRef.current.find(
+                  (structure) =>
+                    structure.id ===
+                    nanobot.target?.structureId,
                 );
-              } else if (
-                nanobot.state ===
-                "working"
-              ) {
-                const started =
-                  nanobotWorkStartedRef.current.get(
-                    nanobot.id,
-                  ) ?? performance.now();
 
-                const duration =
-                  getNanobotWorkDuration(
-                    nanobot.type,
+              if (targetStructure) {
+                const target =
+                  getStructureTargetPosition(
+                    targetStructure,
                   );
-
-                const workProgress =
-                  Math.min(
-                    1,
-                    Math.max(
-                      0,
-                      (performance.now() -
-                        started) /
-                        (duration * 1000),
-                    ),
-                  );
-
-                nanobot.progress =
-                  workProgress;
-
-                nanobot.updatedAt =
-                  Date.now();
-
-                if (
-                  workProgress >= 1
-                ) {
-                  nanobot.progress = 1;
-
-                  nanobotWorkStartedRef.current.delete(
-                    nanobot.id,
-                  );
-
-                  nanobotReturnStartedRef.current.set(
-                    nanobot.id,
-                    performance.now(),
-                  );
-
-                  nanobotRegistry.setState(
-                    nanobot.id,
-                    "returning",
-                  );
-
-                  setStatus(
-                    `${nanobot.metadata.label} completed ${nanobot.type} operation`,
-                  );
-                }
-              } else if (
-                nanobot.state ===
-                  "returning"
-              ) {
-                const start =
-                  getNanobotStartPosition();
 
                 const result =
                   navigateNanobot(
                     nanobot,
                     {
-                      position:
-                        start,
-                      radius:
-                        0.003,
+                      position: target,
+                      radius: 0.003,
                     },
                     delta,
                   );
@@ -1882,73 +1471,183 @@ export default function BrainViewer() {
                 nanobot.position =
                   result.position;
 
-                const returnProgress =
-                  getNanobotReturnProgress(
-                    nanobot,
-                  );
-
                 nanobot.progress =
-                  returnProgress;
+                  result.progress;
 
                 nanobot.updatedAt =
                   Date.now();
 
-                if (
-                  result.arrived
-                ) {
+                if (result.arrived) {
                   nanobot.progress = 1;
-
-                  nanobotReturnStartedRef.current.delete(
-                    nanobot.id,
-                  );
 
                   nanobotRegistry.setState(
                     nanobot.id,
-                    "completed",
-                  );
-
-                  setStatus(
-                    `${nanobot.metadata.label} mission complete`,
+                    "arrived",
                   );
                 }
               }
+            } else if (
+              nanobot.state === "arrived"
+            ) {
+              nanobot.progress = 1;
 
-              const visual =
-                nanobotVisualsRef.current.get(
+              if (
+                !nanobotWorkStartedRef.current.has(
+                  nanobot.id,
+                )
+              ) {
+                nanobotWorkStartedRef.current.set(
+                  nanobot.id,
+                  performance.now(),
+                );
+              }
+
+              nanobotRegistry.setState(
+                nanobot.id,
+                "working",
+              );
+            } else if (
+              nanobot.state === "working"
+            ) {
+              const started =
+                nanobotWorkStartedRef.current.get(
+                  nanobot.id,
+                ) ?? performance.now();
+
+              const duration =
+                getNanobotWorkDuration(
+                  nanobot.type,
+                );
+
+              const workProgress =
+                Math.min(
+                  1,
+                  Math.max(
+                    0,
+                    (performance.now() - started) /
+                      (duration * 1000),
+                  ),
+                );
+
+              nanobot.progress =
+                workProgress;
+
+              nanobot.updatedAt =
+                Date.now();
+
+              if (workProgress >= 1) {
+                nanobot.progress = 1;
+
+                nanobotWorkStartedRef.current.delete(
                   nanobot.id,
                 );
 
-              if (visual) {
-                updateNanobotVisual(
-                  visual,
-                  nanobot,
-                  elapsed,
+                nanobotReturnStartedRef.current.set(
+                  nanobot.id,
+                  performance.now(),
                 );
 
-                // Luna nanobots use a red visual language.
-                visual.root.traverse((object) => {
+                nanobotRegistry.setState(
+                  nanobot.id,
+                  "returning",
+                );
+
+                setStatus(
+                  `${nanobot.metadata.label} completed ${nanobot.type} operation`,
+                );
+              }
+            } else if (
+              nanobot.state === "returning"
+            ) {
+              const start =
+                getNanobotStartPosition();
+
+              const result =
+                navigateNanobot(
+                  nanobot,
+                  {
+                    position: start,
+                    radius: 0.003,
+                  },
+                  delta,
+                );
+
+              nanobot.position =
+                result.position;
+
+              const returnProgress =
+                getNanobotReturnProgress(
+                  nanobot,
+                );
+
+              nanobot.progress =
+                returnProgress;
+
+              nanobot.updatedAt =
+                Date.now();
+
+              if (result.arrived) {
+                nanobot.progress = 1;
+
+                nanobotReturnStartedRef.current.delete(
+                  nanobot.id,
+                );
+
+                nanobotRegistry.setState(
+                  nanobot.id,
+                  "completed",
+                );
+
+                setStatus(
+                  `${nanobot.metadata.label} mission complete`,
+                );
+              }
+            }
+
+            const visual =
+              nanobotVisualsRef.current.get(
+                nanobot.id,
+              );
+
+            if (visual) {
+              updateNanobotVisual(
+                visual,
+                nanobot,
+                elapsed,
+              );
+
+              visual.root.traverse(
+                (object) => {
                   if (!(object instanceof THREE.Mesh)) {
                     return;
                   }
 
-                  const materials = Array.isArray(object.material)
-                    ? object.material
-                    : [object.material];
+                  const materials =
+                    Array.isArray(object.material)
+                      ? object.material
+                      : [object.material];
 
                   materials.forEach((material) => {
-                    if (!(material instanceof THREE.MeshStandardMaterial)) {
+                    if (
+                      !(
+                        material instanceof
+                        THREE.MeshStandardMaterial
+                      )
+                    ) {
                       return;
                     }
 
                     material.color.set(0xff2b2b);
                     material.emissive.set(0xff0000);
                     material.emissiveIntensity =
-                      nanobot.state === "error" ? 2.4 : 1.6;
+                      nanobot.state === "error"
+                        ? 2.4
+                        : 1.6;
                   });
-                });
-              }
-            },
-          );
+                },
+              );
+            }
+          });
 
         controls.update();
 
@@ -1961,23 +1660,15 @@ export default function BrainViewer() {
     animate();
 
     const stateInterval =
-      window.setInterval(
-        () => {
-          setNanobots(
-            nanobotRegistry.getAll(),
-          );
-        },
-        150,
-      );
+      window.setInterval(() => {
+        setNanobots(
+          nanobotRegistry.getAll(),
+        );
+      }, 150);
 
     return () => {
-      cancelAnimationFrame(
-        animationFrame,
-      );
-
-      window.clearInterval(
-        stateInterval,
-      );
+      cancelAnimationFrame(animationFrame);
+      window.clearInterval(stateInterval);
 
       window.removeEventListener(
         "resize",
@@ -2000,12 +1691,8 @@ export default function BrainViewer() {
       );
 
       nanobotVisualsRef.current.forEach(
-        (
-          visual,
-        ) => {
-          disposeNanobotVisual(
-            visual,
-          );
+        (visual) => {
+          disposeNanobotVisual(visual);
         },
       );
 
@@ -2015,28 +1702,17 @@ export default function BrainViewer() {
       nanobotReturnStartedRef.current.clear();
 
       nanobotRegistry.clear();
-      nanobotWorkStartedRef.current.clear();
-      nanobotReturnStartedRef.current.clear();
 
       controls.dispose();
       renderer.dispose();
 
       brainMeshMapRef.current.clear();
 
-      brainRootRef.current =
-        null;
-
-      nanobotRootRef.current =
-        null;
-
-      cameraRef.current =
-        null;
-
-      controlsRef.current =
-        null;
-
-      brainBoundsRef.current =
-        null;
+      brainRootRef.current = null;
+      nanobotRootRef.current = null;
+      cameraRef.current = null;
+      controlsRef.current = null;
+      brainBoundsRef.current = null;
 
       if (
         renderer.domElement.parentElement ===
@@ -2049,273 +1725,6 @@ export default function BrainViewer() {
     };
   }, []);
 
-  const toggleInteriorMode =
-    () => {
-      const mesh =
-        selectedMeshRef.current;
-
-      if (!mesh) {
-        setStatus(
-          "Select a brain structure first",
-        );
-
-        return;
-      }
-
-      if (interiorMode) {
-        restoreInteriorMode();
-
-        setInteriorMode(
-          false,
-        );
-
-        setStatus(
-          `Selected: ${
-            selectedStructure?.displayName ??
-            mesh.name
-          }`,
-        );
-
-        return;
-      }
-
-      applyInteriorMode(
-        mesh,
-      );
-
-      setInteriorMode(
-        true,
-      );
-
-      setStatus(
-        `Interior view: ${
-          selectedStructure?.displayName ??
-          mesh.name
-        }`,
-      );
-    };
-
-  const updateInteriorOpacity =
-    (
-      value: number,
-    ) => {
-      const next =
-        Math.min(
-          0.5,
-          Math.max(
-            0.03,
-            value,
-          ),
-        );
-
-      interiorOpacityRef.current =
-        next;
-
-      setInteriorOpacity(
-        next,
-      );
-
-      if (
-        !interiorMode
-      ) {
-        return;
-      }
-
-      interiorOriginalMaterialsRef.current.forEach(
-        (
-          _original,
-          mesh,
-        ) => {
-          const material =
-            mesh.material;
-
-          if (
-            Array.isArray(
-              material,
-            )
-          ) {
-            material.forEach(
-              (
-                item,
-              ) => {
-                item.opacity =
-                  next;
-
-                item.transparent =
-                  true;
-
-                item.depthWrite =
-                  false;
-              },
-            );
-          } else {
-            material.opacity =
-              next;
-
-            material.transparent =
-              true;
-
-            material.depthWrite =
-              false;
-          }
-        },
-      );
-    };
-
-  const updateCutawayDepth =
-    (
-      value: number,
-    ) => {
-      const next =
-        Math.min(
-          1,
-          Math.max(
-            0,
-            value,
-          ),
-        );
-
-      setCutawayDepth(
-        next,
-      );
-
-      cutawayDepthRef.current =
-        next;
-    };
-
-  const toggleCrossSectionMode =
-    () => {
-      const brainRoot =
-        brainRootRef.current;
-
-      const bounds =
-        brainBoundsRef.current;
-
-      if (
-        !brainRoot ||
-        !bounds
-      ) {
-        return;
-      }
-
-      if (
-        crossSectionMode
-      ) {
-        brainRoot.traverse(
-          (object) => {
-            if (
-              object instanceof
-              THREE.Mesh
-            ) {
-              const material =
-                object.material;
-
-              if (
-                Array.isArray(
-                  material,
-                )
-              ) {
-                material.forEach(
-                  (
-                    item,
-                  ) => {
-                    item.clippingPlanes =
-                      [];
-                  },
-                );
-              } else {
-                material.clippingPlanes =
-                  [];
-              }
-            }
-          },
-        );
-
-        setCrossSectionMode(
-          false,
-        );
-
-        return;
-      }
-
-      const position =
-        THREE.MathUtils.lerp(
-          bounds.min.x,
-          bounds.max.x,
-          crossSectionDepth,
-        );
-
-      clippingPlaneRef.current.set(
-        new THREE.Vector3(
-          1,
-          0,
-          0,
-        ),
-        -position,
-      );
-
-      brainRoot.traverse(
-        (object) => {
-          if (
-            object instanceof
-            THREE.Mesh
-          ) {
-            const material =
-              object.material;
-
-            if (
-              Array.isArray(
-                material,
-              )
-            ) {
-              material.forEach(
-                (
-                  item,
-                ) => {
-                  item.clippingPlanes =
-                    [
-                      clippingPlaneRef.current,
-                    ];
-                },
-              );
-            } else {
-              material.clippingPlanes =
-                [
-                  clippingPlaneRef.current,
-                ];
-            }
-          }
-        },
-      );
-
-      setCrossSectionMode(
-        true,
-      );
-    };
-
-  const updateCrossSectionDepth =
-    (
-      value: number,
-    ) => {
-      setCrossSectionDepth(
-        value,
-      );
-
-      crossSectionDepthRef.current =
-        value;
-
-      if (
-        crossSectionMode
-      ) {
-        toggleCrossSectionMode();
-        window.setTimeout(
-          () =>
-            toggleCrossSectionMode(),
-          0,
-        );
-      }
-    };
-
   return (
     <BrainWorkspace>
       <div className="relative h-full min-h-[600px] w-full overflow-hidden rounded-xl bg-black">
@@ -2327,178 +1736,162 @@ export default function BrainViewer() {
         <BrainWorkspaceBar
           panels={DEFAULT_PANELS}
           workspace={workspace}
+          activeScale={activeScale}
+          selectedStructure={selectedStructure}
+          nanobotCount={nanobots.length}
+          onScaleChange={handleScaleChange}
+          onDeployMission={deployMission}
+          onPauseNanobots={pauseNanobots}
+          onResumeNanobots={resumeNanobots}
+          onReturnNanobots={returnNanobots}
+          onClearNanobots={clearNanobots}
+          onResetView={handleViewReset}
+          onToggleCrossSection={
+            handleViewCrossSection
+          }
+          onToggleInterior={
+            handleViewInterior
+          }
         />
 
-      <BrainScaleAssetLoader
-        structure={
-          selectedStructure
-        }
-        activeScale={
-          activeScale
-        }
-        onAssetStateChange={
-          (
-            state,
-          ) =>
-            handleScaleAssetStateChange(
-              state,
-            )
-        }
-      />
+        <BrainScaleAssetLoader
+          structure={selectedStructure}
+          activeScale={activeScale}
+          onAssetStateChange={
+            handleScaleAssetStateChange
+          }
+        />
 
         {workspace.isOpen("anatomy") &&
           !workspace.isMinimized("anatomy") && (
-            <div className="pointer-events-none absolute left-4 top-16 bottom-4 z-40 ">
+            <div className="pointer-events-none absolute bottom-4 left-4 top-16 z-40">
               <div className="pointer-events-auto relative max-h-full">
                 <BrainAnatomyNavigator
-                  structures={
-                    brainStructures
-                  }
-                  selectedStructure={
-                    selectedStructure
-                  }
-                  onSelectStructure={
-                    selectBrainStructure
-                  }
+                  structures={brainStructures}
+                  selectedStructure={selectedStructure}
+                  onSelectStructure={selectBrainStructure}
                 />
+
                 <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => workspace.minimizePanel("anatomy")}
+                    onClick={() =>
+                      workspace.minimizePanel("anatomy")
+                    }
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
                     title="Minimize"
                     aria-label="Minimize Brain Anatomy"
-                  >−</button>
+                  >
+                    −
+                  </button>
+
                   <button
                     type="button"
-                    onClick={() => workspace.closePanel("anatomy")}
+                    onClick={() =>
+                      workspace.closePanel("anatomy")
+                    }
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
                     title="Close"
                     aria-label="Close Brain Anatomy"
-                  >×</button>
+                  >
+                    ×
+                  </button>
                 </div>
               </div>
             </div>
           )}
 
-      <div className="pointer-events-none absolute left-4 top-16 z-10 mt-2 rounded-lg bg-black/55 px-3 py-2 text-sm text-white/80 backdrop-blur">
-        {status}
-      </div>
+        <div className="pointer-events-none absolute left-4 top-16 z-10 mt-2 rounded-lg bg-black/55 px-3 py-2 text-sm text-white/80 backdrop-blur">
+          {status}
+        </div>
 
         {workspace.isOpen("inspector") &&
           !workspace.isMinimized("inspector") && (
-            <div className="pointer-events-none absolute right-4 top-16 bottom-4 z-40 ">
+            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-40">
               <div className="pointer-events-auto relative max-h-full">
-      <AnatomicalInspector
-        structure={
-          selectedStructure
-        }
-        activeScale={
-          activeScale
-        }
-        onScaleChange={
-          handleScaleChange
-        }
-        isIsolated={
-          isolationMode
-        }
-        interiorMode={
-          interiorMode
-        }
-        interiorOpacity={
-          interiorOpacity
-        }
-        cutawayDepth={
-          cutawayDepth
-        }
-        crossSectionMode={
-          crossSectionMode
-        }
-        crossSectionDepth={
-          crossSectionDepth
-        }
-        onToggleCrossSectionMode={
-          toggleCrossSectionMode
-        }
-        onCrossSectionDepthChange={
-          updateCrossSectionDepth
-        }
-        onToggleInteriorMode={
-          toggleInteriorMode
-        }
-        onInteriorOpacityChange={
-          updateInteriorOpacity
-        }
-        onCutawayDepthChange={
-          updateCutawayDepth
-        }
-        onFocusStructure={
-          focusSelectedStructure
-        }
-        onToggleIsolation={() => {
-          const mesh =
-            selectedMeshRef.current;
+                <AnatomicalInspector
+                  structure={selectedStructure}
+                  activeScale={activeScale}
+                  onScaleChange={handleScaleChange}
+                  isIsolated={isolationMode}
+                  interiorMode={interiorMode}
+                  interiorOpacity={interiorOpacity}
+                  cutawayDepth={cutawayDepth}
+                  crossSectionMode={crossSectionMode}
+                  crossSectionDepth={crossSectionDepth}
+                  onToggleCrossSectionMode={
+                    toggleCrossSectionMode
+                  }
+                  onCrossSectionDepthChange={
+                    updateCrossSectionDepth
+                  }
+                  onToggleInteriorMode={
+                    toggleInteriorMode
+                  }
+                  onInteriorOpacityChange={
+                    updateInteriorOpacity
+                  }
+                  onCutawayDepthChange={
+                    updateCutawayDepth
+                  }
+                  onFocusStructure={
+                    focusSelectedStructure
+                  }
+                  onToggleIsolation={() => {
+                    const mesh =
+                      selectedMeshRef.current;
 
-          if (!mesh) {
-            return;
-          }
+                    if (!mesh) {
+                      return;
+                    }
 
-          if (
-            isolationMode
-          ) {
-            restoreBrainVisibility();
+                    if (isolationMode) {
+                      restoreBrainVisibility();
+                      setIsolationMode(false);
+                    } else {
+                      setBrainIsolation(mesh);
+                      setIsolationMode(true);
+                    }
+                  }}
+                  onClear={() => {
+                    restoreBrainVisibility();
+                    restoreInteriorMode();
+                    restoreSelectedMesh();
 
-            setIsolationMode(
-              false,
-            );
-          } else {
-            setBrainIsolation(
-              mesh,
-            );
+                    setIsolationMode(false);
+                    setInteriorMode(false);
+                    setSelectedStructure(null);
 
-            setIsolationMode(
-              true,
-            );
-          }
-        }}
-        onClear={() => {
-          restoreBrainVisibility();
-          restoreInteriorMode();
-          restoreSelectedMesh();
-
-          setIsolationMode(
-            false,
-          );
-
-          setInteriorMode(
-            false,
-          );
-
-          setSelectedStructure(
-            null,
-          );
-
-          setStatus(
-            "Luna's brain online",
-          );
-        }}
-      />
+                    setStatus(
+                      "Luna's brain online",
+                    );
+                  }}
+                />
 
                 <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => workspace.minimizePanel("inspector")}
+                    onClick={() =>
+                      workspace.minimizePanel("inspector")
+                    }
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
                     title="Minimize"
                     aria-label="Minimize Anatomical Inspector"
-                  >−</button>
+                  >
+                    −
+                  </button>
+
                   <button
                     type="button"
-                    onClick={() => workspace.closePanel("inspector")}
+                    onClick={() =>
+                      workspace.closePanel("inspector")
+                    }
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
                     title="Close"
                     aria-label="Close Anatomical Inspector"
-                  >×</button>
+                  >
+                    ×
+                  </button>
                 </div>
               </div>
             </div>
@@ -2506,62 +1899,51 @@ export default function BrainViewer() {
 
         {workspace.isOpen("nanobots") &&
           !workspace.isMinimized("nanobots") && (
-            <div className="pointer-events-none absolute right-4 top-16 bottom-4 z-40 flex  items-end">
+            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-40 flex items-end">
               <div className="pointer-events-auto relative max-h-full">
-      <NanobotPanel
-        nanobots={
-          nanobots
-        }
-        selectedNanobotId={
-          selectedNanobotId
-        }
-        selectedStructure={
-          selectedStructure
-        }
-        onDeploy={
-          deployNanobot
-        }
-        onPause={
-          pauseNanobots
-        }
-        onResume={
-          resumeNanobots
-        }
-        onReturn={
-          returnNanobots
-        }
-        onClear={
-          clearNanobots
-        }
-        onSelectNanobot={
-          selectNanobot
-        }
-      />
+                <NanobotPanel
+                  nanobots={nanobots}
+                  selectedNanobotId={selectedNanobotId}
+                  selectedStructure={selectedStructure}
+                  onDeploy={deployNanobot}
+                  onPause={pauseNanobots}
+                  onResume={resumeNanobots}
+                  onReturn={returnNanobots}
+                  onClear={clearNanobots}
+                  onSelectNanobot={selectNanobot}
+                />
 
                 <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => workspace.minimizePanel("nanobots")}
+                    onClick={() =>
+                      workspace.minimizePanel("nanobots")
+                    }
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
                     title="Minimize"
                     aria-label="Minimize Nanobot System"
-                  >−</button>
+                  >
+                    −
+                  </button>
+
                   <button
                     type="button"
-                    onClick={() => workspace.closePanel("nanobots")}
+                    onClick={() =>
+                      workspace.closePanel("nanobots")
+                    }
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
                     title="Close"
                     aria-label="Close Nanobot System"
-                  >×</button>
+                  >
+                    ×
+                  </button>
                 </div>
               </div>
             </div>
           )}
 
         <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-lg border border-white/10 bg-black/55 px-3 py-2 text-xs text-white/65 backdrop-blur">
-          Drag to rotate · Scroll to zoom ·
-          Right-drag to pan · Click a structure ·
-          Double-click to reset
+          Drag to rotate · Scroll to zoom · Right-drag to pan · Click a structure · Double-click to reset
         </div>
       </div>
     </BrainWorkspace>

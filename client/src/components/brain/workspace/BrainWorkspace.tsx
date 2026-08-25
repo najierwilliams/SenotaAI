@@ -1,188 +1,341 @@
-import type { ReactNode } from "react";
-
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 export type BrainWorkspacePanelId =
   | "anatomy"
   | "inspector"
-  | "nanobots"
-  | "scales"
-  | "missions"
-  | "view";
+  | "nanobots";
 
 export interface BrainWorkspacePanelDefinition {
   id: BrainWorkspacePanelId;
   label: string;
-  shortLabel?: string;
+  description: string;
 }
 
-export interface BrainWorkspaceProps {
-  children: ReactNode;
-  panels?: BrainWorkspacePanelDefinition[];
-}
-
-const DEFAULT_PANELS: BrainWorkspacePanelDefinition[] = [
-  { id: "anatomy", label: "Brain Anatomy" },
-  { id: "inspector", label: "Inspector" },
-  { id: "nanobots", label: "Nanobots" },
-  { id: "scales", label: "Scales" },
-  { id: "missions", label: "Missions" },
-  { id: "view", label: "View" },
+export const DEFAULT_PANELS: BrainWorkspacePanelDefinition[] = [
+  {
+    id: "anatomy",
+    label: "Brain Anatomy",
+    description: "Browse anatomical structures.",
+  },
+  {
+    id: "inspector",
+    label: "Inspector",
+    description: "Inspect selected anatomy.",
+  },
+  {
+    id: "nanobots",
+    label: "Nanobots",
+    description: "Control the nanobot fleet.",
+  },
 ];
 
-export interface BrainWorkspaceContextValue {
-  openPanels: BrainWorkspacePanelId[];
-  activePanel: BrainWorkspacePanelId | null;
-  minimizedPanels: BrainWorkspacePanelId[];
-  openPanel: (id: BrainWorkspacePanelId) => void;
-  closePanel: (id: BrainWorkspacePanelId) => void;
-  togglePanel: (id: BrainWorkspacePanelId) => void;
-  minimizePanel: (id: BrainWorkspacePanelId) => void;
-  restorePanel: (id: BrainWorkspacePanelId) => void;
-  isOpen: (id: BrainWorkspacePanelId) => boolean;
-  isMinimized: (id: BrainWorkspacePanelId) => boolean;
+export type BrainWorkspaceMenu =
+  | BrainWorkspacePanelId
+  | "scales"
+  | "missions"
+  | "view"
+  | null;
+
+export interface BrainWorkspaceState {
+  openPanels: Record<BrainWorkspacePanelId, boolean>;
+  minimizedPanels: Record<BrainWorkspacePanelId, boolean>;
+  openMenu: BrainWorkspaceMenu;
+
+  isOpen: (
+    id: BrainWorkspacePanelId,
+  ) => boolean;
+
+  isMinimized: (
+    id: BrainWorkspacePanelId,
+  ) => boolean;
+
+  openPanel: (
+    id: BrainWorkspacePanelId,
+  ) => void;
+
+  closePanel: (
+    id: BrainWorkspacePanelId,
+  ) => void;
+
+  minimizePanel: (
+    id: BrainWorkspacePanelId,
+  ) => void;
+
+  restorePanel: (
+    id: BrainWorkspacePanelId,
+  ) => void;
+
+  togglePanel: (
+    id: BrainWorkspacePanelId,
+  ) => void;
+
+  openWorkspaceMenu: (
+    menu: Exclude<
+      BrainWorkspaceMenu,
+      null
+    >,
+  ) => void;
+
+  closeMenu: () => void;
+
+  toggleWorkspaceMenu: (
+    menu: Exclude<
+      BrainWorkspaceMenu,
+      null
+    >,
+  ) => void;
 }
 
-export function useBrainWorkspaceState(
-  initialOpen: BrainWorkspacePanelId[] = [
-    "anatomy",
-    "inspector",
-    "nanobots",
-  ],
-): BrainWorkspaceContextValue {
+export function useBrainWorkspaceState(): BrainWorkspaceState {
   const [openPanels, setOpenPanels] =
-    useState<BrainWorkspacePanelId[]>(
-      initialOpen,
-    );
-
-  const [activePanel, setActivePanel] =
-    useState<BrainWorkspacePanelId | null>(
-      initialOpen[0] ?? null,
-    );
-
-  const [minimizedPanels, setMinimizedPanels] =
-    useState<BrainWorkspacePanelId[]>([]);
-
-  const openPanel = (id: BrainWorkspacePanelId) => {
-    const rightDockPanels: BrainWorkspacePanelId[] = [
-      "inspector",
-      "nanobots",
-    ];
-
-    setOpenPanels((current) => {
-      let next = current.includes(id)
-        ? current
-        : [...current, id];
-
-      if (rightDockPanels.includes(id)) {
-        next = next.filter(
-          (panelId) =>
-            !rightDockPanels.includes(panelId) ||
-            panelId === id,
-        );
-      }
-
-      return next;
+    useState<
+      Record<
+        BrainWorkspacePanelId,
+        boolean
+      >
+    >({
+      anatomy: true,
+      inspector: true,
+      nanobots: true,
     });
 
-    setMinimizedPanels((current) =>
-      current.filter((panelId) => panelId !== id),
-    );
+  const [
+    minimizedPanels,
+    setMinimizedPanels,
+  ] =
+    useState<
+      Record<
+        BrainWorkspacePanelId,
+        boolean
+      >
+    >({
+      anatomy: false,
+      inspector: false,
+      nanobots: false,
+    });
 
-    setActivePanel(id);
+  const [openMenu, setOpenMenu] =
+    useState<BrainWorkspaceMenu>(null);
+
+  /*
+   * OPEN
+   *
+   * Always makes the panel visible.
+   * Also clears minimized state.
+   */
+  const openPanel = (
+    id: BrainWorkspacePanelId,
+  ) => {
+    setOpenPanels((current) => ({
+      ...current,
+      [id]: true,
+    }));
+
+    setMinimizedPanels((current) => ({
+      ...current,
+      [id]: false,
+    }));
+
+    setOpenMenu(null);
   };
 
-  const closePanel = (id: BrainWorkspacePanelId) => {
-    setOpenPanels((current) =>
-      current.filter((panelId) => panelId !== id),
-    );
+  /*
+   * RESTORE
+   *
+   * Explicitly restores a minimized panel.
+   */
+  const restorePanel = (
+    id: BrainWorkspacePanelId,
+  ) => {
+    setOpenPanels((current) => ({
+      ...current,
+      [id]: true,
+    }));
 
-    setMinimizedPanels((current) =>
-      current.filter((panelId) => panelId !== id),
-    );
+    setMinimizedPanels((current) => ({
+      ...current,
+      [id]: false,
+    }));
 
-    setActivePanel((current) =>
-      current === id ? null : current,
+    setOpenMenu(null);
+  };
+
+  /*
+   * CLOSE
+   */
+  const closePanel = (
+    id: BrainWorkspacePanelId,
+  ) => {
+    setOpenPanels((current) => ({
+      ...current,
+      [id]: false,
+    }));
+
+    setMinimizedPanels((current) => ({
+      ...current,
+      [id]: false,
+    }));
+
+    setOpenMenu(null);
+  };
+
+  /*
+   * MINIMIZE
+   */
+  const minimizePanel = (
+    id: BrainWorkspacePanelId,
+  ) => {
+    setOpenPanels((current) => ({
+      ...current,
+      [id]: true,
+    }));
+
+    setMinimizedPanels((current) => ({
+      ...current,
+      [id]: true,
+    }));
+
+    setOpenMenu(null);
+  };
+
+  /*
+   * TOGGLE
+   */
+  const togglePanel = (
+    id: BrainWorkspacePanelId,
+  ) => {
+    setOpenPanels((currentOpen) => {
+      const currentlyOpen =
+        currentOpen[id];
+
+      setMinimizedPanels(
+        (currentMinimized) => {
+          if (!currentlyOpen) {
+            return {
+              ...currentMinimized,
+              [id]: false,
+            };
+          }
+
+          if (currentMinimized[id]) {
+            return {
+              ...currentMinimized,
+              [id]: false,
+            };
+          }
+
+          return {
+            ...currentMinimized,
+            [id]: true,
+          };
+        },
+      );
+
+      return {
+        ...currentOpen,
+        [id]: true,
+      };
+    });
+
+    setOpenMenu(null);
+  };
+
+  const openWorkspaceMenu = (
+    menu: Exclude<
+      BrainWorkspaceMenu,
+      null
+    >,
+  ) => {
+    setOpenMenu(menu);
+  };
+
+  const closeMenu = () => {
+    setOpenMenu(null);
+  };
+
+  const toggleWorkspaceMenu = (
+    menu: Exclude<
+      BrainWorkspaceMenu,
+      null
+    >,
+  ) => {
+    setOpenMenu((current) =>
+      current === menu
+        ? null
+        : menu,
     );
   };
 
-  const minimizePanel = (id: BrainWorkspacePanelId) => {
-    setMinimizedPanels((current) =>
-      current.includes(id)
-        ? current
-        : [...current, id],
+  useEffect(() => {
+    const handlePointerDown =
+      (event: PointerEvent) => {
+        const target =
+          event.target;
+
+        if (
+          target instanceof Element &&
+          target.closest(
+            "[data-brain-workspace]",
+          )
+        ) {
+          return;
+        }
+
+        setOpenMenu(null);
+      };
+
+    document.addEventListener(
+      "pointerdown",
+      handlePointerDown,
     );
 
-    setActivePanel((current) =>
-      current === id ? null : current,
-    );
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDown,
+      );
+    };
+  }, []);
+
+  return {
+    openPanels,
+    minimizedPanels,
+    openMenu,
+
+    isOpen: (
+      id: BrainWorkspacePanelId,
+    ) => openPanels[id],
+
+    isMinimized: (
+      id: BrainWorkspacePanelId,
+    ) => minimizedPanels[id],
+
+    openPanel,
+    closePanel,
+    minimizePanel,
+    restorePanel,
+    togglePanel,
+
+    openWorkspaceMenu,
+    closeMenu,
+    toggleWorkspaceMenu,
   };
-
-  const restorePanel = (id: BrainWorkspacePanelId) => {
-    setOpenPanels((current) =>
-      current.includes(id)
-        ? current
-        : [...current, id],
-    );
-
-    setMinimizedPanels((current) =>
-      current.filter((panelId) => panelId !== id),
-    );
-
-    setActivePanel(id);
-  };
-
-  const togglePanel = (id: BrainWorkspacePanelId) => {
-    if (!openPanels.includes(id)) {
-      openPanel(id);
-      return;
-    }
-
-    if (minimizedPanels.includes(id)) {
-      restorePanel(id);
-      return;
-    }
-
-    setActivePanel((current) =>
-      current === id ? null : id,
-    );
-  };
-
-  const isOpen = (id: BrainWorkspacePanelId) =>
-    openPanels.includes(id);
-
-  const isMinimized = (id: BrainWorkspacePanelId) =>
-    minimizedPanels.includes(id);
-
-  return useMemo(
-    () => ({
-      openPanels,
-      activePanel,
-      minimizedPanels,
-      openPanel,
-      closePanel,
-      togglePanel,
-      minimizePanel,
-      restorePanel,
-      isOpen,
-      isMinimized,
-    }),
-    [
-      openPanels,
-      activePanel,
-      minimizedPanels,
-    ],
-  );
 }
 
 export default function BrainWorkspace({
   children,
-}: BrainWorkspaceProps) {
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden">
+    <div
+      data-brain-workspace
+      className="relative h-full w-full"
+    >
       {children}
     </div>
   );
 }
-
-export { DEFAULT_PANELS };
