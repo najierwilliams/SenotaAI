@@ -1,7 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
+import {
+  GLTFLoader,
+} from "three/examples/jsm/loaders/GLTFLoader.js";
+
+import {
+  OrbitControls,
+} from "three/examples/jsm/controls/OrbitControls.js";
 
 import {
   buildBrainStructureRegistry,
@@ -9,10 +21,42 @@ import {
   type BrainStructure,
 } from "./anatomy/BrainStructureRegistry";
 
+import {
+  nanobotRegistry,
+} from "./anatomy/NanobotRegistry";
+
+import {
+  navigateNanobot,
+} from "./anatomy/NanobotNavigation";
+
+import type {
+  Nanobot,
+  NanobotPosition,
+  NanobotType,
+} from "./anatomy/NanobotTypes";
+
+import {
+  createNanobotVisual,
+  disposeNanobotVisual,
+  updateNanobotVisual,
+  type NanobotVisual,
+} from "./anatomy/NanobotVisuals";
+
 import AnatomicalInspector from "./AnatomicalInspector";
 import BrainAnatomyNavigator from "./BrainAnatomyNavigator";
 import BrainScaleAssetLoader from "./BrainScaleAssetLoader";
-import type { BrainScaleAsset } from "./anatomy/BrainScaleAssetRegistry";
+import NanobotPanel from "./NanobotPanel";
+
+import BrainWorkspace, {
+  DEFAULT_PANELS,
+  useBrainWorkspaceState,
+} from "./workspace/BrainWorkspace";
+
+import BrainWorkspaceBar from "./workspace/BrainWorkspaceBar";
+
+import type {
+  BrainScaleAsset,
+} from "./anatomy/BrainScaleAssetRegistry";
 
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
@@ -40,7 +84,9 @@ export default function BrainViewer() {
     );
 
   const controlsRef =
-    useRef<OrbitControls | null>(null);
+    useRef<OrbitControls | null>(
+      null,
+    );
 
   const brainMeshMapRef =
     useRef<Map<string, THREE.Mesh>>(
@@ -51,34 +97,157 @@ export default function BrainViewer() {
     useRef<
       Map<
         THREE.Mesh,
-        THREE.Material | THREE.Material[]
+        THREE.Material |
+          THREE.Material[]
       >
     >(new Map());
 
-  const [status, setStatus] = useState(
-    "Loading Luna's brain...",
+  const brainBoundsRef =
+    useRef<THREE.Box3 | null>(
+      null,
+    );
+
+  const nanobotRootRef =
+    useRef<THREE.Group | null>(
+      null,
+    );
+
+  const nanobotVisualsRef =
+    useRef<
+      Map<
+        string,
+        NanobotVisual
+      >
+    >(new Map());
+
+  const nanobotPositionsRef =
+    useRef<
+      Map<
+        string,
+        NanobotPosition
+      >
+    >(new Map());
+
+  const nanobotClockRef =
+    useRef(
+      new THREE.Clock(),
+    );
+
+  const nanobotWorkStartedRef =
+    useRef<
+      Map<string, number>
+    >(new Map());
+
+  const nanobotReturnStartedRef =
+    useRef<
+      Map<string, number>
+    >(new Map());
+
+  const [status, setStatus] =
+    useState(
+      "Loading Luna's brain...",
+    );
+
+  const [
+    selectedStructure,
+    setSelectedStructure,
+  ] =
+    useState<BrainStructure | null>(
+      null,
+    );
+
+  const [
+    isolationMode,
+    setIsolationMode,
+  ] = useState(false);
+
+  const [
+    interiorMode,
+    setInteriorMode,
+  ] = useState(false);
+
+  const [
+    interiorOpacity,
+    setInteriorOpacity,
+  ] = useState(0.12);
+
+  const [
+    cutawayDepth,
+    setCutawayDepth,
+  ] = useState(0);
+
+  const [
+    crossSectionMode,
+    setCrossSectionMode,
+  ] = useState(false);
+
+  const [
+    crossSectionDepth,
+    setCrossSectionDepth,
+  ] = useState(0);
+
+  const [
+    brainStructures,
+    setBrainStructures,
+  ] = useState<BrainStructure[]>(
+    [],
   );
 
-  const [selectedStructure, setSelectedStructure] =
-    useState<BrainStructure | null>(null);
+  const brainStructuresRef =
+    useRef<BrainStructure[]>(
+      [],
+    );
 
-  const [isolationMode, setIsolationMode] =
+  brainStructuresRef.current =
+    brainStructures;
+
+  const [
+    activeScale,
+    setActiveScale,
+  ] =
+    useState<BrainScale>(
+      "macro",
+    );
+
+  const [
+    scaleAsset,
+    setScaleAsset,
+  ] =
+    useState<BrainScaleAsset | null>(
+      null,
+    );
+
+  const [
+    scaleAssetLoading,
+    setScaleAssetLoading,
+  ] =
     useState(false);
 
-  const [interiorMode, setInteriorMode] =
-    useState(false);
+  const [
+    scaleAssetError,
+    setScaleAssetError,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
-  const [interiorOpacity, setInteriorOpacity] =
-    useState(0.12);
+  const [
+    nanobots,
+    setNanobots,
+  ] = useState<Nanobot[]>(
+    [],
+  );
 
-  const [cutawayDepth, setCutawayDepth] =
-    useState(0);
+  const [
+    selectedNanobotId,
+    setSelectedNanobotId,
+  ] =
+    useState<string | null>(
+      null,
+    );
 
-  const [crossSectionMode, setCrossSectionMode] =
-    useState(false);
-
-  const [crossSectionDepth, setCrossSectionDepth] =
-    useState(0);
+  const workspace =
+    useBrainWorkspaceState();
 
   const interiorModeRef =
     useRef(false);
@@ -95,22 +264,14 @@ export default function BrainViewer() {
   const crossSectionDepthRef =
     useRef(0);
 
-  const clippingPlaneRef =
-    useRef(
-      new THREE.Plane(
-        new THREE.Vector3(1, 0, 0),
-        0,
-      ),
-    );
-
-  const brainBoundsRef =
-    useRef<THREE.Box3 | null>(null);
-
   interiorModeRef.current =
     interiorMode;
 
   interiorOpacityRef.current =
     interiorOpacity;
+
+  cutawayDepthRef.current =
+    cutawayDepth;
 
   crossSectionModeRef.current =
     crossSectionMode;
@@ -118,287 +279,214 @@ export default function BrainViewer() {
   crossSectionDepthRef.current =
     crossSectionDepth;
 
-  const [brainStructures, setBrainStructures] =
-    useState<BrainStructure[]>([]);
-
-  const [activeScale, setActiveScale] =
-    useState<BrainScale>("macro");
-
-  const [scaleAsset, setScaleAsset] =
-    useState<BrainScaleAsset | null>(null);
-
-  const [scaleAssetLoading, setScaleAssetLoading] =
-    useState(false);
-
-  const [scaleAssetError, setScaleAssetError] =
-    useState<string | null>(null);
-
-  const restoreInteriorMode = () => {
-    interiorOriginalMaterialsRef.current.forEach(
-      (originalMaterial, mesh) => {
-        mesh.material =
-          originalMaterial;
-      },
+  const clippingPlaneRef =
+    useRef(
+      new THREE.Plane(
+        new THREE.Vector3(
+          1,
+          0,
+          0,
+        ),
+        0,
+      ),
     );
 
-    interiorOriginalMaterialsRef.current.clear();
-  };
-
-  const applyInteriorMode = (
-    selectedMesh: THREE.Mesh | null,
-  ) => {
-    const brainRoot =
-      brainRootRef.current;
-
-    if (!brainRoot) {
-      return;
-    }
-
-    interiorOriginalMaterialsRef.current.clear();
-
-    brainRoot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) {
-        return;
-      }
-
-      if (object === selectedMesh) {
-        return;
-      }
-
-      const originalMaterial =
-        object.material;
-
-      interiorOriginalMaterialsRef.current.set(
-        object,
-        originalMaterial,
+  const restoreInteriorMode =
+    () => {
+      interiorOriginalMaterialsRef.current.forEach(
+        (
+          originalMaterial,
+          mesh,
+        ) => {
+          mesh.material =
+            originalMaterial;
+        },
       );
 
-      if (Array.isArray(originalMaterial)) {
-        const clonedMaterials =
-          originalMaterial.map(
-            (material) => {
-              const clone =
-                material.clone();
+      interiorOriginalMaterialsRef.current.clear();
+    };
 
-              clone.transparent = true;
-              clone.opacity =
-                interiorOpacityRef.current;
-              clone.depthWrite = false;
+  const applyInteriorMode =
+    (
+      selectedMesh:
+        THREE.Mesh | null,
+    ) => {
+      const brainRoot =
+        brainRootRef.current;
 
-              return clone;
-            },
+      if (!brainRoot) {
+        return;
+      }
+
+      interiorOriginalMaterialsRef.current.clear();
+
+      brainRoot.traverse(
+        (object) => {
+          if (
+            !(
+              object instanceof
+              THREE.Mesh
+            )
+          ) {
+            return;
+          }
+
+          if (
+            object ===
+            selectedMesh
+          ) {
+            return;
+          }
+
+          const originalMaterial =
+            object.material;
+
+          interiorOriginalMaterialsRef.current.set(
+            object,
+            originalMaterial,
           );
 
-        object.material =
-          clonedMaterials;
-      } else {
-        const clonedMaterial =
-          originalMaterial.clone();
-
-        clonedMaterial.transparent = true;
-        clonedMaterial.opacity =
-          interiorOpacityRef.current;
-        clonedMaterial.depthWrite = false;
-
-        object.material =
-          clonedMaterial;
-      }
-    });
-  };
-
-  const getCutawayOpacity = (
-    mesh: THREE.Mesh,
-    selectedMesh: THREE.Mesh | null,
-    opacity: number,
-  ) => {
-    if (
-      !selectedMesh ||
-      cutawayDepthRef.current <= 0
-    ) {
-      return opacity;
-    }
-
-    const selectedBox =
-      new THREE.Box3().setFromObject(
-        selectedMesh,
-      );
-
-    const selectedCenter =
-      selectedBox.getCenter(
-        new THREE.Vector3(),
-      );
-
-    const selectedSize =
-      selectedBox.getSize(
-        new THREE.Vector3(),
-      );
-
-    const referenceRadius =
-      Math.max(
-        selectedSize.x,
-        selectedSize.y,
-        selectedSize.z,
-        0.001,
-      );
-
-    const cutawayRadius =
-      referenceRadius *
-      (1 + cutawayDepthRef.current * 12);
-
-    const box =
-      new THREE.Box3().setFromObject(
-        mesh,
-      );
-
-    const center =
-      box.getCenter(
-        new THREE.Vector3(),
-      );
-
-    return center.distanceTo(
-      selectedCenter,
-    ) <= cutawayRadius
-      ? opacity
-      : 0;
-  };
-
-  const updateInteriorOpacity = (
-    value: number,
-  ) => {
-    const clampedValue = Math.min(
-      0.5,
-      Math.max(0.03, value),
-    );
-
-    interiorOpacityRef.current =
-      clampedValue;
-
-    setInteriorOpacity(
-      clampedValue,
-    );
-
-    if (!interiorModeRef.current) {
-      return;
-    }
-
-    const brainRoot =
-      brainRootRef.current;
-
-    const selectedMesh =
-      selectedMeshRef.current;
-
-    if (!brainRoot) {
-      return;
-    }
-
-    brainRoot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) {
-        return;
-      }
-
-      if (object === selectedMesh) {
-        return;
-      }
-
-      const material =
-        object.material;
-
-      const opacity =
-        cutawayDepthRef.current > 0
-          ? getCutawayOpacity(
-              object,
-              selectedMesh,
-              clampedValue,
+          if (
+            Array.isArray(
+              originalMaterial,
             )
-          : clampedValue;
+          ) {
+            object.material =
+              originalMaterial.map(
+                (
+                  material,
+                ) => {
+                  const clone =
+                    material.clone();
 
-      if (Array.isArray(material)) {
-        material.forEach(
-          (item) => {
-            item.opacity =
-              opacity;
-            item.transparent = true;
-            item.depthWrite = false;
-          },
-        );
-      } else {
-        material.opacity =
-          opacity;
-        material.transparent = true;
-        material.depthWrite = false;
-      }
-    });
-  };
+                  clone.transparent =
+                    true;
 
-  const updateCutawayDepth = (
-    value: number,
-  ) => {
-    const clampedValue = Math.min(
-      1,
-      Math.max(0, value),
-    );
+                  clone.opacity =
+                    interiorOpacityRef.current;
 
-    cutawayDepthRef.current =
-      clampedValue;
+                  clone.depthWrite =
+                    false;
 
-    setCutawayDepth(
-      clampedValue,
-    );
+                  return clone;
+                },
+              );
+          } else {
+            const clone =
+              originalMaterial.clone();
 
-    if (!interiorModeRef.current) {
-      return;
-    }
+            clone.transparent =
+              true;
 
-    const brainRoot =
-      brainRootRef.current;
+            clone.opacity =
+              interiorOpacityRef.current;
 
-    const selectedMesh =
-      selectedMeshRef.current;
+            clone.depthWrite =
+              false;
 
-    if (!brainRoot || !selectedMesh) {
-      return;
-    }
-
-    const selectedBox =
-      new THREE.Box3().setFromObject(
-        selectedMesh,
+            object.material =
+              clone;
+          }
+        },
       );
+    };
 
-    const selectedCenter =
-      selectedBox.getCenter(
-        new THREE.Vector3(),
-      );
+  const restoreSelectedMesh =
+    () => {
+      const mesh =
+        selectedMeshRef.current;
 
-    const selectedSize =
-      selectedBox.getSize(
-        new THREE.Vector3(),
-      );
+      const originalMaterial =
+        selectedOriginalMaterialRef.current;
 
-    const referenceRadius =
-      Math.max(
-        selectedSize.x,
-        selectedSize.y,
-        selectedSize.z,
-        0.001,
-      );
-
-    const cutawayRadius =
-      referenceRadius *
-      (1 + clampedValue * 12);
-
-    brainRoot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) {
+      if (
+        !mesh ||
+        !originalMaterial
+      ) {
         return;
       }
 
-      if (object === selectedMesh) {
-        object.visible = true;
+      mesh.material =
+        originalMaterial;
+
+      selectedMeshRef.current =
+        null;
+
+      selectedOriginalMaterialRef.current =
+        null;
+    };
+
+  const setBrainIsolation =
+    (
+      isolateMesh:
+        THREE.Mesh | null,
+    ) => {
+      const brainRoot =
+        brainRootRef.current;
+
+      if (!brainRoot) {
+        return;
+      }
+
+      brainRoot.traverse(
+        (object) => {
+          if (
+            object instanceof
+            THREE.Mesh
+          ) {
+            object.visible =
+              !isolateMesh ||
+              object ===
+                isolateMesh;
+          }
+        },
+      );
+    };
+
+  const restoreBrainVisibility =
+    () => {
+      const brainRoot =
+        brainRootRef.current;
+
+      if (!brainRoot) {
+        return;
+      }
+
+      brainRoot.traverse(
+        (object) => {
+          if (
+            object instanceof
+            THREE.Mesh
+          ) {
+            object.visible =
+              true;
+          }
+        },
+      );
+    };
+
+  const focusSelectedStructure =
+    () => {
+      const mesh =
+        selectedMeshRef.current;
+
+      const camera =
+        cameraRef.current;
+
+      const controls =
+        controlsRef.current;
+
+      if (
+        !mesh ||
+        !camera ||
+        !controls
+      ) {
         return;
       }
 
       const box =
         new THREE.Box3().setFromObject(
-          object,
+          mesh,
         );
 
       const center =
@@ -406,395 +494,29 @@ export default function BrainViewer() {
           new THREE.Vector3(),
         );
 
+      const size =
+        box.getSize(
+          new THREE.Vector3(),
+        );
+
+      const maxSize =
+        Math.max(
+          size.x,
+          size.y,
+          size.z,
+        );
+
       const distance =
-        center.distanceTo(
-          selectedCenter,
+        Math.max(
+          maxSize * 4,
+          0.025,
         );
 
-      const material =
-        object.material;
-
-      const opacity =
-        distance <= cutawayRadius
-          ? interiorOpacityRef.current
-          : 0;
-
-      if (Array.isArray(material)) {
-        material.forEach(
-          (item) => {
-            item.transparent = true;
-            item.opacity = opacity;
-            item.depthWrite = false;
-          },
-        );
-      } else {
-        material.transparent = true;
-        material.opacity = opacity;
-        material.depthWrite = false;
-      }
-    });
-  };
-
-  const applyClippingPlane = (
-    enabled: boolean,
-    depth: number,
-  ) => {
-    const brainRoot =
-      brainRootRef.current;
-
-    const bounds =
-      brainBoundsRef.current;
-
-    if (!brainRoot || !bounds) {
-      return;
-    }
-
-    const minX = bounds.min.x;
-    const maxX = bounds.max.x;
-
-    const position =
-      minX +
-      (maxX - minX) *
-        Math.min(
-          1,
-          Math.max(0, depth),
-        );
-
-    clippingPlaneRef.current.set(
-      new THREE.Vector3(1, 0, 0),
-      -position,
-    );
-
-    brainRoot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) {
-        return;
-      }
-
-      const material =
-        object.material;
-
-      if (Array.isArray(material)) {
-        material.forEach(
-          (item) => {
-            item.clippingPlanes =
-              enabled
-                ? [clippingPlaneRef.current]
-                : [];
-          },
-        );
-      } else {
-        material.clippingPlanes =
-          enabled
-            ? [clippingPlaneRef.current]
-            : [];
-      }
-    });
-  };
-
-  const updateCrossSectionDepth = (
-    value: number,
-  ) => {
-    const clampedValue = Math.min(
-      1,
-      Math.max(0, value),
-    );
-
-    crossSectionDepthRef.current =
-      clampedValue;
-
-    setCrossSectionDepth(
-      clampedValue,
-    );
-
-    if (
-      crossSectionModeRef.current
-    ) {
-      applyClippingPlane(
-        true,
-        clampedValue,
-      );
-    }
-  };
-
-  const toggleCrossSectionMode = () => {
-    const bounds =
-      brainBoundsRef.current;
-
-    if (!bounds) {
-      setStatus(
-        "Brain model is still loading",
-      );
-
-      return;
-    }
-
-    if (crossSectionMode) {
-      applyClippingPlane(
-        false,
-        0,
-      );
-
-      crossSectionModeRef.current =
-        false;
-
-      setCrossSectionMode(false);
-
-      setCrossSectionDepth(0);
-
-      crossSectionDepthRef.current =
-        0;
-
-      setStatus(
-        selectedStructure
-          ? `Selected: ${selectedStructure.displayName}`
-          : "Luna's brain online",
-      );
-
-      return;
-    }
-
-    applyClippingPlane(
-      true,
-      crossSectionDepth,
-    );
-
-    crossSectionModeRef.current =
-      true;
-
-    setCrossSectionMode(true);
-
-    setStatus(
-      "Cross-section view active",
-    );
-  };
-
-  const toggleInteriorMode = () => {
-    const selectedMesh =
-      selectedMeshRef.current;
-
-    if (!selectedMesh) {
-      setStatus(
-        "Select a brain structure first",
-      );
-
-      return;
-    }
-
-    if (interiorMode) {
-      restoreInteriorMode();
-
-      applyClippingPlane(
-        false,
-        0,
-      );
-
-      crossSectionModeRef.current =
-        false;
-
-      crossSectionDepthRef.current =
-        0;
-
-      cutawayDepthRef.current =
-        0;
-
-      setCrossSectionDepth(0);
-      setCrossSectionMode(false);
-      setCutawayDepth(0);
-      setInteriorMode(false);
-
-      setStatus(
-        `Selected: ${
-          selectedStructure?.displayName ??
-          selectedMesh.name
-        }`,
-      );
-
-      return;
-    }
-
-    applyInteriorMode(
-      selectedMesh,
-    );
-
-    setInteriorMode(true);
-
-    setStatus(
-      `Interior view: ${
-        selectedStructure?.displayName ??
-        selectedMesh.name
-      }`,
-    );
-  };
-
-  const restoreSelectedMesh = () => {
-    const mesh =
-      selectedMeshRef.current;
-
-    const originalMaterial =
-      selectedOriginalMaterialRef.current;
-
-    if (
-      !mesh ||
-      !originalMaterial
-    ) {
-      return;
-    }
-
-    mesh.material =
-      originalMaterial;
-
-    selectedMeshRef.current =
-      null;
-
-    selectedOriginalMaterialRef.current =
-      null;
-  };
-
-  const selectBrainStructure = (
-    structure: BrainStructure,
-  ) => {
-    const mesh =
-      brainMeshMapRef.current.get(
-        structure.id,
-      );
-
-    if (!mesh) {
-      setSelectedStructure(
-        structure,
-      );
-
-      setStatus(
-        `Structure not available in current mesh map: ${structure.displayName}`,
-      );
-
-      return;
-    }
-
-    restoreSelectedMesh();
-
-    if (interiorMode) {
-      restoreInteriorMode();
-    }
-
-    cutawayDepthRef.current =
-      0;
-
-    setCutawayDepth(0);
-
-    selectedOriginalMaterialRef.current =
-      mesh.material;
-
-    if (
-      Array.isArray(
-        mesh.material,
-      )
-    ) {
-      const clonedMaterials =
-        mesh.material.map(
-          (material) =>
-            material.clone(),
-        );
-
-      clonedMaterials.forEach(
-        (material) => {
-          if (
-            material instanceof
-            THREE.MeshStandardMaterial
-          ) {
-            material.color.set(
-              0x0088ff,
-            );
-
-            material.emissive.set(
-              0x0066ff,
-            );
-
-            material.emissiveIntensity = 1.5;
-          }
-        },
-      );
-
-      mesh.material =
-        clonedMaterials;
-    } else {
-      const clonedMaterial =
-        mesh.material.clone();
-
-      if (
-        clonedMaterial instanceof
-        THREE.MeshStandardMaterial
-      ) {
-        clonedMaterial.color.set(
-          0x0088ff,
-        );
-
-        clonedMaterial.emissive.set(
-          0x0066ff,
-        );
-
-        clonedMaterial.emissiveIntensity = 1.5;
-      }
-
-      mesh.material =
-        clonedMaterial;
-    }
-
-    selectedMeshRef.current =
-      mesh;
-
-    if (interiorMode) {
-      applyInteriorMode(
-        mesh,
-      );
-    }
-
-    if (crossSectionMode) {
-      applyClippingPlane(
-        true,
-        crossSectionDepthRef.current,
-      );
-    }
-
-    const box =
-      new THREE.Box3().setFromObject(
-        mesh,
-      );
-
-    const center =
-      box.getCenter(
-        new THREE.Vector3(),
-      );
-
-    const size =
-      box.getSize(
-        new THREE.Vector3(),
-      );
-
-    const maxSize =
-      Math.max(
-        size.x,
-        size.y,
-        size.z,
-      );
-
-    const focusDistance =
-      Math.max(
-        maxSize * 4,
-        0.025,
-      );
-
-    const camera =
-      cameraRef.current;
-
-    const controls =
-      controlsRef.current;
-
-    if (camera && controls) {
       camera.position.set(
         center.x,
         center.y,
         center.z +
-          focusDistance,
+          distance,
       );
 
       controls.target.copy(
@@ -802,56 +524,610 @@ export default function BrainViewer() {
       );
 
       controls.update();
-    }
 
-    setSelectedStructure(
-      structure,
-    );
+      setStatus(
+        `Focused: ${
+          selectedStructure?.displayName ??
+          mesh.name
+        }`,
+      );
+    };
 
-    setIsolationMode(false);
+  const selectBrainStructure =
+    (
+      structure:
+        BrainStructure,
+    ) => {
+      const mesh =
+        brainMeshMapRef.current.get(
+          structure.id,
+        );
 
-    setStatus(
-      `Selected: ${structure.displayName}`,
-    );
-  };
+      if (!mesh) {
+        setSelectedStructure(
+          structure,
+        );
 
-  const setBrainIsolation = (
-    isolateMesh: THREE.Mesh | null,
-  ) => {
-    const brainRoot =
-      brainRootRef.current;
+        setStatus(
+          `Structure not available: ${structure.displayName}`,
+        );
 
-    if (!brainRoot) {
-      return;
-    }
-
-    brainRoot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) {
         return;
       }
 
-      object.visible =
-        !isolateMesh ||
-        object === isolateMesh;
-    });
-  };
+      restoreSelectedMesh();
 
-  const restoreBrainVisibility = () => {
-    const brainRoot =
-      brainRootRef.current;
+      if (interiorModeRef.current) {
+        restoreInteriorMode();
+      }
 
-    if (!brainRoot) {
-      return;
-    }
+      selectedOriginalMaterialRef.current =
+        mesh.material;
 
-    brainRoot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) {
+      if (
+        Array.isArray(
+          mesh.material,
+        )
+      ) {
+        mesh.material =
+          mesh.material.map(
+            (material) => {
+              const clone =
+                material.clone();
+
+              if (
+                clone instanceof
+                THREE.MeshStandardMaterial
+              ) {
+                clone.color.set(
+                  0x0088ff,
+                );
+
+                clone.emissive.set(
+                  0x0066ff,
+                );
+
+                clone.emissiveIntensity =
+                  1.5;
+              }
+
+              return clone;
+            },
+          );
+      } else {
+        const clone =
+          mesh.material.clone();
+
+        if (
+          clone instanceof
+          THREE.MeshStandardMaterial
+        ) {
+          clone.color.set(
+            0x0088ff,
+          );
+
+          clone.emissive.set(
+            0x0066ff,
+          );
+
+          clone.emissiveIntensity =
+            1.5;
+        }
+
+        mesh.material =
+          clone;
+      }
+
+      selectedMeshRef.current =
+        mesh;
+
+      setSelectedStructure(
+        structure,
+      );
+
+      setIsolationMode(false);
+
+      const box =
+        new THREE.Box3().setFromObject(
+          mesh,
+        );
+
+      const center =
+        box.getCenter(
+          new THREE.Vector3(),
+        );
+
+      const size =
+        box.getSize(
+          new THREE.Vector3(),
+        );
+
+      const distance =
+        Math.max(
+          Math.max(
+            size.x,
+            size.y,
+            size.z,
+          ) * 4,
+          0.025,
+        );
+
+      const camera =
+        cameraRef.current;
+
+      const controls =
+        controlsRef.current;
+
+      if (
+        camera &&
+        controls
+      ) {
+        camera.position.set(
+          center.x,
+          center.y,
+          center.z +
+            distance,
+        );
+
+        controls.target.copy(
+          center,
+        );
+
+        controls.update();
+      }
+
+      setStatus(
+        `Selected: ${structure.displayName}`,
+      );
+    };
+
+  const getStructureTargetPosition =
+    (
+      structure:
+        BrainStructure,
+    ): NanobotPosition => {
+      const mesh =
+        brainMeshMapRef.current.get(
+          structure.id,
+        );
+
+      if (mesh) {
+        const box =
+          new THREE.Box3().setFromObject(
+            mesh,
+          );
+
+        const center =
+          box.getCenter(
+            new THREE.Vector3(),
+          );
+
+        return {
+          x: center.x,
+          y: center.y,
+          z: center.z,
+        };
+      }
+
+      const bounds =
+        brainBoundsRef.current;
+
+      if (bounds) {
+        const center =
+          bounds.getCenter(
+            new THREE.Vector3(),
+          );
+
+        return {
+          x: center.x,
+          y: center.y,
+          z: center.z,
+        };
+      }
+
+      return {
+        x: 0,
+        y: 0,
+        z: 0,
+      };
+    };
+
+  const getNanobotStartPosition =
+    (): NanobotPosition => {
+      const bounds =
+        brainBoundsRef.current;
+
+      if (!bounds) {
+        return {
+          x: 0,
+          y: 0,
+          z: 0,
+        };
+      }
+
+      return {
+        x:
+          bounds.min.x -
+          Math.max(
+            bounds.getSize(
+              new THREE.Vector3(),
+            ).x *
+              0.2,
+            0.01,
+          ),
+
+        y:
+          bounds.min.y +
+          bounds.getSize(
+            new THREE.Vector3(),
+          ).y *
+            0.5,
+
+        z:
+          bounds.min.z +
+          bounds.getSize(
+            new THREE.Vector3(),
+          ).z *
+            0.5,
+      };
+    };
+
+  const getNanobotWorkDuration =
+    (
+      type: NanobotType,
+    ): number => {
+      switch (type) {
+        case "diagnostic":
+          return 4;
+        case "repair":
+          return 6;
+        case "delivery":
+          return 5;
+        case "monitor":
+          return 8;
+        case "scout":
+        default:
+          return 3;
+      }
+    };
+
+  const getNanobotReturnProgress =
+    (
+      nanobot: Nanobot,
+    ): number => {
+      const start =
+        nanobotReturnStartedRef.current.get(
+          nanobot.id,
+        );
+
+      if (!start) {
+        return 0;
+      }
+
+      const duration = 3;
+
+      return Math.min(
+        1,
+        Math.max(
+          0,
+          (performance.now() - start) /
+            (duration * 1000),
+        ),
+      );
+    };
+
+  const syncNanobotState =
+    () => {
+      setNanobots(
+        nanobotRegistry.getAll(),
+      );
+    };
+
+  const deployNanobot =
+    (
+      type: NanobotType,
+    ) => {
+      if (
+        !selectedStructure
+      ) {
+        setStatus(
+          "Select a brain structure before deploying a nanobot",
+        );
+
         return;
       }
 
-      object.visible = true;
-    });
-  };
+      const nanobot =
+        nanobotRegistry.create(
+          type,
+        );
+
+      nanobot.position =
+        getNanobotStartPosition();
+
+      nanobotRegistry.register(
+        nanobot,
+      );
+
+      nanobotRegistry.setState(
+        nanobot.id,
+        "deploying",
+      );
+
+      nanobotRegistry.targetStructure(
+        nanobot.id,
+        selectedStructure,
+      );
+
+      const visual =
+        createNanobotVisual(
+          nanobot,
+        );
+
+      const nanobotRoot =
+        nanobotRootRef.current;
+
+      if (nanobotRoot) {
+        nanobotRoot.add(
+          visual.root,
+        );
+      }
+
+      nanobotVisualsRef.current.set(
+        nanobot.id,
+        visual,
+      );
+
+      nanobotPositionsRef.current.set(
+        nanobot.id,
+        {
+          ...nanobot.position,
+        },
+      );
+
+      setSelectedNanobotId(
+        nanobot.id,
+      );
+
+      syncNanobotState();
+
+      setStatus(
+        `${nanobot.metadata.label} deployed toward ${selectedStructure.displayName}`,
+      );
+    };
+
+  const pauseNanobots =
+    () => {
+      nanobotRegistry
+        .getAll()
+        .forEach(
+          (nanobot) => {
+            if (
+              nanobot.state ===
+                "navigating" ||
+              nanobot.state ===
+                "deploying"
+            ) {
+              nanobotRegistry.setState(
+                nanobot.id,
+                "paused",
+              );
+            }
+          },
+        );
+
+      syncNanobotState();
+
+      setStatus(
+        "Nanobot navigation paused",
+      );
+    };
+
+  const resumeNanobots =
+    () => {
+      nanobotRegistry
+        .getAll()
+        .forEach(
+          (nanobot) => {
+            if (
+              nanobot.state ===
+              "paused"
+            ) {
+              nanobotRegistry.setState(
+                nanobot.id,
+                "navigating",
+              );
+            }
+          },
+        );
+
+      syncNanobotState();
+
+      setStatus(
+        "Nanobot navigation resumed",
+      );
+    };
+
+  const returnNanobots =
+    () => {
+      const now =
+        performance.now();
+
+      nanobotRegistry
+        .getAll()
+        .forEach(
+          (nanobot) => {
+            if (
+              nanobot.state !==
+                "completed" &&
+              nanobot.state !==
+                "returning"
+            ) {
+              nanobotReturnStartedRef.current.set(
+                nanobot.id,
+                now,
+              );
+
+              nanobotRegistry.setState(
+                nanobot.id,
+                "returning",
+              );
+            }
+          },
+        );
+
+      syncNanobotState();
+
+      setStatus(
+        "Nanobots returning to deployment point",
+      );
+    };
+
+  const clearNanobots =
+    () => {
+      nanobotVisualsRef.current.forEach(
+        (
+          visual,
+        ) => {
+          const root =
+            nanobotRootRef.current;
+
+          if (root) {
+            root.remove(
+              visual.root,
+            );
+          }
+
+          disposeNanobotVisual(
+            visual,
+          );
+        },
+      );
+
+      nanobotVisualsRef.current.clear();
+      nanobotPositionsRef.current.clear();
+      nanobotWorkStartedRef.current.clear();
+      nanobotReturnStartedRef.current.clear();
+
+      nanobotRegistry.clear();
+
+      setNanobots([]);
+
+      setSelectedNanobotId(
+        null,
+      );
+
+      setStatus(
+        selectedStructure
+          ? `Selected: ${selectedStructure.displayName}`
+          : "Luna's brain online",
+      );
+    };
+
+  const selectNanobot =
+    (
+      id: string,
+    ) => {
+      const nanobot =
+        nanobotRegistry.get(
+          id,
+        );
+
+      if (!nanobot) {
+        return;
+      }
+
+      setSelectedNanobotId(
+        id,
+      );
+
+      setStatus(
+        `${nanobot.metadata.label} · ${nanobot.state}${
+          nanobot.target
+            ? ` · ${nanobot.target.structureName}`
+            : ""
+        }`,
+      );
+    };
+
+  const handleScaleChange =
+    (
+      scale: BrainScale,
+    ) => {
+      setActiveScale(scale);
+
+      const labels: Record<
+        BrainScale,
+        string
+      > = {
+        macro:
+          "Macro anatomy",
+        tissue:
+          "Tissue scale",
+        cellular:
+          "Cellular scale",
+        subcellular:
+          "Subcellular scale",
+        molecular:
+          "Molecular scale",
+      };
+
+      setStatus(
+        `${labels[scale]} selected · checking layer`,
+      );
+    };
+
+  const handleScaleAssetStateChange =
+    useCallback(
+      (
+        state: {
+          loading: boolean;
+          error: string | null;
+          asset:
+            | BrainScaleAsset
+            | null;
+        },
+      ) => {
+        setScaleAssetLoading(
+          state.loading,
+        );
+
+        setScaleAssetError(
+          state.error,
+        );
+
+        setScaleAsset(
+          state.asset,
+        );
+
+        if (state.loading) {
+          setStatus(
+            "Loading selected brain scale...",
+          );
+
+          return;
+        }
+
+        if (state.error) {
+          setStatus(
+            `Scale layer error: ${state.error}`,
+          );
+
+          return;
+        }
+
+        if (!state.asset) {
+          return;
+        }
+
+        setStatus(
+          state.asset.available
+            ? `${state.asset.label} layer ready`
+            : `${state.asset.label} layer registered · dataset not connected`,
+        );
+      },
+      [],
+    );
 
   useEffect(() => {
     const container =
@@ -861,10 +1137,13 @@ export default function BrainViewer() {
       return;
     }
 
-    const scene = new THREE.Scene();
+    const scene =
+      new THREE.Scene();
 
     scene.background =
-      new THREE.Color(0x080b10);
+      new THREE.Color(
+        0x080b10,
+      );
 
     const camera =
       new THREE.PerspectiveCamera(
@@ -880,12 +1159,6 @@ export default function BrainViewer() {
 
     cameraRef.current =
       camera;
-
-    camera.position.set(
-      0,
-      0,
-      0.3,
-    );
 
     const renderer =
       new THREE.WebGLRenderer({
@@ -962,12 +1235,28 @@ export default function BrainViewer() {
     const brainRoot =
       new THREE.Group();
 
+    brainRoot.name =
+      "luna-brain";
+
     scene.add(
       brainRoot,
     );
 
     brainRootRef.current =
       brainRoot;
+
+    const nanobotRoot =
+      new THREE.Group();
+
+    nanobotRoot.name =
+      "luna-nanobots";
+
+    scene.add(
+      nanobotRoot,
+    );
+
+    nanobotRootRef.current =
+      nanobotRoot;
 
     const controls =
       new OrbitControls(
@@ -1017,242 +1306,199 @@ export default function BrainViewer() {
     let pointerDownX = 0;
     let pointerDownY = 0;
 
-    const highlightMesh = (
-      mesh: THREE.Mesh,
-    ) => {
-      const originalMaterial =
-        mesh.material;
+    const highlightMesh =
+      (
+        mesh: THREE.Mesh,
+      ) => {
+        const original =
+          mesh.material;
 
-      selectedOriginalMaterialRef.current =
-        originalMaterial;
-
-      if (
-        Array.isArray(
-          originalMaterial,
-        )
-      ) {
-        const clonedMaterials =
-          originalMaterial.map(
-            (material) =>
-              material.clone(),
-          );
-
-        clonedMaterials.forEach(
-          (material) => {
-            if (
-              material instanceof
-              THREE.MeshStandardMaterial
-            ) {
-              material.color.set(
-                0x0088ff,
-              );
-
-              material.emissive.set(
-                0x0066ff,
-              );
-
-              material.emissiveIntensity =
-                1.5;
-            }
-          },
-        );
-
-        mesh.material =
-          clonedMaterials;
-      } else {
-        const clonedMaterial =
-          originalMaterial.clone();
+        selectedOriginalMaterialRef.current =
+          original;
 
         if (
-          clonedMaterial instanceof
-          THREE.MeshStandardMaterial
+          Array.isArray(
+            original,
+          )
         ) {
-          clonedMaterial.color.set(
-            0x0088ff,
-          );
+          mesh.material =
+            original.map(
+              (
+                material,
+              ) => {
+                const clone =
+                  material.clone();
 
-          clonedMaterial.emissive.set(
-            0x0066ff,
-          );
+                if (
+                  clone instanceof
+                  THREE.MeshStandardMaterial
+                ) {
+                  clone.color.set(
+                    0x0088ff,
+                  );
 
-          clonedMaterial.emissiveIntensity =
-            1.5;
+                  clone.emissive.set(
+                    0x0066ff,
+                  );
+
+                  clone.emissiveIntensity =
+                    1.5;
+                }
+
+                return clone;
+              },
+            );
+        } else {
+          const clone =
+            original.clone();
+
+          if (
+            clone instanceof
+            THREE.MeshStandardMaterial
+          ) {
+            clone.color.set(
+              0x0088ff,
+            );
+
+            clone.emissive.set(
+              0x0066ff,
+            );
+
+            clone.emissiveIntensity =
+              1.5;
+          }
+
+          mesh.material =
+            clone;
         }
 
-        mesh.material =
-          clonedMaterial;
-      }
+        selectedMeshRef.current =
+          mesh;
+      };
 
-      selectedMeshRef.current =
-        mesh;
-    };
+    const handlePointerDown =
+      (
+        event: PointerEvent,
+      ) => {
+        pointerDownX =
+          event.clientX;
 
-    const handlePointerDown = (
-      event: PointerEvent,
-    ) => {
-      pointerDownX =
-        event.clientX;
+        pointerDownY =
+          event.clientY;
+      };
 
-      pointerDownY =
-        event.clientY;
-    };
+    const handlePointerUp =
+      (
+        event: PointerEvent,
+      ) => {
+        const movementX =
+          Math.abs(
+            event.clientX -
+              pointerDownX,
+          );
 
-    const handlePointerUp = (
-      event: PointerEvent,
-    ) => {
-      const movementX =
-        Math.abs(
-          event.clientX -
-            pointerDownX,
-        );
+        const movementY =
+          Math.abs(
+            event.clientY -
+              pointerDownY,
+          );
 
-      const movementY =
-        Math.abs(
-          event.clientY -
-            pointerDownY,
-        );
+        if (
+          movementX > 5 ||
+          movementY > 5
+        ) {
+          return;
+        }
 
-      if (
-        movementX > 5 ||
-        movementY > 5
-      ) {
-        return;
-      }
+        const rect =
+          renderer.domElement.getBoundingClientRect();
 
-      const rect =
-        renderer.domElement.getBoundingClientRect();
-
-      pointer.x =
-        ((event.clientX -
-          rect.left) /
-          rect.width) *
-          2 -
-        1;
-
-      pointer.y =
-        -(
-          ((event.clientY -
-            rect.top) /
-            rect.height) *
+        pointer.x =
+          ((event.clientX -
+            rect.left) /
+            rect.width) *
             2 -
-          1
+          1;
+
+        pointer.y =
+          -(
+            ((event.clientY -
+              rect.top) /
+              rect.height) *
+              2 -
+            1
+          );
+
+        raycaster.setFromCamera(
+          pointer,
+          camera,
         );
 
-      raycaster.setFromCamera(
-        pointer,
-        camera,
-      );
+        const intersections =
+          raycaster.intersectObjects(
+            brainRoot.children,
+            true,
+          );
 
-      const intersections =
-        raycaster.intersectObjects(
-          brainRoot.children,
-          true,
-        );
+        if (
+          intersections.length ===
+          0
+        ) {
+          restoreSelectedMesh();
 
-      if (
-        intersections.length === 0
-      ) {
+          setSelectedStructure(
+            null,
+          );
+
+          setStatus(
+            "Luna's brain online",
+          );
+
+          return;
+        }
+
+        const object =
+          intersections[0]
+            .object;
+
+        if (
+          !(
+            object instanceof
+            THREE.Mesh
+          )
+        ) {
+          return;
+        }
+
         restoreSelectedMesh();
 
-        if (
-          interiorModeRef.current
-        ) {
-          restoreInteriorMode();
+        highlightMesh(
+          object,
+        );
 
-          applyClippingPlane(
-            false,
-            0,
+        const registry =
+          buildBrainStructureRegistry([
+            object.name,
+          ]);
+
+        const structure =
+          registry[0] ??
+          null;
+
+        if (structure) {
+          setSelectedStructure(
+            structure,
           );
 
-          crossSectionModeRef.current =
-            false;
-
-          crossSectionDepthRef.current =
-            0;
-
-          setCrossSectionDepth(
-            0,
+          setStatus(
+            `Selected: ${structure.displayName}`,
           );
-
-          setCrossSectionMode(
-            false,
+        } else {
+          setStatus(
+            `Selected: ${object.name}`,
           );
-
-          cutawayDepthRef.current =
-            0;
-
-          setCutawayDepth(0);
-          setInteriorMode(false);
         }
-
-        setSelectedStructure(
-          null,
-        );
-
-        setStatus(
-          "Luna's brain online",
-        );
-
-        return;
-      }
-
-      const clickedObject =
-        intersections[0].object;
-
-      if (
-        !(
-          clickedObject instanceof
-          THREE.Mesh
-        )
-      ) {
-        return;
-      }
-
-      restoreSelectedMesh();
-
-      if (
-        interiorModeRef.current
-      ) {
-        restoreInteriorMode();
-      }
-
-      highlightMesh(
-        clickedObject,
-      );
-
-      if (
-        interiorModeRef.current
-      ) {
-        applyInteriorMode(
-          clickedObject,
-        );
-      }
-
-      const structureName =
-        clickedObject.name;
-
-      const registry =
-        buildBrainStructureRegistry(
-          [structureName],
-        );
-
-      const structure =
-        registry[0] ?? null;
-
-      setSelectedStructure(
-        structure,
-      );
-
-      if (structure) {
-        setStatus(
-          `Selected: ${structure.displayName}`,
-        );
-      } else {
-        setStatus(
-          `Selected: ${structureName}`,
-        );
-      }
-    };
+      };
 
     renderer.domElement.addEventListener(
       "pointerdown",
@@ -1269,7 +1515,6 @@ export default function BrainViewer() {
 
     loader.load(
       BRAIN_MODEL_URL,
-
       (gltf) => {
         const brain =
           gltf.scene;
@@ -1307,15 +1552,9 @@ export default function BrainViewer() {
         if (
           maxDimension > 0
         ) {
-          const targetSize =
-            0.17;
-
-          const scale =
-            targetSize /
-            maxDimension;
-
           brain.scale.setScalar(
-            scale,
+            0.17 /
+              maxDimension,
           );
         }
 
@@ -1332,16 +1571,13 @@ export default function BrainViewer() {
             new THREE.Vector3(),
           );
 
-        const startingDistance =
-          Math.max(
-            scaledSize.z * 2.5,
-            0.3,
-          );
-
         camera.position.set(
           0,
           0,
-          startingDistance,
+          Math.max(
+            scaledSize.z * 2.5,
+            0.3,
+          ),
         );
 
         controls.target.set(
@@ -1354,13 +1590,16 @@ export default function BrainViewer() {
 
         controls.saveState();
 
-        let meshCount = 0;
-
         const meshNames: string[] =
           [];
 
         const meshMap =
-          new Map<string, THREE.Mesh>();
+          new Map<
+            string,
+            THREE.Mesh
+          >();
+
+        let meshCount = 0;
 
         brain.traverse(
           (object) => {
@@ -1370,19 +1609,23 @@ export default function BrainViewer() {
             ) {
               meshCount++;
 
-              if (object.name) {
+              if (
+                object.name
+              ) {
                 meshNames.push(
                   object.name,
                 );
 
-                const structureId =
+                const structure =
                   buildBrainStructureRegistry([
                     object.name,
-                  ])[0]?.id;
+                  ])[0];
 
-                if (structureId) {
+                if (
+                  structure
+                ) {
                   meshMap.set(
-                    structureId,
+                    structure.id,
                     object,
                   );
                 }
@@ -1394,22 +1637,17 @@ export default function BrainViewer() {
         brainMeshMapRef.current =
           meshMap;
 
-        const structures =
+        setBrainStructures(
           buildBrainStructureRegistry(
             meshNames,
-          );
-
-        setBrainStructures(
-          structures,
+          ),
         );
 
         setStatus(
           `Luna's brain online · ${meshCount} anatomical meshes`,
         );
       },
-
       undefined,
-
       (error) => {
         console.error(
           "Failed to load Luna brain:",
@@ -1426,11 +1664,11 @@ export default function BrainViewer() {
       () => {
         controls.reset();
 
-        restoreInteriorMode();
         restoreSelectedMesh();
 
-        setInteriorMode(false);
-        setSelectedStructure(null);
+        setSelectedStructure(
+          null,
+        );
 
         setStatus(
           "Luna's brain online",
@@ -1471,25 +1709,274 @@ export default function BrainViewer() {
 
     let animationFrame = 0;
 
-    const animate = () => {
-      animationFrame =
-        requestAnimationFrame(
-          animate,
+    const animate =
+      () => {
+        animationFrame =
+          requestAnimationFrame(
+            animate,
+          );
+
+        const delta =
+          Math.min(
+            nanobotClockRef.current.getDelta(),
+            0.05,
+          );
+
+        const elapsed =
+          nanobotClockRef.current.elapsedTime;
+
+        nanobotRegistry
+          .getAll()
+          .forEach(
+            (
+              nanobot,
+            ) => {
+              if (
+                nanobot.state ===
+                  "navigating" &&
+                nanobot.target
+              ) {
+                const targetStructure =
+                  brainStructuresRef.current.find(
+                    (structure) =>
+                      structure.id ===
+                      nanobot
+                        .target
+                        ?.structureId,
+                  );
+
+                if (
+                  targetStructure
+                ) {
+                  const target =
+                    getStructureTargetPosition(
+                      targetStructure,
+                    );
+
+                  const result =
+                    navigateNanobot(
+                      nanobot,
+                      {
+                        position:
+                          target,
+                        radius:
+                          0.003,
+                      },
+                      delta,
+                    );
+
+                  nanobot.position =
+                    result.position;
+
+                  nanobot.progress =
+                    result.progress;
+
+                  nanobot.updatedAt =
+                    Date.now();
+
+                  if (
+                    result.arrived
+                  ) {
+                    nanobot.progress = 1;
+
+                    nanobotRegistry.setState(
+                      nanobot.id,
+                      "arrived",
+                    );
+                  }
+                }
+              } else if (
+                nanobot.state ===
+                "arrived"
+              ) {
+                nanobot.progress = 1;
+
+                if (
+                  !nanobotWorkStartedRef.current.has(
+                    nanobot.id,
+                  )
+                ) {
+                  nanobotWorkStartedRef.current.set(
+                    nanobot.id,
+                    performance.now(),
+                  );
+                }
+
+                nanobotRegistry.setState(
+                  nanobot.id,
+                  "working",
+                );
+              } else if (
+                nanobot.state ===
+                "working"
+              ) {
+                const started =
+                  nanobotWorkStartedRef.current.get(
+                    nanobot.id,
+                  ) ?? performance.now();
+
+                const duration =
+                  getNanobotWorkDuration(
+                    nanobot.type,
+                  );
+
+                const workProgress =
+                  Math.min(
+                    1,
+                    Math.max(
+                      0,
+                      (performance.now() -
+                        started) /
+                        (duration * 1000),
+                    ),
+                  );
+
+                nanobot.progress =
+                  workProgress;
+
+                nanobot.updatedAt =
+                  Date.now();
+
+                if (
+                  workProgress >= 1
+                ) {
+                  nanobot.progress = 1;
+
+                  nanobotWorkStartedRef.current.delete(
+                    nanobot.id,
+                  );
+
+                  nanobotReturnStartedRef.current.set(
+                    nanobot.id,
+                    performance.now(),
+                  );
+
+                  nanobotRegistry.setState(
+                    nanobot.id,
+                    "returning",
+                  );
+
+                  setStatus(
+                    `${nanobot.metadata.label} completed ${nanobot.type} operation`,
+                  );
+                }
+              } else if (
+                nanobot.state ===
+                  "returning"
+              ) {
+                const start =
+                  getNanobotStartPosition();
+
+                const result =
+                  navigateNanobot(
+                    nanobot,
+                    {
+                      position:
+                        start,
+                      radius:
+                        0.003,
+                    },
+                    delta,
+                  );
+
+                nanobot.position =
+                  result.position;
+
+                const returnProgress =
+                  getNanobotReturnProgress(
+                    nanobot,
+                  );
+
+                nanobot.progress =
+                  returnProgress;
+
+                nanobot.updatedAt =
+                  Date.now();
+
+                if (
+                  result.arrived
+                ) {
+                  nanobot.progress = 1;
+
+                  nanobotReturnStartedRef.current.delete(
+                    nanobot.id,
+                  );
+
+                  nanobotRegistry.setState(
+                    nanobot.id,
+                    "completed",
+                  );
+
+                  setStatus(
+                    `${nanobot.metadata.label} mission complete`,
+                  );
+                }
+              }
+
+              const visual =
+                nanobotVisualsRef.current.get(
+                  nanobot.id,
+                );
+
+              if (visual) {
+                updateNanobotVisual(
+                  visual,
+                  nanobot,
+                  elapsed,
+                );
+
+                // Luna nanobots use a red visual language.
+                visual.root.traverse((object) => {
+                  if (!(object instanceof THREE.Mesh)) {
+                    return;
+                  }
+
+                  const materials = Array.isArray(object.material)
+                    ? object.material
+                    : [object.material];
+
+                  materials.forEach((material) => {
+                    if (!(material instanceof THREE.MeshStandardMaterial)) {
+                      return;
+                    }
+
+                    material.color.set(0xff2b2b);
+                    material.emissive.set(0xff0000);
+                    material.emissiveIntensity =
+                      nanobot.state === "error" ? 2.4 : 1.6;
+                  });
+                });
+              }
+            },
+          );
+
+        controls.update();
+
+        renderer.render(
+          scene,
+          camera,
         );
-
-      controls.update();
-
-      renderer.render(
-        scene,
-        camera,
-      );
-    };
+      };
 
     animate();
+
+    const stateInterval =
+      window.setInterval(
+        () => {
+          setNanobots(
+            nanobotRegistry.getAll(),
+          );
+        },
+        150,
+      );
 
     return () => {
       cancelAnimationFrame(
         animationFrame,
+      );
+
+      window.clearInterval(
+        stateInterval,
       );
 
       window.removeEventListener(
@@ -1512,36 +1999,43 @@ export default function BrainViewer() {
         handleDoubleClick,
       );
 
+      nanobotVisualsRef.current.forEach(
+        (
+          visual,
+        ) => {
+          disposeNanobotVisual(
+            visual,
+          );
+        },
+      );
+
+      nanobotVisualsRef.current.clear();
+      nanobotPositionsRef.current.clear();
+      nanobotWorkStartedRef.current.clear();
+      nanobotReturnStartedRef.current.clear();
+
+      nanobotRegistry.clear();
+      nanobotWorkStartedRef.current.clear();
+      nanobotReturnStartedRef.current.clear();
+
       controls.dispose();
-
       renderer.dispose();
-
-      restoreInteriorMode();
 
       brainMeshMapRef.current.clear();
 
       brainRootRef.current =
         null;
 
-      interiorOpacityRef.current =
-        0.12;
-
-      cutawayDepthRef.current =
-        0;
-
-      crossSectionModeRef.current =
-        false;
-
-      crossSectionDepthRef.current =
-        0;
-
-      brainBoundsRef.current =
+      nanobotRootRef.current =
         null;
 
       cameraRef.current =
         null;
 
       controlsRef.current =
+        null;
+
+      brainBoundsRef.current =
         null;
 
       if (
@@ -1555,213 +2049,353 @@ export default function BrainViewer() {
     };
   }, []);
 
-  const handleScaleChange = (
-    scale: BrainScale,
-  ) => {
-    setActiveScale(scale);
+  const toggleInteriorMode =
+    () => {
+      const mesh =
+        selectedMeshRef.current;
 
-    const labels: Record<
-      BrainScale,
-      string
-    > = {
-      macro: "Macro anatomy",
-      tissue: "Tissue scale",
-      cellular: "Cellular scale",
-      subcellular:
-        "Subcellular scale",
-      molecular:
-        "Molecular scale",
-    };
-
-    if (scale === "macro") {
-      setStatus(
-        selectedStructure
-          ? `Selected: ${selectedStructure.displayName}`
-          : "Luna's brain online",
-      );
-
-      return;
-    }
-
-    setStatus(
-      `${labels[scale]} selected · checking layer`,
-    );
-  };
-
-  const handleScaleAssetStateChange =
-    useCallback(
-      (state: {
-        loading: boolean;
-        error: string | null;
-        asset: BrainScaleAsset | null;
-      }) => {
-        setScaleAssetLoading(
-          state.loading,
+      if (!mesh) {
+        setStatus(
+          "Select a brain structure first",
         );
 
-        setScaleAssetError(
-          state.error,
+        return;
+      }
+
+      if (interiorMode) {
+        restoreInteriorMode();
+
+        setInteriorMode(
+          false,
         );
-
-        setScaleAsset(
-          state.asset,
-        );
-
-        if (state.loading) {
-          setStatus(
-            "Loading selected brain scale...",
-          );
-
-          return;
-        }
-
-        if (state.error) {
-          setStatus(
-            `Scale layer error: ${state.error}`,
-          );
-
-          return;
-        }
-
-        if (!state.asset) {
-          return;
-        }
-
-        if (state.asset.available) {
-          setStatus(
-            `${state.asset.label} layer ready`,
-          );
-
-          return;
-        }
 
         setStatus(
-          `${state.asset.label} layer registered · dataset not connected`,
+          `Selected: ${
+            selectedStructure?.displayName ??
+            mesh.name
+          }`,
         );
-      },
-      [],
-    );
 
-  const focusSelectedStructure = () => {
-    const mesh =
-      selectedMeshRef.current;
+        return;
+      }
 
-    const camera =
-      cameraRef.current;
-
-    const controls =
-      controlsRef.current;
-
-    if (
-      !mesh ||
-      !camera ||
-      !controls
-    ) {
-      return;
-    }
-
-    const box =
-      new THREE.Box3().setFromObject(
+      applyInteriorMode(
         mesh,
       );
 
-    const center =
-      box.getCenter(
-        new THREE.Vector3(),
+      setInteriorMode(
+        true,
       );
 
-    const size =
-      box.getSize(
-        new THREE.Vector3(),
+      setStatus(
+        `Interior view: ${
+          selectedStructure?.displayName ??
+          mesh.name
+        }`,
+      );
+    };
+
+  const updateInteriorOpacity =
+    (
+      value: number,
+    ) => {
+      const next =
+        Math.min(
+          0.5,
+          Math.max(
+            0.03,
+            value,
+          ),
+        );
+
+      interiorOpacityRef.current =
+        next;
+
+      setInteriorOpacity(
+        next,
       );
 
-    const maxSize =
-      Math.max(
-        size.x,
-        size.y,
-        size.z,
+      if (
+        !interiorMode
+      ) {
+        return;
+      }
+
+      interiorOriginalMaterialsRef.current.forEach(
+        (
+          _original,
+          mesh,
+        ) => {
+          const material =
+            mesh.material;
+
+          if (
+            Array.isArray(
+              material,
+            )
+          ) {
+            material.forEach(
+              (
+                item,
+              ) => {
+                item.opacity =
+                  next;
+
+                item.transparent =
+                  true;
+
+                item.depthWrite =
+                  false;
+              },
+            );
+          } else {
+            material.opacity =
+              next;
+
+            material.transparent =
+              true;
+
+            material.depthWrite =
+              false;
+          }
+        },
+      );
+    };
+
+  const updateCutawayDepth =
+    (
+      value: number,
+    ) => {
+      const next =
+        Math.min(
+          1,
+          Math.max(
+            0,
+            value,
+          ),
+        );
+
+      setCutawayDepth(
+        next,
       );
 
-    const focusDistance =
-      Math.max(
-        maxSize * 4,
-        0.025,
+      cutawayDepthRef.current =
+        next;
+    };
+
+  const toggleCrossSectionMode =
+    () => {
+      const brainRoot =
+        brainRootRef.current;
+
+      const bounds =
+        brainBoundsRef.current;
+
+      if (
+        !brainRoot ||
+        !bounds
+      ) {
+        return;
+      }
+
+      if (
+        crossSectionMode
+      ) {
+        brainRoot.traverse(
+          (object) => {
+            if (
+              object instanceof
+              THREE.Mesh
+            ) {
+              const material =
+                object.material;
+
+              if (
+                Array.isArray(
+                  material,
+                )
+              ) {
+                material.forEach(
+                  (
+                    item,
+                  ) => {
+                    item.clippingPlanes =
+                      [];
+                  },
+                );
+              } else {
+                material.clippingPlanes =
+                  [];
+              }
+            }
+          },
+        );
+
+        setCrossSectionMode(
+          false,
+        );
+
+        return;
+      }
+
+      const position =
+        THREE.MathUtils.lerp(
+          bounds.min.x,
+          bounds.max.x,
+          crossSectionDepth,
+        );
+
+      clippingPlaneRef.current.set(
+        new THREE.Vector3(
+          1,
+          0,
+          0,
+        ),
+        -position,
       );
 
-    camera.position.set(
-      center.x,
-      center.y,
-      center.z +
-        focusDistance,
-    );
+      brainRoot.traverse(
+        (object) => {
+          if (
+            object instanceof
+            THREE.Mesh
+          ) {
+            const material =
+              object.material;
 
-    controls.target.copy(
-      center,
-    );
+            if (
+              Array.isArray(
+                material,
+              )
+            ) {
+              material.forEach(
+                (
+                  item,
+                ) => {
+                  item.clippingPlanes =
+                    [
+                      clippingPlaneRef.current,
+                    ];
+                },
+              );
+            } else {
+              material.clippingPlanes =
+                [
+                  clippingPlaneRef.current,
+                ];
+            }
+          }
+        },
+      );
 
-    controls.update();
+      setCrossSectionMode(
+        true,
+      );
+    };
 
-    setStatus(
-      `Focused: ${
-        selectedStructure?.displayName ??
-        mesh.name
-      }`,
-    );
-  };
+  const updateCrossSectionDepth =
+    (
+      value: number,
+    ) => {
+      setCrossSectionDepth(
+        value,
+      );
+
+      crossSectionDepthRef.current =
+        value;
+
+      if (
+        crossSectionMode
+      ) {
+        toggleCrossSectionMode();
+        window.setTimeout(
+          () =>
+            toggleCrossSectionMode(),
+          0,
+        );
+      }
+    };
 
   return (
-    <div className="relative h-full min-h-[600px] w-full overflow-hidden rounded-xl bg-black">
-      <div
-        ref={containerRef}
-        className="absolute inset-0"
-      />
+    <BrainWorkspace>
+      <div className="relative h-full min-h-[600px] w-full overflow-hidden rounded-xl bg-black">
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+        />
+
+        <BrainWorkspaceBar
+          panels={DEFAULT_PANELS}
+          workspace={workspace}
+        />
 
       <BrainScaleAssetLoader
-        structure={selectedStructure}
-        activeScale={activeScale}
-        onAssetStateChange={
-          handleScaleAssetStateChange
-        }
-      />
-
-      <BrainAnatomyNavigator
-        structures={brainStructures}
-        selectedStructure={
+        structure={
           selectedStructure
         }
-        onSelectStructure={
-          selectBrainStructure
+        activeScale={
+          activeScale
+        }
+        onAssetStateChange={
+          (
+            state,
+          ) =>
+            handleScaleAssetStateChange(
+              state,
+            )
         }
       />
 
-      <div className="pointer-events-none absolute left-4 top-4 rounded-lg bg-black/60 px-3 py-2 text-sm text-white backdrop-blur">
+        {workspace.isOpen("anatomy") &&
+          !workspace.isMinimized("anatomy") && (
+            <div className="pointer-events-none absolute left-4 top-16 bottom-4 z-40 ">
+              <div className="pointer-events-auto relative max-h-full">
+                <BrainAnatomyNavigator
+                  structures={
+                    brainStructures
+                  }
+                  selectedStructure={
+                    selectedStructure
+                  }
+                  onSelectStructure={
+                    selectBrainStructure
+                  }
+                />
+                <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => workspace.minimizePanel("anatomy")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
+                    title="Minimize"
+                    aria-label="Minimize Brain Anatomy"
+                  >−</button>
+                  <button
+                    type="button"
+                    onClick={() => workspace.closePanel("anatomy")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
+                    title="Close"
+                    aria-label="Close Brain Anatomy"
+                  >×</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+      <div className="pointer-events-none absolute left-4 top-16 z-10 mt-2 rounded-lg bg-black/55 px-3 py-2 text-sm text-white/80 backdrop-blur">
         {status}
       </div>
 
-      <div className="pointer-events-none absolute left-4 top-16 rounded-lg border border-white/10 bg-black/55 px-3 py-2 text-[10px] text-white/60 backdrop-blur">
-        <div className="uppercase tracking-wider text-white/35">
-          Active scale
-        </div>
-
-        <div className="mt-1 text-xs text-white/80">
-          {scaleAsset?.label ??
-            activeScale}
-        </div>
-
-        <div className="mt-0.5">
-          {scaleAssetLoading
-            ? "Loading"
-            : scaleAssetError
-              ? "Error"
-              : scaleAsset?.available
-                ? "Dataset ready"
-                : "Architecture ready · dataset pending"}
-        </div>
-      </div>
-
+        {workspace.isOpen("inspector") &&
+          !workspace.isMinimized("inspector") && (
+            <div className="pointer-events-none absolute right-4 top-16 bottom-4 z-40 ">
+              <div className="pointer-events-auto relative max-h-full">
       <AnatomicalInspector
-        structure={selectedStructure}
-        activeScale={activeScale}
+        structure={
+          selectedStructure
+        }
+        activeScale={
+          activeScale
+        }
         onScaleChange={
           handleScaleChange
         }
@@ -1809,37 +2443,21 @@ export default function BrainViewer() {
             return;
           }
 
-          if (isolationMode) {
+          if (
+            isolationMode
+          ) {
             restoreBrainVisibility();
 
             setIsolationMode(
               false,
             );
-
-            setStatus(
-              "Luna's brain online",
-            );
           } else {
-            if (
-              interiorModeRef.current
-            ) {
-              restoreInteriorMode();
-              setInteriorMode(false);
-            }
-
             setBrainIsolation(
               mesh,
             );
 
             setIsolationMode(
               true,
-            );
-
-            setStatus(
-              `Isolated: ${
-                selectedStructure?.displayName ??
-                mesh.name
-              }`,
             );
           }
         }}
@@ -1848,9 +2466,17 @@ export default function BrainViewer() {
           restoreInteriorMode();
           restoreSelectedMesh();
 
-          setIsolationMode(false);
-          setInteriorMode(false);
-          setSelectedStructure(null);
+          setIsolationMode(
+            false,
+          );
+
+          setInteriorMode(
+            false,
+          );
+
+          setSelectedStructure(
+            null,
+          );
 
           setStatus(
             "Luna's brain online",
@@ -1858,11 +2484,86 @@ export default function BrainViewer() {
         }}
       />
 
-      <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg bg-black/60 px-3 py-2 text-xs text-white/80 backdrop-blur">
-        Drag to rotate · Scroll to zoom ·
-        Right-drag to pan · Click a structure ·
-        Double-click to reset
+                <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => workspace.minimizePanel("inspector")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
+                    title="Minimize"
+                    aria-label="Minimize Anatomical Inspector"
+                  >−</button>
+                  <button
+                    type="button"
+                    onClick={() => workspace.closePanel("inspector")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
+                    title="Close"
+                    aria-label="Close Anatomical Inspector"
+                  >×</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {workspace.isOpen("nanobots") &&
+          !workspace.isMinimized("nanobots") && (
+            <div className="pointer-events-none absolute right-4 top-16 bottom-4 z-40 flex  items-end">
+              <div className="pointer-events-auto relative max-h-full">
+      <NanobotPanel
+        nanobots={
+          nanobots
+        }
+        selectedNanobotId={
+          selectedNanobotId
+        }
+        selectedStructure={
+          selectedStructure
+        }
+        onDeploy={
+          deployNanobot
+        }
+        onPause={
+          pauseNanobots
+        }
+        onResume={
+          resumeNanobots
+        }
+        onReturn={
+          returnNanobots
+        }
+        onClear={
+          clearNanobots
+        }
+        onSelectNanobot={
+          selectNanobot
+        }
+      />
+
+                <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => workspace.minimizePanel("nanobots")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
+                    title="Minimize"
+                    aria-label="Minimize Nanobot System"
+                  >−</button>
+                  <button
+                    type="button"
+                    onClick={() => workspace.closePanel("nanobots")}
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
+                    title="Close"
+                    aria-label="Close Nanobot System"
+                  >×</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-lg border border-white/10 bg-black/55 px-3 py-2 text-xs text-white/65 backdrop-blur">
+          Drag to rotate · Scroll to zoom ·
+          Right-drag to pan · Click a structure ·
+          Double-click to reset
+        </div>
       </div>
-    </div>
+    </BrainWorkspace>
   );
 }
