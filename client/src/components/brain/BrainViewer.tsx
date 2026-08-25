@@ -1764,8 +1764,8 @@ export default function BrainViewer() {
 
         {workspace.isOpen("anatomy") &&
           !workspace.isMinimized("anatomy") && (
-            <div className="pointer-events-none absolute bottom-4 left-4 top-16 z-40">
-              <div className="pointer-events-auto relative max-h-full">
+            <div className="pointer-events-none absolute bottom-4 left-4 top-16 z-40 w-72">
+              <div className="pointer-events-auto h-full">
                 <BrainAnatomyNavigator
                   structures={brainStructures}
                   selectedStructure={selectedStructure}
@@ -1807,8 +1807,8 @@ export default function BrainViewer() {
 
         {workspace.isOpen("inspector") &&
           !workspace.isMinimized("inspector") && (
-            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-40">
-              <div className="pointer-events-auto relative max-h-full">
+            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-40 w-80 max-w-[calc(100%-2rem)]">
+              <div className="pointer-events-auto h-full">
                 <AnatomicalInspector
                   structure={selectedStructure}
                   activeScale={activeScale}
@@ -1899,8 +1899,8 @@ export default function BrainViewer() {
 
         {workspace.isOpen("nanobots") &&
           !workspace.isMinimized("nanobots") && (
-            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-40 flex items-end">
-              <div className="pointer-events-auto relative max-h-full">
+            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-40 w-80 max-w-[calc(100%-2rem)]">
+              <div className="pointer-events-auto h-full">
                 <NanobotPanel
                   nanobots={nanobots}
                   selectedNanobotId={selectedNanobotId}

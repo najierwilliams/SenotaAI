@@ -81,7 +81,7 @@ export default function NanobotPanel({
     ) ?? null;
 
   return (
-    <aside className="absolute bottom-0 right-0 z-10 flex max-h-full w-80 max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-red-500/25 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-red-500/25 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
       <div className="border-b border-white/10 px-4 py-3">
         <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-red-300/65">
           Nanobot System
@@ -106,7 +106,7 @@ export default function NanobotPanel({
         </div>
       </div>
 
-      <div className="max-h-[calc(100vh-6rem)] space-y-3 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         <div className="rounded-lg border border-white/10 bg-white/5 p-3">
           <div className="text-[10px] uppercase tracking-wider text-white/40">
             Current target

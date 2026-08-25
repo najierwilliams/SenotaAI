@@ -1,5 +1,3 @@
-import { useState } from "react";
-
 import type {
   BrainScale,
   BrainStructure,
@@ -60,11 +58,26 @@ export default function AnatomicalInspector({
   activeScale,
   onScaleChange,
 }: AnatomicalInspectorProps) {
-  const [isMinimized, setIsMinimized] =
-    useState(false);
-
   if (!structure) {
-    return null;
+    return (
+      <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
+        <div className="border-b border-white/10 p-5 pr-20">
+          <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
+            Anatomical Inspector
+          </div>
+
+          <h2 className="mt-2 text-xl font-semibold leading-tight">
+            No structure selected
+          </h2>
+        </div>
+
+        <div className="flex min-h-0 flex-1 items-center p-5">
+          <p className="text-sm leading-relaxed text-white/55">
+            Select an anatomical structure from the navigator or directly in the brain viewer to inspect it here.
+          </p>
+        </div>
+      </aside>
+    );
   }
 
   const hemisphereLabel =
@@ -101,16 +114,9 @@ export default function AnatomicalInspector({
       : null;
 
   return (
-    <aside
-      className={[
-        "absolute right-4 top-4 z-10 w-80 max-w-[calc(100%-2rem)] overflow-hidden rounded-xl border border-white/10 bg-black/75 text-white shadow-2xl backdrop-blur-xl",
-        isMinimized
-          ? ""
-          : "max-h-[calc(100vh-2rem)]",
-      ].join(" ")}
-    >
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
+      <div className="border-b border-white/10 p-5 pr-20">
         <div className="min-w-0">
           <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/45">
             Anatomical Inspector
@@ -121,45 +127,9 @@ export default function AnatomicalInspector({
           </h2>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() =>
-              setIsMinimized(
-                (current) => !current,
-              )
-            }
-            className="rounded-md px-2 py-1 text-sm leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
-            aria-label={
-              isMinimized
-                ? "Expand anatomical inspector"
-                : "Minimize anatomical inspector"
-            }
-            title={
-              isMinimized
-                ? "Expand"
-                : "Minimize"
-            }
-          >
-            {isMinimized
-              ? "□"
-              : "−"}
-          </button>
-
-          <button
-            type="button"
-            onClick={onClear}
-            className="rounded-md px-2 py-1 text-lg leading-none text-white/50 transition hover:bg-white/10 hover:text-white"
-            aria-label="Close anatomical inspector"
-            title="Close"
-          >
-            ×
-          </button>
-        </div>
       </div>
 
-      {!isMinimized && (
-        <div className="max-h-[calc(100vh-6rem)] overflow-y-auto p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -488,8 +458,7 @@ export default function AnatomicalInspector({
               model.
             </p>
           </div>
-        </div>
-      )}
+      </div>
     </aside>
   );
 }
