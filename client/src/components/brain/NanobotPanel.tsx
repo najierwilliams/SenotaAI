@@ -88,6 +88,7 @@ export default function NanobotPanel({
 
   const canDeploy =
     Boolean(selectedStructure) &&
+    observationContext.scale === "macro" &&
     observationContext.available;
 
   return (
@@ -141,15 +142,20 @@ export default function NanobotPanel({
           )}
 
           <div className="mt-2 text-[10px] text-red-100/65">
-            {observationContext.scaleLabel} observation · {observationContext.status === "unavailable"
-              ? "dataset not connected"
-              : observationContext.structureName ?? "whole brain"}
+            {observationContext.scaleLabel} observation · {observationContext.scientificStatus ?? "local asset state"}
           </div>
+          {observationContext.datasetLabel && (
+            <div className="mt-1 text-[9px] leading-relaxed text-red-100/45">
+              Dataset: {observationContext.datasetLabel}
+            </div>
+          )}
         </div>
 
-        {!observationContext.available && (
+        {observationContext.scale !== "macro" && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-[11px] leading-relaxed text-red-100/65">
-            {observationContext.scaleLabel} dataset not connected. Existing missions retain their targets, but new missions are unavailable at this observation scale.
+            {observationContext.scientificAvailable
+              ? "Scientific metadata is available, but no provider-supported coordinate-resolved mission data is connected. Existing missions retain their targets; new lower-scale missions remain disabled."
+              : `${observationContext.scaleLabel} scientific dataset is ${observationContext.scientificStatus ?? "unavailable"}. Existing missions retain their targets, but new missions are unavailable at this observation scale.`}
           </div>
         )}
 

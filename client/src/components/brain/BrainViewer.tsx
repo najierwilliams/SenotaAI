@@ -63,6 +63,10 @@ import {
   getObservationContextLabel,
 } from "./anatomy/BrainObservationContext";
 
+import {
+  useBrainScientificObservation,
+} from "./anatomy/useBrainScientificObservation";
+
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
 
@@ -174,6 +178,16 @@ export default function BrainViewer() {
   const workspace =
     useBrainWorkspaceState();
 
+  const {
+    observation: scientificObservation,
+    loading: scientificLoading,
+    error: scientificError,
+    retry: retryScientificObservation,
+  } = useBrainScientificObservation({
+    scale: activeScale,
+    structure: selectedStructure,
+  });
+
   const observationContext =
     createBrainObservationContext({
       scale: activeScale,
@@ -181,6 +195,9 @@ export default function BrainViewer() {
       asset: scaleAsset,
       loading: scaleAssetLoading,
       error: scaleAssetError,
+      scientificObservation,
+      scientificLoading,
+      scientificError,
     });
 
   useEffect(() => {
@@ -189,6 +206,8 @@ export default function BrainViewer() {
       datasetId:
         observationContext.datasetId,
       status: observationContext.status,
+      scientificStatus:
+        observationContext.scientificStatus,
     });
 
     if (nanobotRegistry.getAll().length) {
@@ -664,6 +683,8 @@ export default function BrainViewer() {
             observationContext.datasetId,
           status:
             observationContext.status,
+          scientificStatus:
+            observationContext.scientificStatus,
         },
       );
 
@@ -882,6 +903,7 @@ export default function BrainViewer() {
       setScaleRetryToken(
         (current) => current + 1,
       );
+      retryScientificObservation();
     };
 
   const returnToMacro =
@@ -1973,13 +1995,19 @@ export default function BrainViewer() {
             </div>
             {observationContext.scale !== "macro" && (
               <div className="mt-1 text-[10px] leading-relaxed text-white/50">
-                {observationContext.status === "unavailable"
-                  ? `${observationContext.scaleLabel} dataset not connected`
-                  : observationContext.message}
+                {observationContext.message}
+                {observationContext.datasetLabel && (
+                  <span className="mt-1 block text-white/35">
+                    Source: {observationContext.datasetLabel} · {observationContext.scientificStatus ?? "local asset state"}
+                  </span>
+                )}
               </div>
             )}
-            {(observationContext.status === "unavailable" ||
-              observationContext.status === "error") && (
+            {observationContext.scale !== "macro" &&
+              observationContext.scientificStatus &&
+              observationContext.scientificStatus !== "available" &&
+              observationContext.scientificStatus !== "partial" &&
+              observationContext.scientificStatus !== "loading" && (
               <div className="mt-2 flex justify-center gap-2">
                 <button
                   type="button"

@@ -28,6 +28,9 @@ import { registerOAuthRoutes } from "./_core/oauth";
 import { sdk } from "./_core/sdk";
 import { registerStorageProxy } from "./_core/storageProxy";
 import { buildTemporalContext, resolveTimeZone } from "./temporalContext";
+import { getScientificDatasetManifest } from "./scientificData/registry";
+import { queryBrainScientificObservation } from "./scientificData/brainScienceService";
+import type { BrainScientificScale } from "@shared/brainScience";
 
 function readCookie(header: string | undefined, name: string) {
   return header?.split(";").map(item => item.trim()).find(item => item.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -357,6 +360,49 @@ export function createApp() {
       const message = error instanceof Error ? error.message : String(error);
       return res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
     }
+  });
+
+  app.get("/api/brain-science/manifest", (_req, res) => {
+    return res.json(getScientificDatasetManifest());
+  });
+
+  app.get("/api/brain-science/observation", async (req, res) => {
+    const scale = typeof req.query.scale === "string"
+      ? req.query.scale
+      : null;
+
+    const validScales: BrainScientificScale[] = [
+      "macro",
+      "tissue",
+      "cellular",
+      "subcellular",
+      "molecular",
+    ];
+
+    if (!scale || !validScales.includes(scale as BrainScientificScale)) {
+      return res.status(400).json({
+        error: "scale must be macro, tissue, cellular, subcellular, or molecular",
+      });
+    }
+
+    const structureId = typeof req.query.structureId === "string"
+      ? req.query.structureId.slice(0, 180)
+      : null;
+
+    const structureName = typeof req.query.structureName === "string"
+      ? req.query.structureName.slice(0, 180)
+      : null;
+
+    const refresh = req.query.refresh === "true";
+
+    const observation = await queryBrainScientificObservation({
+      scale: scale as BrainScientificScale,
+      structureId,
+      structureName,
+      refresh,
+    });
+
+    return res.json(observation);
   });
 
   app.use(

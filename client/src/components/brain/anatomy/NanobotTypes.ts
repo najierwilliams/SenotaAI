@@ -5,6 +5,10 @@ import type {
   BrainStructureDepth,
 } from "./BrainStructureRegistry";
 
+import type {
+  BrainDatasetStatus,
+} from "@shared/brainScience";
+
 export type NanobotState =
   | "idle"
   | "deploying"
@@ -62,6 +66,7 @@ export interface NanobotTarget {
   observationScale: BrainScale;
   observationDatasetId: string | null;
   observationStatus: "ready" | "unavailable" | "loading" | "error";
+  observationScientificStatus: BrainDatasetStatus | null;
 }
 
 export interface NanobotFinding {
@@ -140,6 +145,7 @@ export interface NanobotObservationTarget {
   scale: BrainScale;
   datasetId: string | null;
   status: NanobotTarget["observationStatus"];
+  scientificStatus?: BrainDatasetStatus | null;
 }
 
 export function createNanobotTarget(
@@ -166,6 +172,8 @@ export function createNanobotTarget(
       observation.datasetId,
     observationStatus:
       observation.status,
+    observationScientificStatus:
+      observation.scientificStatus ?? null,
   };
 }
 

@@ -377,6 +377,8 @@ export class NanobotRegistry {
         observation.datasetId;
       nanobot.target.observationStatus =
         observation.status;
+      nanobot.target.observationScientificStatus =
+        observation.scientificStatus ?? null;
       nanobot.updatedAt = now;
     });
   }

@@ -7,13 +7,13 @@ import {
   BRAIN_SCALE_OPTIONS,
 } from "./anatomy/BrainStructureRegistry";
 
-import {
-  isBrainScaleAvailable,
-} from "./anatomy/BrainScaleAssetRegistry";
-
 import type {
   BrainObservationContext,
 } from "./anatomy/BrainObservationContext";
+
+import {
+  getDatasetStatusLabel,
+} from "@shared/brainScience";
 
 interface AnatomicalInspectorProps {
   structure: BrainStructure | null;
@@ -91,9 +91,7 @@ export default function AnatomicalInspector({
               {observationContext.scaleLabel}
             </div>
             <div className="mt-1 text-[10px] text-white/40">
-              {observationContext.status === "unavailable"
-                ? `${observationContext.scaleLabel} dataset not connected`
-                : observationContext.message}
+              {observationContext.message}
             </div>
           </div>
         </div>
@@ -168,10 +166,39 @@ export default function AnatomicalInspector({
                 {observationContext.datasetLabel ?? "Dataset not connected"}
               </div>
               <p className="mt-1 text-[10px] leading-relaxed text-white/45">
-                {observationContext.status === "unavailable"
-                  ? `${observationContext.scaleLabel} dataset not connected. The displayed anatomy remains the selected parent context; no lower-scale measurements are shown.`
-                  : observationContext.message}
+                {observationContext.message}
               </p>
+              {observationContext.scientificStatus && (
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-white/50">
+                  <div>
+                    <span className="block text-white/30">Status</span>
+                    {getDatasetStatusLabel(observationContext.scientificStatus)}
+                  </div>
+                  {observationContext.provenance && (
+                    <div>
+                      <span className="block text-white/30">Provider</span>
+                      {observationContext.provenance.provider}
+                    </div>
+                  )}
+                </div>
+              )}
+              {observationContext.referenceSpace && (
+                <div className="mt-3 text-[10px] leading-relaxed text-white/45">
+                  <span className="text-white/30">Reference space: </span>
+                  {observationContext.referenceSpace.label}
+                </div>
+              )}
+              {observationContext.structureMapping && (
+                <div className="mt-2 text-[10px] leading-relaxed text-white/40">
+                  <span className="text-white/30">Structure mapping: </span>
+                  {observationContext.structureMapping.status} · {observationContext.structureMapping.note}
+                </div>
+              )}
+              {observationContext.provenance?.citation && (
+                <div className="mt-3 text-[9px] leading-relaxed text-white/30">
+                  Citation: {observationContext.provenance.citation}
+                </div>
+              )}
               {observationContext.scale !== "macro" && (
                 <button
                   type="button"
@@ -240,45 +267,30 @@ export default function AnatomicalInspector({
 
           <div className="mt-5 rounded-lg border border-white/10 bg-white/5 p-3">
             <div className="text-[10px] uppercase tracking-wider text-white/40">
-              Dataset availability
+              Scientific observations
             </div>
 
-            <div className="mt-2 grid grid-cols-2 gap-1">
-              {BRAIN_SCALE_OPTIONS.map(
-                (option) => {
-                  const available =
-                    isBrainScaleAvailable(
-                      structure,
-                      option.value as BrainScale,
-                    );
-
-                  return (
-                    <div
-                      key={
-                        option.value
-                      }
-                      className="rounded-md border border-white/5 bg-black/10 px-2 py-1.5"
-                    >
-                      <div className="text-[10px] text-white/60">
-                        {option.label}
-                      </div>
-
-                      <div className="mt-0.5 text-[9px] text-white/30">
-                        {available
-                          ? "Available"
-                          : "Not connected"}
-                      </div>
+            {observationContext.findings.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {observationContext.findings.map((finding) => (
+                  <div
+                    key={finding.id}
+                    className="rounded-md border border-white/5 bg-black/10 px-2 py-2"
+                  >
+                    <div className="text-[10px] text-white/60">
+                      {finding.label}
                     </div>
-                  );
-                },
-              )}
-            </div>
-
-            <p className="mt-2 text-[9px] leading-relaxed text-white/30">
-              Additional scale datasets can
-              be registered without replacing
-              the existing macro model.
-            </p>
+                    <div className="mt-0.5 text-xs text-blue-100/85">
+                      {finding.value}{finding.unit ? ` ${finding.unit}` : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[10px] leading-relaxed text-white/40">
+                No provider measurement is displayed for this context. Luna does not infer scientific values when a dataset lacks a supported result.
+              </p>
+            )}
           </div>
 
           <div className="mt-5 rounded-lg border border-white/10 bg-white/5 p-3">

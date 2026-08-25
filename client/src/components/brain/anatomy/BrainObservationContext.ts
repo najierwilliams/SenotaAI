@@ -4,6 +4,16 @@ import type {
 } from "./BrainStructureRegistry";
 
 import {
+  isDatasetUsable,
+  type BrainDatasetProvenance,
+  type BrainDatasetStatus,
+  type BrainReferenceSpace,
+  type BrainScientificFinding,
+  type BrainScientificObservation,
+  type BrainStructureMapping,
+} from "@shared/brainScience";
+
+import {
   getBrainScaleDescription,
   getBrainScaleLabel,
   type BrainScaleAsset,
@@ -29,6 +39,13 @@ export interface BrainObservationContext {
   status: BrainObservationStatus;
   available: boolean;
   message: string;
+  scientificStatus: BrainDatasetStatus | null;
+  scientificAvailable: boolean;
+  scientificObservation: BrainScientificObservation | null;
+  provenance: BrainDatasetProvenance | null;
+  referenceSpace: BrainReferenceSpace | null;
+  structureMapping: BrainStructureMapping | null;
+  findings: BrainScientificFinding[];
 }
 
 interface CreateBrainObservationContextOptions {
@@ -37,6 +54,9 @@ interface CreateBrainObservationContextOptions {
   asset: BrainScaleAsset | null;
   loading: boolean;
   error: string | null;
+  scientificObservation?: BrainScientificObservation | null;
+  scientificLoading?: boolean;
+  scientificError?: string | null;
 }
 
 export function createBrainObservationContext({
@@ -45,6 +65,9 @@ export function createBrainObservationContext({
   asset,
   loading,
   error,
+  scientificObservation = null,
+  scientificLoading = false,
+  scientificError = null,
 }: CreateBrainObservationContextOptions): BrainObservationContext {
   const scaleLabel =
     getBrainScaleLabel(scale);
@@ -73,10 +96,31 @@ export function createBrainObservationContext({
     structure?.displayName ??
     null;
 
+  const scientificStatus =
+    scientificLoading
+      ? "loading"
+      : scientificObservation?.status ??
+        (scientificError ? "offline" : null);
+
+  const scientificAvailable =
+    scientificObservation
+      ? isDatasetUsable(
+          scientificObservation.status,
+        )
+      : false;
+
   let message =
     `${scaleLabel} observation ready`;
 
-  if (status === "loading") {
+  if (scientificLoading) {
+    message =
+      `Loading ${scaleLabel.toLowerCase()} scientific dataset...`;
+  } else if (scientificObservation) {
+    message = scientificObservation.message;
+  } else if (scientificError) {
+    message =
+      `Scientific provider unavailable: ${scientificError}`;
+  } else if (status === "loading") {
     message =
       `Loading ${scaleLabel.toLowerCase()} observation...`;
   } else if (status === "error") {
@@ -100,16 +144,20 @@ export function createBrainObservationContext({
     parentStructureName:
       structure?.parentRegion ?? null,
     datasetId:
+      scientificObservation?.dataset?.id ??
       asset?.id ??
       (macroModelAvailable
         ? "luna_brain_macro"
         : null),
     datasetLabel:
+      scientificObservation?.dataset?.name ??
       asset?.label ??
       (macroModelAvailable
         ? "Macro anatomy model"
         : null),
     datasetUrl:
+      scientificObservation?.dataset?.endpoint ??
+      scientificObservation?.dataset?.assetUrl ??
       asset?.url ??
       (macroModelAvailable
         ? "/models/luna/brain/source/3d-vh-f-allen-brain.glb"
@@ -117,6 +165,38 @@ export function createBrainObservationContext({
     status,
     available,
     message,
+    scientificStatus,
+    scientificAvailable,
+    scientificObservation,
+    provenance:
+      scientificObservation?.dataset
+        ? {
+            provider:
+              scientificObservation.dataset.provider,
+            datasetName:
+              scientificObservation.dataset.name,
+            version:
+              scientificObservation.dataset.version,
+            sourceUrl:
+              scientificObservation.dataset.endpoint ??
+              scientificObservation.dataset.assetUrl ??
+              "",
+            citation:
+              scientificObservation.dataset.citation,
+            license:
+              scientificObservation.dataset.license,
+            accessedAt:
+              scientificObservation.fetchedAt,
+            referenceSpaceIds:
+              scientificObservation.dataset.referenceSpaceIds,
+          }
+        : null,
+    referenceSpace:
+      scientificObservation?.referenceSpace ?? null,
+    structureMapping:
+      scientificObservation?.structureMapping ?? null,
+    findings:
+      scientificObservation?.findings ?? [],
   };
 }
 

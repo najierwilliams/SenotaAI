@@ -313,6 +313,11 @@ export default function BrainAnatomyNavigator({
             <div className="mt-1 text-[10px] text-white/40">
               {observationContext.scaleLabel} observation
             </div>
+            {observationContext.datasetLabel && (
+              <div className="mt-2 text-[10px] leading-relaxed text-blue-100/60">
+                Source: {observationContext.datasetLabel} · {observationContext.scientificStatus ?? "local"}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -340,10 +345,41 @@ export default function BrainAnatomyNavigator({
                 {observationContext.scaleLabel} navigator
               </div>
               <p className="mt-2 text-xs leading-relaxed text-white/60">
-                {observationContext.status === "unavailable"
-                  ? `${observationContext.scaleLabel} dataset not connected. Lower-scale entities will appear here when a dataset is registered for this observation context.`
-                  : observationContext.message}
+                {observationContext.message}
               </p>
+
+              {observationContext.findings.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <div className="text-[9px] uppercase tracking-[0.16em] text-blue-200/55">
+                    Provider observations
+                  </div>
+                  {observationContext.findings.map((finding) => (
+                    <div
+                      key={finding.id}
+                      className="rounded-md border border-white/8 bg-black/20 px-3 py-2"
+                    >
+                      <div className="text-[10px] text-white/75">
+                        {finding.label}
+                      </div>
+                      <div className="mt-1 text-xs font-medium text-blue-100/80">
+                        {finding.value}{finding.unit ? ` ${finding.unit}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {observationContext.structureMapping && (
+                <div className="mt-4 rounded-md border border-white/8 bg-black/20 px-3 py-2 text-[10px] leading-relaxed text-white/45">
+                  Structure mapping: {observationContext.structureMapping.status}. {observationContext.structureMapping.note}
+                </div>
+              )}
+
+              {observationContext.referenceSpace && (
+                <div className="mt-3 text-[10px] leading-relaxed text-white/35">
+                  Reference space: {observationContext.referenceSpace.label}
+                </div>
+              )}
             </div>
             <button
               type="button"

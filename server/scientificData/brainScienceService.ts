@@ -1,0 +1,573 @@
+import type {
+  BrainDataset,
+  BrainDatasetProvenance,
+  BrainDatasetStatus,
+  BrainReferenceSpace,
+  BrainScientificFinding,
+  BrainScientificObservation,
+  BrainStructureMapping,
+} from "@shared/brainScience";
+import {
+  getDataset,
+  BRAIN_REFERENCE_SPACES,
+} from "./registry";
+
+const EBRAINS_HUMAN_ATLAS_URL =
+  "https://siibra-api-stable.apps.hbp.eu/v3_0/atlases/juelich/iav/atlas/v1.0.0/1";
+
+const CELLXGENE_HBCA_URL =
+  "https://api.cellxgene.cziscience.com/curation/v1/collections/283d65eb-dd53-496d-adb7-7570c7caa443";
+
+const ALLEN_BASE_URL =
+  "https://api.brain-map.org/api/v2/data/query.json";
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 8_000;
+const MAX_STRUCTURE_NAME_LENGTH = 120;
+
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+const queryCache = new Map<
+  string,
+  CacheEntry<BrainScientificObservation>
+>();
+
+export interface BrainScientificQuery {
+  scale: BrainScientificObservation["scale"];
+  structureId?: string | null;
+  structureName?: string | null;
+  refresh?: boolean;
+}
+
+function getReferenceSpace(
+  dataset: BrainDataset,
+): BrainReferenceSpace | null {
+  const referenceSpaceId =
+    dataset.referenceSpaceIds[0];
+
+  return (
+    BRAIN_REFERENCE_SPACES.find(
+      (space) => space.id === referenceSpaceId,
+    ) ?? null
+  );
+}
+
+function createProvenance(
+  dataset: BrainDataset,
+  accessedAt: string | null,
+): BrainDatasetProvenance {
+  return {
+    provider: dataset.provider,
+    datasetName: dataset.name,
+    version: dataset.version,
+    sourceUrl:
+      dataset.endpoint ??
+      dataset.assetUrl ??
+      "",
+    citation: dataset.citation,
+    license: dataset.license,
+    accessedAt,
+    referenceSpaceIds:
+      dataset.referenceSpaceIds,
+  };
+}
+
+function createStructureMapping(
+  query: BrainScientificQuery,
+  dataset: BrainDataset,
+): BrainStructureMapping | null {
+  if (!query.structureId || !query.structureName) {
+    return null;
+  }
+
+  return {
+    canonicalStructureId: query.structureId,
+    provider: dataset.provider,
+    externalId: null,
+    externalName: query.structureName,
+    status: "query-required",
+    note:
+      "The canonical Luna structure is retained as the identity. Provider-specific assignment is queried by dataset metadata and is not treated as a validated coordinate transform.",
+  };
+}
+
+function sanitizeStructureName(
+  value: string | null | undefined,
+): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value
+    .replace(/[^a-zA-Z0-9 _-]/g, "")
+    .trim()
+    .slice(0, MAX_STRUCTURE_NAME_LENGTH);
+
+  return normalized || null;
+}
+
+async function fetchJson<T>(
+  url: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    FETCH_TIMEOUT_MS,
+  );
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Provider returned HTTP ${response.status}`,
+      );
+    }
+
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function createUnavailableObservation(
+  dataset: BrainDataset,
+  query: BrainScientificQuery,
+): BrainScientificObservation {
+  return {
+    scale: query.scale,
+    status: dataset.status,
+    dataset,
+    structureMapping: createStructureMapping(
+      query,
+      dataset,
+    ),
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings: [],
+    message:
+      dataset.limitations ??
+      "Scientific dataset unavailable for this observation context.",
+    cached: false,
+    fetchedAt: null,
+  };
+}
+
+async function queryTissue(
+  dataset: BrainDataset,
+  query: BrainScientificQuery,
+): Promise<BrainScientificObservation> {
+  const payload = await fetchJson<{
+    name?: string;
+    spaces?: Array<{ "@id"?: string }>;
+    parcellations?: Array<{ "@id"?: string }>;
+  }>(EBRAINS_HUMAN_ATLAS_URL);
+
+  const accessedAt = new Date().toISOString();
+  const provenance = createProvenance(
+    dataset,
+    accessedAt,
+  );
+
+  const parcellationCount =
+    payload.parcellations?.length ?? 0;
+
+  const findings: BrainScientificFinding[] = [
+    {
+      id: "ebrains-human-atlas",
+      label: "Atlas",
+      value:
+        payload.name ??
+        "Multilevel Human Atlas",
+      unit: null,
+      kind: "atlas",
+      provenance,
+    },
+    {
+      id: "ebrains-parcellation-count",
+      label: "Published parcellation references",
+      value: String(parcellationCount),
+      unit: "references",
+      kind: "atlas",
+      provenance,
+    },
+  ];
+
+  return {
+    scale: query.scale,
+    status: "partial",
+    dataset,
+    structureMapping: createStructureMapping(
+      query,
+      dataset,
+    ),
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings,
+    message:
+      "Live EBRAINS atlas metadata is available. Regional assignment and raw probabilistic maps remain provider queries rather than a binary in-viewer boundary.",
+    cached: false,
+    fetchedAt: accessedAt,
+  };
+}
+
+interface CellxgeneDataset {
+  dataset_id?: string;
+  title?: string;
+  cell_count?: number;
+  tissue?: Array<{ label?: string }>;
+  cell_type?: Array<{ label?: string }>;
+}
+
+interface CellxgeneCollection {
+  collection_version_id?: string;
+  datasets?: CellxgeneDataset[];
+}
+
+function matchesCellxgeneDataset(
+  dataset: CellxgeneDataset,
+  structureName: string | null,
+): boolean {
+  if (!structureName) {
+    return false;
+  }
+
+  const haystack = [
+    dataset.title,
+    ...(dataset.tissue ?? []).map(
+      (tissue) => tissue.label,
+    ),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleLowerCase();
+
+  const candidates = structureName
+    .toLocaleLowerCase()
+    .split(/\s+/)
+    .filter((token) => token.length >= 4);
+
+  return candidates.some(
+    (token) => haystack.includes(token),
+  );
+}
+
+async function queryCellular(
+  dataset: BrainDataset,
+  query: BrainScientificQuery,
+): Promise<BrainScientificObservation> {
+  const payload = await fetchJson<CellxgeneCollection>(
+    CELLXGENE_HBCA_URL,
+  );
+
+  const accessedAt = new Date().toISOString();
+  const provenance = createProvenance(
+    {
+      ...dataset,
+      version:
+        payload.collection_version_id ??
+        dataset.version,
+    },
+    accessedAt,
+  );
+
+  const structureName = sanitizeStructureName(
+    query.structureName,
+  );
+
+  const matchedDatasets =
+    (payload.datasets ?? [])
+      .filter((entry) =>
+        matchesCellxgeneDataset(
+          entry,
+          structureName,
+        ),
+      )
+      .slice(0, 5);
+
+  const findings = matchedDatasets.map(
+    (entry, index): BrainScientificFinding => ({
+      id:
+        entry.dataset_id ??
+        `cellxgene-match-${index}`,
+      label: entry.title ?? "CELLxGENE dataset",
+      value: String(entry.cell_count ?? "Metadata available"),
+      unit:
+        typeof entry.cell_count === "number"
+          ? "nuclei"
+          : null,
+      kind: "cellular-metadata",
+      provenance,
+    }),
+  );
+
+  return {
+    scale: query.scale,
+    status: "partial",
+    dataset,
+    structureMapping: createStructureMapping(
+      query,
+      dataset,
+    ),
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings,
+    message: structureName
+      ? findings.length
+        ? "Live CELLxGENE collection metadata matched this anatomical context. The values shown are provider-reported dataset counts, not visualized cell positions."
+        : "CELLxGENE collection metadata is available, but no direct dataset-title match was found for this Luna structure."
+      : "Select a Luna structure to discover bounded CELLxGENE cellular dataset metadata.",
+    cached: false,
+    fetchedAt: accessedAt,
+  };
+}
+
+interface AllenStructureResponse {
+  msg?: Array<{
+    id?: number;
+    name?: string;
+    acronym?: string;
+  }>;
+}
+
+async function queryMolecular(
+  dataset: BrainDataset,
+  query: BrainScientificQuery,
+): Promise<BrainScientificObservation> {
+  const structureName = sanitizeStructureName(
+    query.structureName,
+  );
+
+  if (!structureName) {
+    return {
+      ...createUnavailableObservation(
+        dataset,
+        query,
+      ),
+      status: "partial",
+      message:
+        "Select a Luna structure before querying the Allen Human Brain Atlas structure metadata service.",
+    };
+  }
+
+  const criteria =
+    "model::Structure,rma::criteria," +
+    `[name$il'${structureName}']` +
+    ",rma::options[num_rows$eq5]";
+
+  const url = new URL(ALLEN_BASE_URL);
+  url.searchParams.set("criteria", criteria);
+
+  const payload = await fetchJson<AllenStructureResponse>(
+    url.toString(),
+  );
+
+  const accessedAt = new Date().toISOString();
+  const provenance = createProvenance(
+    dataset,
+    accessedAt,
+  );
+
+  const matches = (payload.msg ?? []).slice(0, 5);
+
+  const findings = matches.map(
+    (entry): BrainScientificFinding => ({
+      id: `allen-structure-${entry.id ?? entry.name ?? "unknown"}`,
+      label: entry.name ?? "Allen structure",
+      value: entry.acronym ?? String(entry.id ?? "Provider match"),
+      unit: null,
+      kind: "molecular-metadata",
+      provenance,
+    }),
+  );
+
+  return {
+    scale: query.scale,
+    status: "partial",
+    dataset,
+    structureMapping: {
+      canonicalStructureId:
+        query.structureId ??
+        "unselected",
+      provider: dataset.provider,
+      externalId:
+        matches.length === 1 && matches[0].id
+          ? String(matches[0].id)
+          : null,
+      externalName:
+        matches.length === 1
+          ? matches[0].name ?? null
+          : null,
+      status:
+        matches.length === 1
+          ? "broad"
+          : "query-required",
+      note:
+        matches.length === 1
+          ? "A provider structure-name match was returned. This is not a coordinate transform and no expression value has been inferred."
+          : "No unique provider structure assignment was made. Luna requires a more specific provider query before showing molecular measurements.",
+    },
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings,
+    message: findings.length
+      ? "Allen Human Brain Atlas structure metadata is available. Molecular values require an explicit provider gene/probe query and retain donor/sample provenance."
+      : "No Allen Human Brain Atlas structure metadata match was returned for this Luna structure.",
+    cached: false,
+    fetchedAt: accessedAt,
+  };
+}
+
+function getPrimaryDataset(
+  scale: BrainScientificObservation["scale"],
+): BrainDataset | null {
+  const ids: Record<
+    BrainScientificObservation["scale"],
+    string
+  > = {
+    macro: "luna-macro-anatomy-model",
+    tissue: "julich-brain-cytoarchitecture",
+    cellular: "cellxgene-human-brain-cell-atlas-v1",
+    subcellular: "human-cortical-em-fragment",
+    molecular: "allen-human-brain-atlas-microarray",
+  };
+
+  return getDataset(ids[scale]);
+}
+
+function createErrorObservation(
+  dataset: BrainDataset,
+  query: BrainScientificQuery,
+  error: unknown,
+): BrainScientificObservation {
+  const message =
+    error instanceof Error
+      ? error.message
+      : "Provider request failed";
+
+  return {
+    ...createUnavailableObservation(
+      dataset,
+      query,
+    ),
+    status: "offline",
+    message:
+      `Scientific provider temporarily unavailable: ${message}. Macro and local workspace features remain available.`,
+  };
+}
+
+export async function queryBrainScientificObservation(
+  query: BrainScientificQuery,
+): Promise<BrainScientificObservation> {
+  const dataset = getPrimaryDataset(query.scale);
+
+  if (!dataset) {
+    throw new Error(
+      `No registered dataset for ${query.scale}`,
+    );
+  }
+
+  const key = [
+    query.scale,
+    query.structureId ?? "",
+    query.structureName ?? "",
+  ].join(":");
+
+  const cached = queryCache.get(key);
+
+  if (
+    cached &&
+    cached.expiresAt > Date.now() &&
+    !query.refresh
+  ) {
+    return {
+      ...cached.value,
+      cached: true,
+    };
+  }
+
+  if (
+    dataset.status === "unavailable" ||
+    dataset.status === "unsupported" ||
+    dataset.status === "requires-authentication"
+  ) {
+    return createUnavailableObservation(
+      dataset,
+      query,
+    );
+  }
+
+  try {
+    let observation: BrainScientificObservation;
+
+    switch (query.scale) {
+      case "macro":
+        observation = {
+          scale: query.scale,
+          status: "available",
+          dataset,
+          structureMapping: createStructureMapping(
+            query,
+            dataset,
+          ),
+          referenceSpace: getReferenceSpace(dataset),
+          coordinateTransform: null,
+          findings: [],
+          message:
+            "The local Luna Macro model remains available independently of external scientific providers.",
+          cached: false,
+          fetchedAt: new Date().toISOString(),
+        };
+        break;
+      case "tissue":
+        observation = await queryTissue(
+          dataset,
+          query,
+        );
+        break;
+      case "cellular":
+        observation = await queryCellular(
+          dataset,
+          query,
+        );
+        break;
+      case "molecular":
+        observation = await queryMolecular(
+          dataset,
+          query,
+        );
+        break;
+      case "subcellular":
+        observation = createUnavailableObservation(
+          dataset,
+          query,
+        );
+        break;
+    }
+
+    queryCache.set(key, {
+      value: observation,
+      expiresAt: Date.now() + CACHE_TTL_MS,
+    });
+
+    return observation;
+  } catch (error) {
+    return createErrorObservation(
+      dataset,
+      query,
+      error,
+    );
+  }
+}
+
+export function clearBrainScientificCache(): void {
+  queryCache.clear();
+}

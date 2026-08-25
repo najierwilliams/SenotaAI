@@ -3966,6 +3966,590 @@ function registerStorageProxy(app2) {
   });
 }
 
+// server/scientificData/registry.ts
+var BRAIN_REFERENCE_SPACES = [
+  {
+    id: "luna-viewer-local",
+    label: "Luna viewer local coordinates",
+    kind: "viewer-local",
+    provider: "luna",
+    units: null,
+    description: "Local coordinates of the existing Allen-derived Luna GLB. No validated transform to external scientific reference spaces is configured."
+  },
+  {
+    id: "ebrains-mni-icbm-152-2009c",
+    label: "MNI ICBM 152 2009c",
+    kind: "template",
+    provider: "ebrains",
+    units: "millimetres",
+    description: "A human atlas reference space exposed by the EBRAINS multilevel human atlas."
+  },
+  {
+    id: "ebrains-bigbrain",
+    label: "BigBrain reference space",
+    kind: "histological",
+    provider: "bigbrain",
+    units: "micrometres",
+    description: "Microscopic 20 \u03BCm histological reference represented in the EBRAINS multilevel atlas."
+  },
+  {
+    id: "allen-human-donor-mr",
+    label: "Allen Human Brain Atlas donor MR space",
+    kind: "donor-native",
+    provider: "allen-institute",
+    units: "millimetres",
+    description: "Donor-specific MR-volume coordinates of Allen Human Brain Atlas sampling sites. These are not interchangeable with Luna viewer coordinates."
+  },
+  {
+    id: "cellxgene-human-brain-anatomical-annotation",
+    label: "CELLxGENE human-brain anatomical annotation",
+    kind: "template",
+    provider: "cellxgene",
+    units: null,
+    description: "Dataset anatomical-region annotation metadata. It is not a 3D spatial coordinate system."
+  }
+];
+var BRAIN_COORDINATE_TRANSFORMS = [
+  {
+    id: "luna-to-ebrains-mni",
+    sourceReferenceSpaceId: "luna-viewer-local",
+    targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+    status: "unavailable",
+    method: null,
+    documentationUrl: null,
+    note: "No validated transform from the Luna GLB coordinate frame to MNI is configured. Luna does not project external coordinates into the viewer."
+  },
+  {
+    id: "allen-donor-mr-to-mni",
+    sourceReferenceSpaceId: "allen-human-donor-mr",
+    targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+    status: "available",
+    method: "Provider-documented donor-specific MR-to-MNI registration",
+    documentationUrl: "https://brain-map.org/support/documentation/human-brain-atlas-api",
+    note: "The Allen provider documents donor-specific transforms. Luna does not apply them client-side; returned sample coordinates remain provider provenance."
+  }
+];
+var BRAIN_DATASETS = [
+  {
+    id: "luna-macro-anatomy-model",
+    name: "Luna Macro Anatomy Model",
+    provider: "luna",
+    scale: "macro",
+    modality: "3D anatomical mesh",
+    species: "Homo sapiens",
+    version: null,
+    status: "available",
+    accessType: "local-asset",
+    endpoint: null,
+    assetUrl: "/models/luna/brain/source/3d-vh-f-allen-brain.glb",
+    requiresAuthentication: false,
+    downloadable: false,
+    approximateSize: null,
+    license: "Repository asset; source licensing must be retained with the asset.",
+    citation: null,
+    referenceSpaceIds: ["luna-viewer-local"],
+    description: "The existing local model used by the Luna Brain Macro viewer.",
+    limitations: "Its local coordinate frame is not a registered MNI or BigBrain transform."
+  },
+  {
+    id: "ebrains-multilevel-human-atlas",
+    name: "EBRAINS Multilevel Human Brain Atlas",
+    provider: "ebrains",
+    scale: "tissue",
+    modality: "Probabilistic cytoarchitecture and regional atlas metadata",
+    species: "Homo sapiens",
+    version: "siibra API v3.0",
+    status: "partial",
+    accessType: "remote-api",
+    endpoint: "https://siibra-api-stable.apps.hbp.eu/v3_0",
+    assetUrl: null,
+    requiresAuthentication: false,
+    downloadable: true,
+    approximateSize: null,
+    license: "Dataset and asset specific; no provider data is redistributed by Luna.",
+    citation: "Amunts K, Mohlberg H, Bludau S, Zilles K. Julich-Brain: A 3D probabilistic atlas of the human brain\u2019s cytoarchitecture. Science. 2020;369(6506):988-992. https://doi.org/10.1126/science.abb4588",
+    referenceSpaceIds: [
+      "ebrains-mni-icbm-152-2009c",
+      "ebrains-bigbrain"
+    ],
+    description: "Remote atlas metadata and regional feature discovery through the documented public siibra HTTP API.",
+    limitations: "Luna exposes verified atlas metadata and provenance only. It does not download or render raw probabilistic volumes, and region mappings remain query-reviewed."
+  },
+  {
+    id: "julich-brain-cytoarchitecture",
+    name: "Julich-Brain Cytoarchitectonic Atlas",
+    provider: "julich-brain",
+    scale: "tissue",
+    modality: "3D probabilistic cytoarchitectonic maps",
+    species: "Homo sapiens",
+    version: null,
+    status: "partial",
+    accessType: "remote-api",
+    endpoint: "https://siibra-api-stable.apps.hbp.eu/v3_0/atlases/juelich/iav/atlas/v1.0.0/1",
+    assetUrl: null,
+    requiresAuthentication: false,
+    downloadable: true,
+    approximateSize: "Tera- to petabyte-scale source imaging pipeline",
+    license: "Dataset and asset specific; no raw map is copied into Luna.",
+    citation: "Amunts K, Mohlberg H, Bludau S, Zilles K. Julich-Brain: A 3D probabilistic atlas of the human brain\u2019s cytoarchitecture. Science. 2020;369(6506):988-992. https://doi.org/10.1126/science.abb4588",
+    referenceSpaceIds: [
+      "ebrains-mni-icbm-152-2009c",
+      "ebrains-bigbrain"
+    ],
+    description: "Cytoarchitectonic tissue context reached through the EBRAINS/siibra atlas service.",
+    limitations: "No raw probability map is converted to a false binary boundary or displayed in Luna\u2019s local coordinate frame."
+  },
+  {
+    id: "bigbrain-microscopic-reference",
+    name: "BigBrain Microscopic Human Brain Reference",
+    provider: "bigbrain",
+    scale: "tissue",
+    modality: "20 \u03BCm histological 3D reference",
+    species: "Homo sapiens",
+    version: null,
+    status: "unsupported",
+    accessType: "remote-stream",
+    endpoint: "https://bigbrainproject.org/",
+    assetUrl: null,
+    requiresAuthentication: false,
+    downloadable: true,
+    approximateSize: ">1 TB full dataset",
+    license: "Dataset-specific terms must be reviewed before derivative use or redistribution.",
+    citation: "Amunts K, et al. BigBrain: An Ultrahigh-Resolution 3D Human Brain Model. Science. 2013;340(6139):1472-1475. https://doi.org/10.1126/science.1235381",
+    referenceSpaceIds: ["ebrains-bigbrain"],
+    description: "A microscopic reference discoverable in EBRAINS; retained as a future streaming/derived-map candidate.",
+    limitations: "The full source dataset is too large for GitHub and browser payloads. Luna does not download, cache, or render the raw volume."
+  },
+  {
+    id: "cellxgene-human-brain-cell-atlas-v1",
+    name: "Human Brain Cell Atlas v1.0",
+    provider: "cellxgene",
+    scale: "cellular",
+    modality: "Single-nucleus transcriptomic cell metadata",
+    species: "Homo sapiens",
+    version: "CELLxGENE collection version retrieved at runtime",
+    status: "partial",
+    accessType: "server-query",
+    endpoint: "https://api.cellxgene.cziscience.com/curation/v1/collections/283d65eb-dd53-496d-adb7-7570c7caa443",
+    assetUrl: null,
+    requiresAuthentication: false,
+    downloadable: true,
+    approximateSize: "Collection contains >3 million nuclei; individual H5AD files vary by subset.",
+    license: "Dataset-specific; Luna retrieves metadata only and does not redistribute H5AD files.",
+    citation: "Siletti K, et al. A cellular census of the human brain. Science. 2023. https://doi.org/10.1126/science.add7046",
+    referenceSpaceIds: [
+      "cellxgene-human-brain-anatomical-annotation"
+    ],
+    description: "Lazy server-side collection metadata lookup for selected anatomy, returning only bounded dataset summaries.",
+    limitations: "The collection is transcriptomic and anatomical metadata, not a 3D coordinate set aligned to the Luna GLB. Luna does not render cells without provider-supported positions."
+  },
+  {
+    id: "allen-human-brain-atlas-microarray",
+    name: "Allen Human Brain Atlas Microarray",
+    provider: "allen-institute",
+    scale: "molecular",
+    modality: "Microarray gene-expression sampling metadata and expression service",
+    species: "Homo sapiens",
+    version: null,
+    status: "partial",
+    accessType: "remote-api",
+    endpoint: "https://api.brain-map.org/api/v2/data/query.json",
+    assetUrl: null,
+    requiresAuthentication: false,
+    downloadable: true,
+    approximateSize: "Provider data and downloads vary by donor and query.",
+    license: "Use is subject to provider terms and citation policy; Luna does not redistribute raw data.",
+    citation: "Allen Institute for Brain Science. Allen Human Brain Atlas API. https://brain-map.org/support/documentation/human-brain-atlas-api",
+    referenceSpaceIds: ["allen-human-donor-mr"],
+    description: "Lazy remote lookup of provider structure metadata for molecular queries, with exact results and donor/MR provenance retained.",
+    limitations: "No expression value is inferred for an unmatched Luna structure or interpolated across anatomy. Returned molecular measurements require an exact provider structure/probe query."
+  },
+  {
+    id: "human-cortical-em-fragment",
+    name: "Human Cortical Electron-Microscopy Fragment",
+    provider: "human-em",
+    scale: "subcellular",
+    modality: "Electron-microscopy reconstruction",
+    species: "Homo sapiens",
+    version: null,
+    status: "unavailable",
+    accessType: "download",
+    endpoint: null,
+    assetUrl: null,
+    requiresAuthentication: false,
+    downloadable: true,
+    approximateSize: "~1.4 PB source imaging data",
+    license: "Provider-specific; no source data is included in Luna.",
+    citation: "Shapson-Coe A, et al. A petavoxel fragment of human cerebral cortex reconstructed at nanoscale resolution. Science. 2024. https://doi.org/10.1126/science.adk4858",
+    referenceSpaceIds: [],
+    description: "A public, sample-scoped human cortical EM resource retained in the registry as a future candidate.",
+    limitations: "It is a single surgical cortical sample without a validated mapping to Luna\u2019s canonical whole-brain structures. Luna therefore does not expose it as subcellular structure data."
+  }
+];
+function getDataset(id) {
+  return BRAIN_DATASETS.find(
+    (dataset) => dataset.id === id
+  ) ?? null;
+}
+function getScientificDatasetManifest() {
+  return {
+    datasets: BRAIN_DATASETS,
+    referenceSpaces: BRAIN_REFERENCE_SPACES,
+    coordinateTransforms: BRAIN_COORDINATE_TRANSFORMS
+  };
+}
+
+// server/scientificData/brainScienceService.ts
+var EBRAINS_HUMAN_ATLAS_URL = "https://siibra-api-stable.apps.hbp.eu/v3_0/atlases/juelich/iav/atlas/v1.0.0/1";
+var CELLXGENE_HBCA_URL = "https://api.cellxgene.cziscience.com/curation/v1/collections/283d65eb-dd53-496d-adb7-7570c7caa443";
+var ALLEN_BASE_URL = "https://api.brain-map.org/api/v2/data/query.json";
+var CACHE_TTL_MS = 5 * 60 * 1e3;
+var FETCH_TIMEOUT_MS = 8e3;
+var MAX_STRUCTURE_NAME_LENGTH = 120;
+var queryCache = /* @__PURE__ */ new Map();
+function getReferenceSpace(dataset) {
+  const referenceSpaceId = dataset.referenceSpaceIds[0];
+  return BRAIN_REFERENCE_SPACES.find(
+    (space) => space.id === referenceSpaceId
+  ) ?? null;
+}
+function createProvenance(dataset, accessedAt) {
+  return {
+    provider: dataset.provider,
+    datasetName: dataset.name,
+    version: dataset.version,
+    sourceUrl: dataset.endpoint ?? dataset.assetUrl ?? "",
+    citation: dataset.citation,
+    license: dataset.license,
+    accessedAt,
+    referenceSpaceIds: dataset.referenceSpaceIds
+  };
+}
+function createStructureMapping(query, dataset) {
+  if (!query.structureId || !query.structureName) {
+    return null;
+  }
+  return {
+    canonicalStructureId: query.structureId,
+    provider: dataset.provider,
+    externalId: null,
+    externalName: query.structureName,
+    status: "query-required",
+    note: "The canonical Luna structure is retained as the identity. Provider-specific assignment is queried by dataset metadata and is not treated as a validated coordinate transform."
+  };
+}
+function sanitizeStructureName(value) {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.replace(/[^a-zA-Z0-9 _-]/g, "").trim().slice(0, MAX_STRUCTURE_NAME_LENGTH);
+  return normalized || null;
+}
+async function fetchJson(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    FETCH_TIMEOUT_MS
+  );
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json"
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      throw new Error(
+        `Provider returned HTTP ${response.status}`
+      );
+    }
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+function createUnavailableObservation(dataset, query) {
+  return {
+    scale: query.scale,
+    status: dataset.status,
+    dataset,
+    structureMapping: createStructureMapping(
+      query,
+      dataset
+    ),
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings: [],
+    message: dataset.limitations ?? "Scientific dataset unavailable for this observation context.",
+    cached: false,
+    fetchedAt: null
+  };
+}
+async function queryTissue(dataset, query) {
+  const payload = await fetchJson(EBRAINS_HUMAN_ATLAS_URL);
+  const accessedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const provenance = createProvenance(
+    dataset,
+    accessedAt
+  );
+  const parcellationCount = payload.parcellations?.length ?? 0;
+  const findings = [
+    {
+      id: "ebrains-human-atlas",
+      label: "Atlas",
+      value: payload.name ?? "Multilevel Human Atlas",
+      unit: null,
+      kind: "atlas",
+      provenance
+    },
+    {
+      id: "ebrains-parcellation-count",
+      label: "Published parcellation references",
+      value: String(parcellationCount),
+      unit: "references",
+      kind: "atlas",
+      provenance
+    }
+  ];
+  return {
+    scale: query.scale,
+    status: "partial",
+    dataset,
+    structureMapping: createStructureMapping(
+      query,
+      dataset
+    ),
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings,
+    message: "Live EBRAINS atlas metadata is available. Regional assignment and raw probabilistic maps remain provider queries rather than a binary in-viewer boundary.",
+    cached: false,
+    fetchedAt: accessedAt
+  };
+}
+function matchesCellxgeneDataset(dataset, structureName) {
+  if (!structureName) {
+    return false;
+  }
+  const haystack = [
+    dataset.title,
+    ...(dataset.tissue ?? []).map(
+      (tissue) => tissue.label
+    )
+  ].filter(Boolean).join(" ").toLocaleLowerCase();
+  const candidates = structureName.toLocaleLowerCase().split(/\s+/).filter((token) => token.length >= 4);
+  return candidates.some(
+    (token) => haystack.includes(token)
+  );
+}
+async function queryCellular(dataset, query) {
+  const payload = await fetchJson(
+    CELLXGENE_HBCA_URL
+  );
+  const accessedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const provenance = createProvenance(
+    {
+      ...dataset,
+      version: payload.collection_version_id ?? dataset.version
+    },
+    accessedAt
+  );
+  const structureName = sanitizeStructureName(
+    query.structureName
+  );
+  const matchedDatasets = (payload.datasets ?? []).filter(
+    (entry) => matchesCellxgeneDataset(
+      entry,
+      structureName
+    )
+  ).slice(0, 5);
+  const findings = matchedDatasets.map(
+    (entry, index2) => ({
+      id: entry.dataset_id ?? `cellxgene-match-${index2}`,
+      label: entry.title ?? "CELLxGENE dataset",
+      value: String(entry.cell_count ?? "Metadata available"),
+      unit: typeof entry.cell_count === "number" ? "nuclei" : null,
+      kind: "cellular-metadata",
+      provenance
+    })
+  );
+  return {
+    scale: query.scale,
+    status: "partial",
+    dataset,
+    structureMapping: createStructureMapping(
+      query,
+      dataset
+    ),
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings,
+    message: structureName ? findings.length ? "Live CELLxGENE collection metadata matched this anatomical context. The values shown are provider-reported dataset counts, not visualized cell positions." : "CELLxGENE collection metadata is available, but no direct dataset-title match was found for this Luna structure." : "Select a Luna structure to discover bounded CELLxGENE cellular dataset metadata.",
+    cached: false,
+    fetchedAt: accessedAt
+  };
+}
+async function queryMolecular(dataset, query) {
+  const structureName = sanitizeStructureName(
+    query.structureName
+  );
+  if (!structureName) {
+    return {
+      ...createUnavailableObservation(
+        dataset,
+        query
+      ),
+      status: "partial",
+      message: "Select a Luna structure before querying the Allen Human Brain Atlas structure metadata service."
+    };
+  }
+  const criteria = `model::Structure,rma::criteria,[name$il'${structureName}'],rma::options[num_rows$eq5]`;
+  const url = new URL(ALLEN_BASE_URL);
+  url.searchParams.set("criteria", criteria);
+  const payload = await fetchJson(
+    url.toString()
+  );
+  const accessedAt = (/* @__PURE__ */ new Date()).toISOString();
+  const provenance = createProvenance(
+    dataset,
+    accessedAt
+  );
+  const matches = (payload.msg ?? []).slice(0, 5);
+  const findings = matches.map(
+    (entry) => ({
+      id: `allen-structure-${entry.id ?? entry.name ?? "unknown"}`,
+      label: entry.name ?? "Allen structure",
+      value: entry.acronym ?? String(entry.id ?? "Provider match"),
+      unit: null,
+      kind: "molecular-metadata",
+      provenance
+    })
+  );
+  return {
+    scale: query.scale,
+    status: "partial",
+    dataset,
+    structureMapping: {
+      canonicalStructureId: query.structureId ?? "unselected",
+      provider: dataset.provider,
+      externalId: matches.length === 1 && matches[0].id ? String(matches[0].id) : null,
+      externalName: matches.length === 1 ? matches[0].name ?? null : null,
+      status: matches.length === 1 ? "broad" : "query-required",
+      note: matches.length === 1 ? "A provider structure-name match was returned. This is not a coordinate transform and no expression value has been inferred." : "No unique provider structure assignment was made. Luna requires a more specific provider query before showing molecular measurements."
+    },
+    referenceSpace: getReferenceSpace(dataset),
+    coordinateTransform: null,
+    findings,
+    message: findings.length ? "Allen Human Brain Atlas structure metadata is available. Molecular values require an explicit provider gene/probe query and retain donor/sample provenance." : "No Allen Human Brain Atlas structure metadata match was returned for this Luna structure.",
+    cached: false,
+    fetchedAt: accessedAt
+  };
+}
+function getPrimaryDataset(scale) {
+  const ids = {
+    macro: "luna-macro-anatomy-model",
+    tissue: "julich-brain-cytoarchitecture",
+    cellular: "cellxgene-human-brain-cell-atlas-v1",
+    subcellular: "human-cortical-em-fragment",
+    molecular: "allen-human-brain-atlas-microarray"
+  };
+  return getDataset(ids[scale]);
+}
+function createErrorObservation(dataset, query, error) {
+  const message = error instanceof Error ? error.message : "Provider request failed";
+  return {
+    ...createUnavailableObservation(
+      dataset,
+      query
+    ),
+    status: "offline",
+    message: `Scientific provider temporarily unavailable: ${message}. Macro and local workspace features remain available.`
+  };
+}
+async function queryBrainScientificObservation(query) {
+  const dataset = getPrimaryDataset(query.scale);
+  if (!dataset) {
+    throw new Error(
+      `No registered dataset for ${query.scale}`
+    );
+  }
+  const key = [
+    query.scale,
+    query.structureId ?? "",
+    query.structureName ?? ""
+  ].join(":");
+  const cached = queryCache.get(key);
+  if (cached && cached.expiresAt > Date.now() && !query.refresh) {
+    return {
+      ...cached.value,
+      cached: true
+    };
+  }
+  if (dataset.status === "unavailable" || dataset.status === "unsupported" || dataset.status === "requires-authentication") {
+    return createUnavailableObservation(
+      dataset,
+      query
+    );
+  }
+  try {
+    let observation;
+    switch (query.scale) {
+      case "macro":
+        observation = {
+          scale: query.scale,
+          status: "available",
+          dataset,
+          structureMapping: createStructureMapping(
+            query,
+            dataset
+          ),
+          referenceSpace: getReferenceSpace(dataset),
+          coordinateTransform: null,
+          findings: [],
+          message: "The local Luna Macro model remains available independently of external scientific providers.",
+          cached: false,
+          fetchedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        break;
+      case "tissue":
+        observation = await queryTissue(
+          dataset,
+          query
+        );
+        break;
+      case "cellular":
+        observation = await queryCellular(
+          dataset,
+          query
+        );
+        break;
+      case "molecular":
+        observation = await queryMolecular(
+          dataset,
+          query
+        );
+        break;
+      case "subcellular":
+        observation = createUnavailableObservation(
+          dataset,
+          query
+        );
+        break;
+    }
+    queryCache.set(key, {
+      value: observation,
+      expiresAt: Date.now() + CACHE_TTL_MS
+    });
+    return observation;
+  } catch (error) {
+    return createErrorObservation(
+      dataset,
+      query,
+      error
+    );
+  }
+}
+
 // server/app.ts
 function readCookie(header, name) {
   return header?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -4341,6 +4925,34 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
       const message = error instanceof Error ? error.message : String(error);
       return res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
     }
+  });
+  app2.get("/api/brain-science/manifest", (_req, res) => {
+    return res.json(getScientificDatasetManifest());
+  });
+  app2.get("/api/brain-science/observation", async (req, res) => {
+    const scale = typeof req.query.scale === "string" ? req.query.scale : null;
+    const validScales = [
+      "macro",
+      "tissue",
+      "cellular",
+      "subcellular",
+      "molecular"
+    ];
+    if (!scale || !validScales.includes(scale)) {
+      return res.status(400).json({
+        error: "scale must be macro, tissue, cellular, subcellular, or molecular"
+      });
+    }
+    const structureId = typeof req.query.structureId === "string" ? req.query.structureId.slice(0, 180) : null;
+    const structureName = typeof req.query.structureName === "string" ? req.query.structureName.slice(0, 180) : null;
+    const refresh = req.query.refresh === "true";
+    const observation = await queryBrainScientificObservation({
+      scale,
+      structureId,
+      structureName,
+      refresh
+    });
+    return res.json(observation);
   });
   app2.use(
     "/api/trpc",
