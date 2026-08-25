@@ -20,6 +20,16 @@ import {
   resolveNanobotTarget,
 } from "./NanobotTargetResolver";
 
+import * as THREE from "three";
+
+import {
+  archiveCompletedNanobot,
+} from "./NanobotCompletion";
+
+import {
+  createNanobotVisual,
+} from "./NanobotVisuals";
+
 const structure: BrainStructure = {
   id: "left-hippocampus",
   sourceName: "Left_Hippocampus",
@@ -104,10 +114,35 @@ describe("NanobotMissionEngine", () => {
     expect(completion.completedResult?.completedAt).toBe(21_600);
     expect(completion.completedResult?.operationMode).toBe("simulation");
 
-    registry.recordMissionResult(nanobot.id, completion.completedResult!);
-    registry.recordMissionResult(nanobot.id, completion.completedResult!);
+    const visualRoot = new THREE.Group();
+    const visual = createNanobotVisual(nanobot);
+    visualRoot.add(visual.root);
+    const visuals = new Map([[nanobot.id, visual]]);
+    const positions = new Map([[nanobot.id, { ...nanobot.position }]]);
+
+    // Scene cleanup removes the completed agent from the active fleet only;
+    // immutable mission history remains inspectable after physical return.
+    const history = archiveCompletedNanobot({
+      registry,
+      nanobotId: nanobot.id,
+      completedResult: completion.completedResult!,
+      visualRoot,
+      visuals,
+      positions,
+    });
+
+    expect(registry.getAll()).toHaveLength(0);
+    expect(history).toHaveLength(1);
+    expect(history[0]?.missionNumber).toBe(1);
+    expect(visualRoot.children).not.toContain(visual.root);
+    expect(visuals.has(nanobot.id)).toBe(false);
+    expect(positions.has(nanobot.id)).toBe(false);
     expect(registry.getMissionHistory()).toHaveLength(1);
-    expect(registry.getMissionHistory()[0]?.missionNumber).toBe(1);
+    expect(registry.getMissionHistory()[0]?.target.targetPosition).toEqual({
+      x: 0.001,
+      y: 0,
+      z: 0,
+    });
   });
 
   it("pauses and resumes the exact previous lifecycle state", () => {
@@ -179,6 +214,10 @@ describe("NanobotTargetResolver spatial provenance", () => {
       structure,
       observationScale: "macro",
       macroPosition: { x: 0.01, y: 0.02, z: 0.03 },
+      macroTargetResolution:
+        "Mesh-derived Luna Local interior simulation work point",
+      macroTargetDerivation:
+        "Selected Macro mesh centre offset toward the loaded brain core for visible simulation entry; not registered to an external scientific reference space.",
       referenceSpace: {
         id: "luna-viewer-local",
         label: "Luna viewer local coordinates",
@@ -199,6 +238,12 @@ describe("NanobotTargetResolver spatial provenance", () => {
     expect(target.position).toEqual({ x: 0.01, y: 0.02, z: 0.03 });
     expect(target.spatialTarget?.referenceSpace?.id).toBe("luna-viewer-local");
     expect(target.spatialTarget?.coordinateTransform).toBeNull();
+    expect(target.spatialTarget?.resolution).toBe(
+      "Mesh-derived Luna Local interior simulation work point",
+    );
+    expect(target.spatialTarget?.targetDerivation).toContain(
+      "visible simulation entry",
+    );
   });
 
   it("preserves an unavailable Tissue atlas region instead of converting it to a Luna point", () => {

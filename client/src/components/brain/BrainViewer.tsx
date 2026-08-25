@@ -59,6 +59,10 @@ import {
 } from "./anatomy/NanobotVisuals";
 
 import {
+  archiveCompletedNanobot,
+} from "./anatomy/NanobotCompletion";
+
+import {
   enableBrainMeshDepth,
 } from "./anatomy/BrainVisualPresentation";
 
@@ -605,13 +609,36 @@ export default function BrainViewer() {
         return null;
       }
 
-      const center =
+      const meshCenter =
         box.getCenter(new THREE.Vector3());
 
+      const brainBounds = brainBoundsRef.current;
+
+      if (!brainBounds || brainBounds.isEmpty()) {
+        return {
+          x: meshCenter.x,
+          y: meshCenter.y,
+          z: meshCenter.z,
+        };
+      }
+
+      const brainCore = brainBounds.getCenter(
+        new THREE.Vector3(),
+      );
+
+      // The GLB centre is often visually occluded by the cortical shell. Move
+      // a small, deterministic amount toward the loaded brain core so the
+      // simulation marker visibly enters the selected anatomy. This remains a
+      // Luna-local presentation coordinate, not a scientific transform.
+      const interiorPoint = meshCenter.lerp(
+        brainCore,
+        0.18,
+      );
+
       return {
-        x: center.x,
-        y: center.y,
-        z: center.z,
+        x: interiorPoint.x,
+        y: interiorPoint.y,
+        z: interiorPoint.z,
       };
     };
 
@@ -706,6 +733,10 @@ export default function BrainViewer() {
         structure: selectedStructure,
         observationScale: observationContext.scale,
         macroPosition,
+        macroTargetResolution:
+          "Mesh-derived Luna Local interior simulation work point",
+        macroTargetDerivation:
+          "Selected Macro mesh centre offset 18% toward the loaded brain core for visible simulation entry; not registered to an external scientific reference space.",
         spatialTarget: observationContext.spatialTarget,
         spatialCapability:
           observationContext.spatialCapability,
@@ -770,7 +801,7 @@ export default function BrainViewer() {
       setSelectedNanobotId(assigned.id);
       syncNanobotState();
       setStatus(
-        `${assigned.metadata.label} deployed toward ${selectedStructure.displayName} · simulation mission`,
+        `${assigned.metadata.label} deployed into ${selectedStructure.displayName} · simulation mission`,
       );
     };
 
@@ -1799,16 +1830,25 @@ export default function BrainViewer() {
               );
 
             if (missionTick.completedResult) {
-              nanobotRegistry.recordMissionResult(
-                nanobot.id,
-                missionTick.completedResult,
-              );
-              setMissionHistory(
-                nanobotRegistry.getMissionHistory(),
+              const archivedHistory =
+                archiveCompletedNanobot({
+                  registry: nanobotRegistry,
+                  nanobotId: nanobot.id,
+                  completedResult: missionTick.completedResult,
+                  visualRoot: nanobotRootRef.current,
+                  visuals: nanobotVisualsRef.current,
+                  positions: nanobotPositionsRef.current,
+                });
+
+              setMissionHistory(archivedHistory);
+              setNanobots(nanobotRegistry.getAll());
+              setSelectedNanobotId((current) =>
+                current === nanobot.id ? null : current,
               );
               setStatus(
-                `${nanobot.metadata.label} completed simulated ${nanobot.type} verification`,
+                `${nanobot.metadata.label} returned and archived after simulated ${nanobot.type} verification`,
               );
+              return;
             }
 
             const engineVisual =

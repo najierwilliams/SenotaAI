@@ -30,6 +30,12 @@ export interface ResolveNanobotTargetOptions {
   structure: BrainStructure;
   observationScale: BrainScale;
   macroPosition: NanobotPosition | null;
+  /**
+   * Optional viewer-only description for a mesh-derived simulation work point.
+   * It never represents an external scientific coordinate transform.
+   */
+  macroTargetResolution?: string;
+  macroTargetDerivation?: string;
   /** Existing compatibility hint; structured capability now takes precedence. */
   hasDatasetBackedCoordinates?: boolean;
   spatialTarget?: BrainSpatialTarget | null;
@@ -50,6 +56,10 @@ export function resolveNanobotTarget(
     structure,
     observationScale,
     macroPosition,
+    macroTargetResolution =
+      "Selected Luna GLB mesh world-space target centre.",
+    macroTargetDerivation =
+      "Selected Macro Three.js mesh world-space target centre.",
     hasDatasetBackedCoordinates = false,
     spatialTarget = null,
     spatialCapability = null,
@@ -71,9 +81,8 @@ export function resolveNanobotTarget(
         units: referenceSpace?.units ?? null,
       },
       coordinateType: "point",
-      resolution: "Selected Luna GLB mesh world-space target",
-      targetDerivation:
-        "Selected Macro Three.js mesh world-space target centre.",
+      resolution: macroTargetResolution,
+      targetDerivation: macroTargetDerivation,
       sourceMap: null,
       probabilityThreshold: null,
       coordinateTransform: null,
