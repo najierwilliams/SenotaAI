@@ -352,18 +352,34 @@ export default function BrainViewer() {
       const originalMaterial =
         selectedOriginalMaterialRef.current;
 
-      if (!mesh || !originalMaterial) {
-        return;
+      if (mesh && originalMaterial) {
+        mesh.material =
+          originalMaterial;
       }
-
-      mesh.material =
-        originalMaterial;
 
       selectedMeshRef.current =
         null;
 
       selectedOriginalMaterialRef.current =
         null;
+    };
+
+  /**
+   * Clears the opaque selection highlight without disabling Interior View.
+   * Interior materials are always rebuilt from their stored originals so a
+   * previously selected mesh cannot remain solid after deselection/reset.
+   */
+  const clearBrainSelection =
+    () => {
+      restoreSelectedMesh();
+
+      if (interiorModeRef.current) {
+        restoreInteriorMode();
+        applyInteriorMode(null);
+      }
+
+      setSelectedStructure(null);
+      setIsolationMode(false);
     };
 
   const setBrainIsolation =
@@ -403,7 +419,12 @@ export default function BrainViewer() {
   const resetCamera =
     () => {
       controlsRef.current?.reset();
-      setStatus("Brain view reset");
+      clearBrainSelection();
+      setStatus(
+        interiorModeRef.current
+          ? "Brain view reset · interior view retained"
+          : "Brain view reset",
+      );
     };
 
   const focusSelectedStructure =
@@ -514,6 +535,10 @@ export default function BrainViewer() {
 
       selectedMeshRef.current =
         mesh;
+
+      if (interiorModeRef.current) {
+        applyInteriorMode(mesh);
+      }
 
       setSelectedStructure(
         structure,
@@ -1232,7 +1257,12 @@ export default function BrainViewer() {
   const handleViewReset =
     () => {
       controlsRef.current?.reset();
-      setStatus("Brain view reset");
+      clearBrainSelection();
+      setStatus(
+        interiorModeRef.current
+          ? "Brain view reset · interior view retained"
+          : "Brain view reset",
+      );
       workspace.closeMenu();
     };
 
@@ -1479,9 +1509,12 @@ export default function BrainViewer() {
           );
 
         if (intersections.length === 0) {
-          restoreSelectedMesh();
-          setSelectedStructure(null);
-          setStatus("Luna's brain online");
+          clearBrainSelection();
+          setStatus(
+            interiorModeRef.current
+              ? "Interior view retained · selection cleared"
+              : "Luna's brain online",
+          );
           return;
         }
 
@@ -1493,7 +1526,16 @@ export default function BrainViewer() {
         }
 
         restoreSelectedMesh();
+
+        if (interiorModeRef.current) {
+          restoreInteriorMode();
+        }
+
         highlightMesh(object);
+
+        if (interiorModeRef.current) {
+          applyInteriorMode(object);
+        }
 
         const registry =
           buildBrainStructureRegistry([
@@ -1638,9 +1680,12 @@ export default function BrainViewer() {
     const handleDoubleClick =
       () => {
         controls.reset();
-        restoreSelectedMesh();
-        setSelectedStructure(null);
-        setStatus("Luna's brain online");
+        clearBrainSelection();
+        setStatus(
+          interiorModeRef.current
+            ? "Interior view retained · selection cleared"
+            : "Luna's brain online",
+        );
       };
 
     renderer.domElement.addEventListener(
