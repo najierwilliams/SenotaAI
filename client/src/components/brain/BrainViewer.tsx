@@ -8,11 +8,27 @@ import {
   type BrainStructure,
 } from "./anatomy/BrainStructureRegistry";
 
+import AnatomicalInspector from "./AnatomicalInspector";
+
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
 
 export default function BrainViewer() {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef =
+    useRef<HTMLDivElement | null>(null);
+
+  const selectedMeshRef =
+    useRef<THREE.Mesh | null>(null);
+
+  const selectedOriginalMaterialRef =
+    useRef<
+      THREE.Material |
+      THREE.Material[] |
+      null
+    >(null);
+
+  const brainRootRef =
+  useRef<THREE.Group | null>(null);
 
   const [status, setStatus] = useState(
     "Loading Luna's brain...",
@@ -21,8 +37,74 @@ export default function BrainViewer() {
   const [selectedStructure, setSelectedStructure] =
     useState<BrainStructure | null>(null);
 
+  const [isolationMode, setIsolationMode] =
+  useState(false);
+
+  const restoreSelectedMesh = () => {
+    const mesh =
+      selectedMeshRef.current;
+
+    const originalMaterial =
+      selectedOriginalMaterialRef.current;
+
+    if (
+      !mesh ||
+      !originalMaterial
+    ) {
+      return;
+    }
+
+    mesh.material =
+      originalMaterial;
+
+    selectedMeshRef.current =
+      null;
+
+    selectedOriginalMaterialRef.current =
+      null;
+  };
+
+  const setBrainIsolation = (
+    isolateMesh: THREE.Mesh | null,
+  ) => {
+    const brainRoot =
+      brainRootRef.current;
+
+    if (!brainRoot) {
+      return;
+    }
+
+    brainRoot.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) {
+        return;
+      }
+
+      object.visible =
+        !isolateMesh ||
+        object === isolateMesh;
+    });
+  };
+
+  const restoreBrainVisibility = () => {
+    const brainRoot =
+      brainRootRef.current;
+
+    if (!brainRoot) {
+      return;
+    }
+
+    brainRoot.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) {
+        return;
+      }
+
+      object.visible = true;
+    });
+  };
+
   useEffect(() => {
-    const container = containerRef.current;
+    const container =
+      containerRef.current;
 
     if (!container) {
       return;
@@ -123,6 +205,9 @@ export default function BrainViewer() {
 
     scene.add(brainRoot);
 
+    brainRootRef.current =
+      brainRoot;
+
     // -----------------------------------------
     // Controls
     // -----------------------------------------
@@ -165,35 +250,13 @@ export default function BrainViewer() {
     let pointerDownX = 0;
     let pointerDownY = 0;
 
-    let selectedMesh:
-      THREE.Mesh | null = null;
-
-    let selectedOriginalMaterial:
-      THREE.Material | THREE.Material[] | null =
-      null;
-
-    const restoreSelectedMesh = () => {
-      if (
-        !selectedMesh ||
-        !selectedOriginalMaterial
-      ) {
-        return;
-      }
-
-      selectedMesh.material =
-        selectedOriginalMaterial;
-
-      selectedMesh = null;
-      selectedOriginalMaterial = null;
-    };
-
     const highlightMesh = (
       mesh: THREE.Mesh,
     ) => {
       const originalMaterial =
         mesh.material;
 
-      selectedOriginalMaterial =
+      selectedOriginalMaterialRef.current =
         originalMaterial;
 
       if (
@@ -243,7 +306,8 @@ export default function BrainViewer() {
           clonedMaterial;
       }
 
-      selectedMesh = mesh;
+      selectedMeshRef.current =
+        mesh;
     };
 
     const handlePointerDown = (
@@ -640,40 +704,50 @@ export default function BrainViewer() {
         {status}
       </div>
 
-      {selectedStructure && (
-        <div className="pointer-events-none absolute right-4 top-4 w-72 rounded-lg bg-black/70 p-4 text-white backdrop-blur">
-          <div className="text-xs uppercase tracking-wide text-white/50">
-            Selected structure
-          </div>
+      <AnatomicalInspector
+        structure={selectedStructure}
+        isIsolated={isolationMode}
+        onToggleIsolation={() => {
+          const mesh =
+            selectedMeshRef.current;
 
-          <div className="mt-1 text-lg font-semibold">
-            {selectedStructure.displayName}
-          </div>
+          if (!mesh) {
+            return;
+          }
 
-          <div className="mt-3 space-y-1 text-xs text-white/70">
-            <div>
-              Hemisphere:{" "}
-              {selectedStructure.hemisphere}
-            </div>
+          if (isolationMode) {
+            restoreBrainVisibility();
 
-            <div>
-              Category:{" "}
-              {selectedStructure.category}
-            </div>
+            setIsolationMode(false);
 
-            {selectedStructure.parentRegion && (
-              <div>
-                Region:{" "}
-                {selectedStructure.parentRegion}
-              </div>
-            )}
+            setStatus(
+              "Luna's brain online",
+            );
+          } else {
+            setBrainIsolation(mesh);
 
-            <div className="break-all pt-2 text-white/40">
-              {selectedStructure.sourceName}
-            </div>
-          </div>
-        </div>
-      )}
+            setIsolationMode(true);
+
+            setStatus(
+              `Isolated: ${
+                selectedStructure?.displayName ??
+                mesh.name
+              }`,
+            );
+          }
+        }}
+        onClear={() => {
+          restoreBrainVisibility();
+          restoreSelectedMesh();
+
+          setIsolationMode(false);
+          setSelectedStructure(null);
+
+          setStatus(
+            "Luna's brain online",
+          );
+        }}
+      />
 
       <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg bg-black/60 px-3 py-2 text-xs text-white/80 backdrop-blur">
         Drag to rotate · Scroll to zoom ·
