@@ -58,6 +58,11 @@ import type {
   BrainScaleAsset,
 } from "./anatomy/BrainScaleAssetRegistry";
 
+import {
+  createBrainObservationContext,
+  getObservationContextLabel,
+} from "./anatomy/BrainObservationContext";
+
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
 
@@ -72,6 +77,9 @@ export default function BrainViewer() {
     useRef<THREE.Material | THREE.Material[] | null>(null);
 
   const brainRootRef =
+    useRef<THREE.Group | null>(null);
+
+  const observationAssetRootRef =
     useRef<THREE.Group | null>(null);
 
   const cameraRef =
@@ -154,6 +162,9 @@ export default function BrainViewer() {
   const [scaleAssetError, setScaleAssetError] =
     useState<string | null>(null);
 
+  const [scaleRetryToken, setScaleRetryToken] =
+    useState(0);
+
   const [nanobots, setNanobots] =
     useState<Nanobot[]>([]);
 
@@ -162,6 +173,34 @@ export default function BrainViewer() {
 
   const workspace =
     useBrainWorkspaceState();
+
+  const observationContext =
+    createBrainObservationContext({
+      scale: activeScale,
+      structure: selectedStructure,
+      asset: scaleAsset,
+      loading: scaleAssetLoading,
+      error: scaleAssetError,
+    });
+
+  useEffect(() => {
+    nanobotRegistry.updateObservationContext({
+      scale: observationContext.scale,
+      datasetId:
+        observationContext.datasetId,
+      status: observationContext.status,
+    });
+
+    if (nanobotRegistry.getAll().length) {
+      setNanobots(
+        nanobotRegistry.getAll(),
+      );
+    }
+  }, [
+    observationContext.scale,
+    observationContext.datasetId,
+    observationContext.status,
+  ]);
 
   const interiorModeRef =
     useRef(false);
@@ -619,6 +658,13 @@ export default function BrainViewer() {
       nanobotRegistry.targetStructure(
         nanobot.id,
         selectedStructure,
+        {
+          scale: observationContext.scale,
+          datasetId:
+            observationContext.datasetId,
+          status:
+            observationContext.status,
+        },
       );
 
       const visual =
@@ -779,18 +825,17 @@ export default function BrainViewer() {
 
   const handleScaleChange =
     (scale: BrainScale) => {
+      setScaleAssetLoading(true);
+      setScaleAssetError(null);
+
+      if (scale === "macro") {
+        controlsRef.current?.reset();
+      }
+
       setActiveScale(scale);
 
-      const labels: Record<BrainScale, string> = {
-        macro: "Macro anatomy",
-        tissue: "Tissue scale",
-        cellular: "Cellular scale",
-        subcellular: "Subcellular scale",
-        molecular: "Molecular scale",
-      };
-
       setStatus(
-        `${labels[scale]} selected · checking layer`,
+        `${scale} observation selected · checking registered dataset`,
       );
     };
 
@@ -831,6 +876,147 @@ export default function BrainViewer() {
       },
       [],
     );
+
+  const retryScaleAsset =
+    () => {
+      setScaleRetryToken(
+        (current) => current + 1,
+      );
+    };
+
+  const returnToMacro =
+    () => {
+      controlsRef.current?.reset();
+      setActiveScale("macro");
+      setStatus(
+        "Macro anatomy selected · whole-brain observation restored",
+      );
+    };
+
+  useEffect(() => {
+    const brainRoot =
+      brainRootRef.current;
+
+    const observationAssetRoot =
+      observationAssetRootRef.current;
+
+    if (!brainRoot || !observationAssetRoot) {
+      return;
+    }
+
+    const clearObservationAsset = () => {
+      while (observationAssetRoot.children.length) {
+        observationAssetRoot.remove(
+          observationAssetRoot.children[0],
+        );
+      }
+    };
+
+    clearObservationAsset();
+
+    if (activeScale === "macro") {
+      brainRoot.visible = true;
+      return;
+    }
+
+    if (
+      !scaleAsset?.available ||
+      !scaleAsset.url
+    ) {
+      brainRoot.visible = true;
+      return;
+    }
+
+    let cancelled = false;
+
+    brainRoot.visible = false;
+
+    const loader = new GLTFLoader();
+
+    loader.load(
+      scaleAsset.url,
+      (gltf) => {
+        if (cancelled) {
+          return;
+        }
+
+        const observationModel =
+          gltf.scene;
+
+        observationAssetRoot.add(
+          observationModel,
+        );
+
+        const camera =
+          cameraRef.current;
+
+        const controls =
+          controlsRef.current;
+
+        const bounds =
+          new THREE.Box3().setFromObject(
+            observationModel,
+          );
+
+        if (
+          camera &&
+          controls &&
+          !bounds.isEmpty()
+        ) {
+          const center =
+            bounds.getCenter(
+              new THREE.Vector3(),
+            );
+
+          const size =
+            bounds.getSize(
+              new THREE.Vector3(),
+            );
+
+          const distance =
+            Math.max(
+              Math.max(size.x, size.y, size.z) * 2.5,
+              0.025,
+            );
+
+          camera.position.set(
+            center.x,
+            center.y,
+            center.z + distance,
+          );
+
+          controls.target.copy(center);
+          controls.update();
+        }
+
+        setStatus(
+          `${scaleAsset.label} observation ready`,
+        );
+      },
+      undefined,
+      (error) => {
+        if (cancelled) {
+          return;
+        }
+
+        brainRoot.visible = true;
+        setScaleAssetError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load registered observation dataset",
+        );
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      clearObservationAsset();
+      brainRoot.visible = true;
+    };
+  }, [
+    activeScale,
+    scaleAsset,
+  ]);
 
   const updateInteriorOpacity =
     (value: number) => {
@@ -1099,6 +1285,16 @@ export default function BrainViewer() {
     brainRoot.name = "luna-brain";
     scene.add(brainRoot);
     brainRootRef.current = brainRoot;
+
+    const observationAssetRoot =
+      new THREE.Group();
+
+    observationAssetRoot.name =
+      "luna-observation-asset";
+
+    scene.add(observationAssetRoot);
+    observationAssetRootRef.current =
+      observationAssetRoot;
 
     const nanobotRoot =
       new THREE.Group();
@@ -1709,6 +1905,8 @@ export default function BrainViewer() {
       brainMeshMapRef.current.clear();
 
       brainRootRef.current = null;
+      observationAssetRootRef.current =
+        null;
       nanobotRootRef.current = null;
       cameraRef.current = null;
       controlsRef.current = null;
@@ -1757,10 +1955,50 @@ export default function BrainViewer() {
         <BrainScaleAssetLoader
           structure={selectedStructure}
           activeScale={activeScale}
+          retryToken={scaleRetryToken}
           onAssetStateChange={
             handleScaleAssetStateChange
           }
         />
+
+        <div className="pointer-events-none absolute left-1/2 top-16 z-30 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2">
+          <div className="pointer-events-auto rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-center shadow-xl backdrop-blur-xl">
+            <div className="text-[9px] font-medium uppercase tracking-[0.18em] text-blue-100/55">
+              Observation
+            </div>
+            <div className="mt-1 text-xs font-semibold text-white/85">
+              {getObservationContextLabel(
+                observationContext,
+              )}
+            </div>
+            {observationContext.scale !== "macro" && (
+              <div className="mt-1 text-[10px] leading-relaxed text-white/50">
+                {observationContext.status === "unavailable"
+                  ? `${observationContext.scaleLabel} dataset not connected`
+                  : observationContext.message}
+              </div>
+            )}
+            {(observationContext.status === "unavailable" ||
+              observationContext.status === "error") && (
+              <div className="mt-2 flex justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={retryScaleAsset}
+                  className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/70 transition hover:bg-white/10 hover:text-white"
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={returnToMacro}
+                  className="rounded-md border border-blue-400/20 bg-blue-500/10 px-2 py-1 text-[10px] text-blue-100 transition hover:bg-blue-500/20"
+                >
+                  Return to Macro
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         {workspace.isOpen("anatomy") &&
           !workspace.isMinimized("anatomy") && (
@@ -1770,6 +2008,8 @@ export default function BrainViewer() {
                   structures={brainStructures}
                   selectedStructure={selectedStructure}
                   onSelectStructure={selectBrainStructure}
+                  observationContext={observationContext}
+                  onReturnToMacro={returnToMacro}
                 />
 
                 <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
@@ -1813,6 +2053,8 @@ export default function BrainViewer() {
                   structure={selectedStructure}
                   activeScale={activeScale}
                   onScaleChange={handleScaleChange}
+                  observationContext={observationContext}
+                  onReturnToMacro={returnToMacro}
                   isIsolated={isolationMode}
                   interiorMode={interiorMode}
                   interiorOpacity={interiorOpacity}
@@ -1905,6 +2147,7 @@ export default function BrainViewer() {
                   nanobots={nanobots}
                   selectedNanobotId={selectedNanobotId}
                   selectedStructure={selectedStructure}
+                  observationContext={observationContext}
                   onDeploy={deployNanobot}
                   onPause={pauseNanobots}
                   onResume={resumeNanobots}

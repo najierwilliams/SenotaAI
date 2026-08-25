@@ -10,7 +10,7 @@ export type BrainScaleAssetKind =
 
 export interface BrainScaleAsset {
   id: string;
-  structureId: string;
+  structureId: string | null;
   scale: BrainScale;
   label: string;
   description: string;
@@ -111,6 +111,43 @@ export function getBrainScaleAsset(
     structure,
     scale,
   );
+}
+
+export function getObservationScaleAsset(
+  structure: BrainStructure | null,
+  scale: BrainScale,
+): BrainScaleAsset | null {
+  if (structure) {
+    return getBrainScaleAsset(
+      structure,
+      scale,
+    );
+  }
+
+  if (scale === "macro") {
+    return {
+      id: "luna_brain_macro",
+      structureId: null,
+      scale: "macro",
+      label: SCALE_METADATA.macro.label,
+      description: SCALE_METADATA.macro.description,
+      url:
+        "/models/luna/brain/source/3d-vh-f-allen-brain.glb",
+      available: true,
+      kind: "model",
+    };
+  }
+
+  return {
+    id: `luna_brain_${scale}`,
+    structureId: null,
+    scale,
+    label: SCALE_METADATA[scale].label,
+    description: SCALE_METADATA[scale].description,
+    url: null,
+    available: false,
+    kind: "placeholder",
+  };
 }
 
 export function isBrainScaleAvailable(

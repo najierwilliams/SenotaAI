@@ -8,10 +8,15 @@ import type {
   NanobotType,
 } from "./anatomy/NanobotTypes";
 
+import type {
+  BrainObservationContext,
+} from "./anatomy/BrainObservationContext";
+
 interface NanobotPanelProps {
   nanobots: Nanobot[];
   selectedNanobotId: string | null;
   selectedStructure: BrainStructure | null;
+  observationContext: BrainObservationContext;
   onDeploy: (
     type: NanobotType,
   ) => void;
@@ -50,6 +55,7 @@ export default function NanobotPanel({
   nanobots,
   selectedNanobotId,
   selectedStructure,
+  observationContext,
   onDeploy,
   onPause,
   onResume,
@@ -79,6 +85,10 @@ export default function NanobotPanel({
         nanobot.id ===
         selectedNanobotId,
     ) ?? null;
+
+  const canDeploy =
+    Boolean(selectedStructure) &&
+    observationContext.available;
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-red-500/25 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
@@ -126,14 +136,22 @@ export default function NanobotPanel({
               ·{" "}
               {labelize(
                 selectedStructure.depth,
-              )}{" "}
-              ·{" "}
-              {labelize(
-                selectedStructure.scale,
               )}
             </div>
           )}
+
+          <div className="mt-2 text-[10px] text-red-100/65">
+            {observationContext.scaleLabel} observation · {observationContext.status === "unavailable"
+              ? "dataset not connected"
+              : observationContext.structureName ?? "whole brain"}
+          </div>
         </div>
+
+        {!observationContext.available && (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-[11px] leading-relaxed text-red-100/65">
+            {observationContext.scaleLabel} dataset not connected. Existing missions retain their targets, but new missions are unavailable at this observation scale.
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -142,7 +160,7 @@ export default function NanobotPanel({
               onDeploy("scout")
             }
             disabled={
-              !selectedStructure
+              !canDeploy
             }
             className="rounded-lg border border-red-500/25 bg-red-500/15 px-3 py-2 text-xs font-medium text-blue-100 transition hover:bg-red-500/25 disabled:cursor-not-allowed disabled:opacity-30"
           >
@@ -157,7 +175,7 @@ export default function NanobotPanel({
               )
             }
             disabled={
-              !selectedStructure
+              !canDeploy
             }
             className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
           >
@@ -170,7 +188,7 @@ export default function NanobotPanel({
               onDeploy("repair")
             }
             disabled={
-              !selectedStructure
+              !canDeploy
             }
             className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
           >
@@ -183,7 +201,7 @@ export default function NanobotPanel({
               onDeploy("monitor")
             }
             disabled={
-              !selectedStructure
+              !canDeploy
             }
             className="rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-30"
           >

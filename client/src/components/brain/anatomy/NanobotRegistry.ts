@@ -9,6 +9,7 @@ import {
   type Nanobot,
   type NanobotFinding,
   type NanobotMission,
+  type NanobotObservationTarget,
   type NanobotMissionPhase,
   type NanobotMissionResult,
   type NanobotState,
@@ -318,6 +319,7 @@ export class NanobotRegistry {
   targetStructure(
     id: string,
     structure: BrainStructure,
+    observation?: NanobotObservationTarget,
   ): Nanobot | null {
     const nanobot =
       this.nanobots.get(id);
@@ -329,6 +331,7 @@ export class NanobotRegistry {
     nanobot.target =
       createNanobotTarget(
         structure,
+        observation,
       );
 
     nanobot.mission =
@@ -356,6 +359,26 @@ export class NanobotRegistry {
       Date.now();
 
     return nanobot;
+  }
+
+  updateObservationContext(
+    observation: NanobotObservationTarget,
+  ): void {
+    const now = Date.now();
+
+    this.nanobots.forEach((nanobot) => {
+      if (!nanobot.target) {
+        return;
+      }
+
+      nanobot.target.observationScale =
+        observation.scale;
+      nanobot.target.observationDatasetId =
+        observation.datasetId;
+      nanobot.target.observationStatus =
+        observation.status;
+      nanobot.updatedAt = now;
+    });
   }
 
   clearTarget(

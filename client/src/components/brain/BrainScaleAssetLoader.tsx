@@ -8,13 +8,14 @@ import type {
 } from "./anatomy/BrainStructureRegistry";
 
 import {
-  getBrainScaleAsset,
+  getObservationScaleAsset,
   type BrainScaleAsset,
 } from "./anatomy/BrainScaleAssetRegistry";
 
 interface BrainScaleAssetLoaderProps {
   structure: BrainStructure | null;
   activeScale: BrainScale;
+  retryToken?: number;
   onAssetStateChange?: (
     state: {
       loading: boolean;
@@ -27,21 +28,12 @@ interface BrainScaleAssetLoaderProps {
 export default function BrainScaleAssetLoader({
   structure,
   activeScale,
+  retryToken = 0,
   onAssetStateChange,
 }: BrainScaleAssetLoaderProps) {
   useEffect(() => {
-    if (!structure) {
-      onAssetStateChange?.({
-        loading: false,
-        error: null,
-        asset: null,
-      });
-
-      return;
-    }
-
     const asset =
-      getBrainScaleAsset(
+      getObservationScaleAsset(
         structure,
         activeScale,
       );
@@ -54,6 +46,7 @@ export default function BrainScaleAssetLoader({
   }, [
     structure,
     activeScale,
+    retryToken,
     onAssetStateChange,
   ]);
 

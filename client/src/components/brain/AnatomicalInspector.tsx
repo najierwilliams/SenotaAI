@@ -11,6 +11,10 @@ import {
   isBrainScaleAvailable,
 } from "./anatomy/BrainScaleAssetRegistry";
 
+import type {
+  BrainObservationContext,
+} from "./anatomy/BrainObservationContext";
+
 interface AnatomicalInspectorProps {
   structure: BrainStructure | null;
   isIsolated: boolean;
@@ -37,6 +41,8 @@ interface AnatomicalInspectorProps {
   onScaleChange: (
     scale: BrainScale,
   ) => void;
+  observationContext: BrainObservationContext;
+  onReturnToMacro: () => void;
 }
 
 export default function AnatomicalInspector({
@@ -57,6 +63,8 @@ export default function AnatomicalInspector({
   onClear,
   activeScale,
   onScaleChange,
+  observationContext,
+  onReturnToMacro,
 }: AnatomicalInspectorProps) {
   if (!structure) {
     return (
@@ -71,10 +79,23 @@ export default function AnatomicalInspector({
           </h2>
         </div>
 
-        <div className="flex min-h-0 flex-1 items-center p-5">
+        <div className="flex min-h-0 flex-1 flex-col justify-center gap-4 p-5">
           <p className="text-sm leading-relaxed text-white/55">
             Select an anatomical structure from the navigator or directly in the brain viewer to inspect it here.
           </p>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-xs text-white/60">
+            <div className="text-[9px] uppercase tracking-[0.16em] text-white/35">
+              Observation
+            </div>
+            <div className="mt-1 text-white/85">
+              {observationContext.scaleLabel}
+            </div>
+            <div className="mt-1 text-[10px] text-white/40">
+              {observationContext.status === "unavailable"
+                ? `${observationContext.scaleLabel} dataset not connected`
+                : observationContext.message}
+            </div>
+          </div>
         </div>
       </aside>
     );
@@ -125,12 +146,43 @@ export default function AnatomicalInspector({
           <h2 className="mt-2 truncate text-xl font-semibold leading-tight">
             {structure.displayName}
           </h2>
+          <div className="mt-1 text-[10px] text-white/40">
+            {observationContext.scaleLabel} observation
+          </div>
         </div>
 
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="space-y-3">
+            <div className="rounded-lg border border-blue-400/15 bg-blue-500/5 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[10px] uppercase tracking-wider text-blue-100/55">
+                  Observation dataset
+                </div>
+                <div className="rounded-full border border-white/10 px-2 py-0.5 text-[9px] text-white/55">
+                  {observationContext.scaleLabel}
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-white/80">
+                {observationContext.datasetLabel ?? "Dataset not connected"}
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed text-white/45">
+                {observationContext.status === "unavailable"
+                  ? `${observationContext.scaleLabel} dataset not connected. The displayed anatomy remains the selected parent context; no lower-scale measurements are shown.`
+                  : observationContext.message}
+              </p>
+              {observationContext.scale !== "macro" && (
+                <button
+                  type="button"
+                  onClick={onReturnToMacro}
+                  className="mt-3 rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] text-white/70 transition hover:bg-white/10 hover:text-white"
+                >
+                  Return to Macro
+                </button>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-white/10 bg-white/5 p-3">
                 <div className="text-[10px] uppercase tracking-wider text-white/40">

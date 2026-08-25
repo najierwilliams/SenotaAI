@@ -2,6 +2,10 @@ import { useMemo, useState } from "react";
 
 import type { BrainStructure } from "./anatomy/BrainStructureRegistry";
 
+import type {
+  BrainObservationContext,
+} from "./anatomy/BrainObservationContext";
+
 import {
   buildBrainAnatomyHierarchy,
   type BrainAnatomyNode,
@@ -13,6 +17,8 @@ interface BrainAnatomyNavigatorProps {
   onSelectStructure: (
     structure: BrainStructure,
   ) => void;
+  observationContext: BrainObservationContext;
+  onReturnToMacro: () => void;
 }
 
 interface TreeNodeProps {
@@ -223,6 +229,8 @@ export default function BrainAnatomyNavigator({
   structures,
   selectedStructure,
   onSelectStructure,
+  observationContext,
+  onReturnToMacro,
 }: BrainAnatomyNavigatorProps) {
   const hierarchy = useMemo(
     () =>
@@ -258,56 +266,94 @@ export default function BrainAnatomyNavigator({
           Anatomical Navigator
         </div>
 
-        <div className="mt-1 text-[10px] text-white/40">
-          Browse the structures in the
-          Luna brain model.
-        </div>
+        {observationContext.scale === "macro" ? (
+          <>
+            <div className="mt-1 text-[10px] text-white/40">
+              Browse the structures in the
+              Luna brain model.
+            </div>
 
-        <input
-          type="search"
-          value={query}
-          onChange={(event) =>
-            setQuery(
-              event.target.value,
-            )
-          }
-          placeholder="Search structures..."
-          className="mt-3 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none placeholder:text-white/30 focus:border-blue-400/40 focus:bg-white/10"
-          aria-label="Search brain structures"
-        />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) =>
+                setQuery(
+                  event.target.value,
+                )
+              }
+              placeholder="Search structures..."
+              className="mt-3 w-full rounded-md border border-white/5 bg-white/5 px-3 py-2 text-xs text-white outline-none placeholder:text-white/30 focus:border-blue-400/40 focus:bg-white/10"
+              aria-label="Search brain structures"
+            />
 
-        <div className="mt-2 flex items-center justify-between text-[9px] text-white/30">
-          <span>
-            {structures.length} structures
-          </span>
+            <div className="mt-2 flex items-center justify-between text-[9px] text-white/30">
+              <span>
+                {structures.length} structures
+              </span>
 
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="hover:text-white"
-            >
-              Clear search
-            </button>
-          )}
-        </div>
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="hover:text-white"
+                >
+                  Clear search
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="mt-3 rounded-lg border border-blue-400/15 bg-blue-500/5 p-3">
+            <div className="text-[9px] uppercase tracking-[0.16em] text-blue-200/55">
+              Observation context
+            </div>
+            <div className="mt-1 text-xs font-medium text-white/85">
+              {observationContext.structureName ?? "No structure selected"}
+            </div>
+            <div className="mt-1 text-[10px] text-white/40">
+              {observationContext.scaleLabel} observation
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <TreeNode
-          node={hierarchy.root}
-          structuresById={
-            structuresById
-          }
-          selectedStructure={
-            selectedStructure
-          }
-          onSelectStructure={
-            onSelectStructure
-          }
-          depth={0}
-          query={query}
-        />
+        {observationContext.scale === "macro" ? (
+          <TreeNode
+            node={hierarchy.root}
+            structuresById={
+              structuresById
+            }
+            selectedStructure={
+              selectedStructure
+            }
+            onSelectStructure={
+              onSelectStructure
+            }
+            depth={0}
+            query={query}
+          />
+        ) : (
+          <div className="flex min-h-full flex-col justify-between rounded-lg border border-white/10 bg-white/[0.03] p-4">
+            <div>
+              <div className="text-[9px] uppercase tracking-[0.16em] text-white/35">
+                {observationContext.scaleLabel} navigator
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-white/60">
+                {observationContext.status === "unavailable"
+                  ? `${observationContext.scaleLabel} dataset not connected. Lower-scale entities will appear here when a dataset is registered for this observation context.`
+                  : observationContext.message}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onReturnToMacro}
+              className="mt-5 rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 transition hover:bg-white/10 hover:text-white"
+            >
+              Return to Macro
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

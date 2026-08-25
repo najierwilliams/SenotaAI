@@ -59,6 +59,9 @@ export interface NanobotTarget {
   hemisphere: BrainHemisphere;
   depth: BrainStructureDepth;
   scale: BrainScale;
+  observationScale: BrainScale;
+  observationDatasetId: string | null;
+  observationStatus: "ready" | "unavailable" | "loading" | "error";
 }
 
 export interface NanobotFinding {
@@ -133,8 +136,19 @@ export const NANOBOT_CAPABILITIES: Record<
   monitor: ["monitor", "inspect"],
 };
 
+export interface NanobotObservationTarget {
+  scale: BrainScale;
+  datasetId: string | null;
+  status: NanobotTarget["observationStatus"];
+}
+
 export function createNanobotTarget(
   structure: BrainStructure,
+  observation: NanobotObservationTarget = {
+    scale: structure.scale,
+    datasetId: null,
+    status: "ready",
+  },
 ): NanobotTarget {
   return {
     structureId: structure.id,
@@ -146,6 +160,12 @@ export function createNanobotTarget(
       structure.depth,
     scale:
       structure.scale,
+    observationScale:
+      observation.scale,
+    observationDatasetId:
+      observation.datasetId,
+    observationStatus:
+      observation.status,
   };
 }
 
