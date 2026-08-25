@@ -7,8 +7,11 @@ import {
   isDatasetUsable,
   type BrainDatasetProvenance,
   type BrainDatasetStatus,
+  type BrainCoordinateTransform,
   type BrainReferenceSpace,
   type BrainScientificFinding,
+  type BrainSpatialCapability,
+  type BrainSpatialTarget,
   type BrainScientificObservation,
   type BrainStructureMapping,
 } from "@shared/brainScience";
@@ -44,7 +47,10 @@ export interface BrainObservationContext {
   scientificObservation: BrainScientificObservation | null;
   provenance: BrainDatasetProvenance | null;
   referenceSpace: BrainReferenceSpace | null;
+  coordinateTransform: BrainCoordinateTransform | null;
   structureMapping: BrainStructureMapping | null;
+  spatialTarget: BrainSpatialTarget | null;
+  spatialCapability: BrainSpatialCapability | null;
   findings: BrainScientificFinding[];
 }
 
@@ -193,8 +199,14 @@ export function createBrainObservationContext({
         : null,
     referenceSpace:
       scientificObservation?.referenceSpace ?? null,
+    coordinateTransform:
+      scientificObservation?.coordinateTransform ?? null,
     structureMapping:
       scientificObservation?.structureMapping ?? null,
+    spatialTarget:
+      scientificObservation?.spatialTarget ?? null,
+    spatialCapability:
+      scientificObservation?.spatialCapability ?? null,
     findings:
       scientificObservation?.findings ?? [],
   };

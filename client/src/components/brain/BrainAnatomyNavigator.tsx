@@ -380,6 +380,19 @@ export default function BrainAnatomyNavigator({
                   Reference space: {observationContext.referenceSpace.label}
                 </div>
               )}
+
+              {observationContext.spatialCapability && (
+                <div className="mt-3 rounded-md border border-amber-300/15 bg-amber-300/5 px-3 py-2 text-[10px] leading-relaxed text-amber-50/65">
+                  <div className="uppercase tracking-[0.14em] text-amber-100/45">Spatial target</div>
+                  <div className="mt-1">
+                    {observationContext.spatialCapability.operationEnabled
+                      ? "Available"
+                      : "Unavailable"}
+                    {" · "}
+                    {observationContext.spatialCapability.reason}
+                  </div>
+                </div>
+              )}
             </div>
             <button
               type="button"

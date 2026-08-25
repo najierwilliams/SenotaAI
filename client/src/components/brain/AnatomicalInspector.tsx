@@ -202,6 +202,45 @@ export default function AnatomicalInspector({
                   {observationContext.structureMapping.status} · {observationContext.structureMapping.note}
                 </div>
               )}
+              {observationContext.spatialCapability && (
+                <div className="mt-3 rounded-md border border-white/10 bg-black/20 p-2.5 text-[10px] leading-relaxed text-white/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="uppercase tracking-wider text-white/35">Spatial target</span>
+                    <span className={observationContext.spatialCapability.operationEnabled ? "text-emerald-300" : "text-amber-200"}>
+                      {observationContext.spatialCapability.operationEnabled
+                        ? "Available"
+                        : "Unavailable"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-white/55">
+                    {observationContext.spatialCapability.reason}
+                  </p>
+                  {observationContext.spatialTarget?.coordinateType !== "unavailable" && (
+                    <div className="mt-2 text-white/40">
+                      <span className="text-white/30">Target type: </span>
+                      {observationContext.spatialTarget?.coordinateType}
+                      {observationContext.spatialTarget?.targetDerivation
+                        ? ` · ${observationContext.spatialTarget.targetDerivation}`
+                        : ""}
+                    </div>
+                  )}
+                  {observationContext.spatialTarget?.coordinate && (
+                    <div className="mt-2 text-white/40">
+                      <span className="text-white/30">Coordinate: </span>
+                      [{observationContext.spatialTarget.coordinate.x}, {observationContext.spatialTarget.coordinate.y}, {observationContext.spatialTarget.coordinate.z}]
+                      {observationContext.spatialTarget.coordinate.units
+                        ? ` ${observationContext.spatialTarget.coordinate.units}`
+                        : ""}
+                    </div>
+                  )}
+                  {observationContext.coordinateTransform && (
+                    <div className="mt-2 text-white/40">
+                      <span className="text-white/30">Transform: </span>
+                      {observationContext.coordinateTransform.transformType} · {observationContext.coordinateTransform.note}
+                    </div>
+                  )}
+                </div>
+              )}
               {observationContext.provenance?.citation && (
                 <div className="mt-3 text-[9px] leading-relaxed text-white/30">
                   Citation: {observationContext.provenance.citation}

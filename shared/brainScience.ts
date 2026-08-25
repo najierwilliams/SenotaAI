@@ -36,14 +36,26 @@ export type BrainReferenceSpaceKind =
   | "viewer-local"
   | "template"
   | "histological"
-  | "donor-native";
+  | "donor-native"
+  | "annotation";
 
+/**
+ * A declared scientific or application coordinate frame. Null fields are
+ * intentional when a provider does not document the property for the source
+ * currently integrated by Luna; consumers must not infer missing metadata.
+ */
 export interface BrainReferenceSpace {
   id: string;
   label: string;
   kind: BrainReferenceSpaceKind;
   provider: BrainDatasetProvider;
+  template: string | null;
   units: string | null;
+  axisOrientation: string | null;
+  coordinateConvention: string | null;
+  resolution: string | null;
+  version: string | null;
+  provenanceUrl: string | null;
   description: string;
 }
 
@@ -100,14 +112,89 @@ export type BrainCoordinateTransformStatus =
   | "available"
   | "unavailable";
 
+export type BrainCoordinateTransformType =
+  | "identity"
+  | "affine"
+  | "nonlinear"
+  | "lookup"
+  | "atlas-derived"
+  | "provider-service"
+  | "unavailable";
+
+/**
+ * A documented transform registration. `available` records that a provider
+ * exposes a transform, while `unavailable` is an explicit scientific gate and
+ * must never be replaced by a guessed affine or viewer normalization.
+ */
 export interface BrainCoordinateTransform {
   id: string;
   sourceReferenceSpaceId: string;
   targetReferenceSpaceId: string;
   status: BrainCoordinateTransformStatus;
+  transformType: BrainCoordinateTransformType;
+  version: string | null;
   method: string | null;
   documentationUrl: string | null;
+  confidence: string | null;
+  reversible: boolean | null;
   note: string;
+}
+
+export interface BrainCoordinate {
+  x: number;
+  y: number;
+  z: number;
+  units: string | null;
+}
+
+export type BrainSpatialCoordinateType =
+  | "point"
+  | "centroid"
+  | "region"
+  | "volume"
+  | "surface"
+  | "voxel"
+  | "cell"
+  | "unavailable";
+
+export type BrainSpatialTargetStatus =
+  | "resolved"
+  | "unavailable";
+
+/**
+ * A target is only resolved if every coordinate field is backed by provider
+ * data and its transform into Luna's active reference frame is documented.
+ * Region targets intentionally do not require or imply a navigational point.
+ */
+export interface BrainSpatialTarget {
+  structureId: string | null;
+  datasetId: string | null;
+  scale: BrainScientificScale;
+  referenceSpace: BrainReferenceSpace | null;
+  coordinate: BrainCoordinate | null;
+  coordinateType: BrainSpatialCoordinateType;
+  resolution: string | null;
+  targetDerivation: string | null;
+  sourceMap: string | null;
+  probabilityThreshold: number | null;
+  coordinateTransform: BrainCoordinateTransform | null;
+  provenance: BrainDatasetProvenance | null;
+  confidence: string | null;
+  spatialStatus: BrainSpatialTargetStatus;
+  reason: string | null;
+}
+
+export interface BrainSpatialCapability {
+  scale: BrainScientificScale;
+  datasetAvailable: boolean;
+  spatialDataAvailable: boolean;
+  referenceSpaceKnown: boolean;
+  structureMappingAvailable: boolean;
+  transformToLunaAvailable: boolean;
+  coordinateResolved: boolean;
+  targetTypeSupported: boolean;
+  operationEnabled: boolean;
+  reason: string;
 }
 
 export interface BrainScientificFinding {
@@ -130,6 +217,8 @@ export interface BrainScientificObservation {
   structureMapping: BrainStructureMapping | null;
   referenceSpace: BrainReferenceSpace | null;
   coordinateTransform: BrainCoordinateTransform | null;
+  spatialTarget: BrainSpatialTarget | null;
+  spatialCapability: BrainSpatialCapability;
   findings: BrainScientificFinding[];
   message: string;
   cached: boolean;

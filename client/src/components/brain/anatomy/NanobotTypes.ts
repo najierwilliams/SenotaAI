@@ -6,7 +6,11 @@ import type {
 } from "./BrainStructureRegistry";
 
 import type {
+  BrainCoordinateTransform,
   BrainDatasetStatus,
+  BrainReferenceSpace,
+  BrainSpatialCapability,
+  BrainSpatialTarget,
 } from "@shared/brainScience";
 
 export type NanobotState =
@@ -130,6 +134,10 @@ export interface NanobotTarget {
   targetResolution: string | null;
   spatialStatus: NanobotSpatialStatus;
   spatialMessage: string;
+  spatialTarget: BrainSpatialTarget | null;
+  spatialCapability: BrainSpatialCapability | null;
+  referenceSpace: BrainReferenceSpace | null;
+  coordinateTransform: BrainCoordinateTransform | null;
 }
 
 export interface NanobotScaleTransition {
@@ -244,6 +252,10 @@ export interface NanobotObservationTarget {
   targetResolution?: string | null;
   spatialStatus?: NanobotSpatialStatus;
   spatialMessage?: string;
+  spatialTarget?: BrainSpatialTarget | null;
+  spatialCapability?: BrainSpatialCapability | null;
+  referenceSpace?: BrainReferenceSpace | null;
+  coordinateTransform?: BrainCoordinateTransform | null;
 }
 
 export function getNanobotScaleProfile(
@@ -290,6 +302,11 @@ export function createNanobotTarget(
       (observation.targetPosition
         ? "Target position resolved from the active viewer context."
         : "No coordinate-resolved target is available for this observation context."),
+    spatialTarget: observation.spatialTarget ?? null,
+    spatialCapability: observation.spatialCapability ?? null,
+    referenceSpace: observation.referenceSpace ?? null,
+    coordinateTransform:
+      observation.coordinateTransform ?? null,
   };
 }
 

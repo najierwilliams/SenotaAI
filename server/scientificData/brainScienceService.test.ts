@@ -96,6 +96,12 @@ describe("Luna Brain scientific dataset integration", () => {
 
     expect(first.status).toBe("partial");
     expect(first.findings).toHaveLength(2);
+    expect(first.spatialTarget?.coordinate).toBeNull();
+    expect(first.spatialTarget?.coordinateType).toBe("region");
+    expect(first.coordinateTransform?.id).toBe("ebrains-mni-to-luna");
+    expect(first.coordinateTransform?.status).toBe("unavailable");
+    expect(first.spatialCapability.operationEnabled).toBe(false);
+    expect(first.spatialCapability.reason).toContain("no validated reference-space registration into Luna Local");
     expect(second.cached).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

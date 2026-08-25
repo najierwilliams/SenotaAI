@@ -196,6 +196,8 @@ export class NanobotMissionEngine {
       return {
         allowed: false,
         reason:
+          target.spatialCapability?.reason ??
+          target.spatialMessage ??
           `${target.observationScale} missions require coordinate-resolved observation data. The current context is metadata or simulation only.`,
       };
     }

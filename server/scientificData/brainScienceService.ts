@@ -11,6 +11,15 @@ import {
   getDataset,
   BRAIN_REFERENCE_SPACES,
 } from "./registry";
+import {
+  createSpatialTargetState,
+} from "./spatialTargetService";
+import {
+  resolveCanonicalStructureMapping,
+} from "./structureMappingService";
+import {
+  getCoordinateTransform,
+} from "./coordinateTransformService";
 
 const EBRAINS_HUMAN_ATLAS_URL =
   "https://siibra-api-stable.apps.hbp.eu/v3_0/atlases/juelich/iav/atlas/v1.0.0/1";
@@ -79,19 +88,11 @@ function createStructureMapping(
   query: BrainScientificQuery,
   dataset: BrainDataset,
 ): BrainStructureMapping | null {
-  if (!query.structureId || !query.structureName) {
-    return null;
-  }
-
-  return {
-    canonicalStructureId: query.structureId,
+  return resolveCanonicalStructureMapping({
+    structureId: query.structureId,
+    structureName: query.structureName,
     provider: dataset.provider,
-    externalId: null,
-    externalName: query.structureName,
-    status: "query-required",
-    note:
-      "The canonical Luna structure is retained as the identity. Provider-specific assignment is queried by dataset metadata and is not treated as a validated coordinate transform.",
-  };
+  });
 }
 
 function sanitizeStructureName(
@@ -152,6 +153,14 @@ function createUnavailableObservation(
     ),
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance: createProvenance(dataset, null),
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: createStructureMapping(query, dataset),
+      coordinateTransform: null,
+    }),
     findings: [],
     message:
       dataset.limitations ??
@@ -175,6 +184,10 @@ async function queryTissue(
   const provenance = createProvenance(
     dataset,
     accessedAt,
+  );
+  const coordinateTransform = getCoordinateTransform(
+    "ebrains-mni-icbm-152-2009c",
+    "luna-viewer-local",
   );
 
   const parcellationCount =
@@ -210,7 +223,15 @@ async function queryTissue(
       dataset,
     ),
     referenceSpace: getReferenceSpace(dataset),
-    coordinateTransform: null,
+    coordinateTransform,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance,
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: createStructureMapping(query, dataset),
+      coordinateTransform,
+    }),
     findings,
     message:
       "Live EBRAINS atlas metadata is available. Regional assignment and raw probabilistic maps remain provider queries rather than a binary in-viewer boundary.",
@@ -319,6 +340,14 @@ async function queryCellular(
     ),
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance,
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: createStructureMapping(query, dataset),
+      coordinateTransform: null,
+    }),
     findings,
     message: structureName
       ? findings.length
@@ -417,6 +446,34 @@ async function queryMolecular(
     },
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance,
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: {
+        canonicalStructureId:
+          query.structureId ?? "unselected",
+        provider: dataset.provider,
+        externalId:
+          matches.length === 1 && matches[0].id
+            ? String(matches[0].id)
+            : null,
+        externalName:
+          matches.length === 1
+            ? matches[0].name ?? null
+            : null,
+        status:
+          matches.length === 1
+            ? "broad"
+            : "query-required",
+        note:
+          matches.length === 1
+            ? "A provider structure-name match was returned. This is not a coordinate transform and no expression value has been inferred."
+            : "No unique provider structure assignment was made. Luna requires a more specific provider query before showing molecular measurements.",
+      },
+      coordinateTransform: null,
+    }),
     findings,
     message: findings.length
       ? "Allen Human Brain Atlas structure metadata is available. Molecular values require an explicit provider gene/probe query and retain donor/sample provenance."
@@ -520,6 +577,17 @@ export async function queryBrainScientificObservation(
           ),
           referenceSpace: getReferenceSpace(dataset),
           coordinateTransform: null,
+          ...createSpatialTargetState({
+            scale: query.scale,
+            dataset,
+            provenance: createProvenance(
+              dataset,
+              new Date().toISOString(),
+            ),
+            referenceSpace: getReferenceSpace(dataset),
+            structureMapping: createStructureMapping(query, dataset),
+            coordinateTransform: null,
+          }),
           findings: [],
           message:
             "The local Luna Macro model remains available independently of external scientific providers.",

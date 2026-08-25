@@ -171,3 +171,75 @@ describe("NanobotMissionEngine", () => {
     }
   });
 });
+
+
+describe("NanobotTargetResolver spatial provenance", () => {
+  it("preserves a Macro mesh-derived Luna-local target without claiming an external transform", () => {
+    const target = resolveNanobotTarget({
+      structure,
+      observationScale: "macro",
+      macroPosition: { x: 0.01, y: 0.02, z: 0.03 },
+      referenceSpace: {
+        id: "luna-viewer-local",
+        label: "Luna viewer local coordinates",
+        kind: "viewer-local",
+        provider: "luna",
+        template: null,
+        units: null,
+        axisOrientation: null,
+        coordinateConvention: "Luna application rendering coordinates",
+        resolution: null,
+        version: null,
+        provenanceUrl: null,
+        description: "Local viewer frame",
+      },
+    });
+
+    expect(target.spatialStatus).toBe("resolved");
+    expect(target.position).toEqual({ x: 0.01, y: 0.02, z: 0.03 });
+    expect(target.spatialTarget?.referenceSpace?.id).toBe("luna-viewer-local");
+    expect(target.spatialTarget?.coordinateTransform).toBeNull();
+  });
+
+  it("preserves an unavailable Tissue atlas region instead of converting it to a Luna point", () => {
+    const target = resolveNanobotTarget({
+      structure,
+      observationScale: "tissue",
+      macroPosition: null,
+      spatialTarget: {
+        structureId: structure.id,
+        datasetId: "julich-brain-cytoarchitecture",
+        scale: "tissue",
+        referenceSpace: null,
+        coordinate: null,
+        coordinateType: "region",
+        resolution: null,
+        targetDerivation: "Provider probabilistic atlas region",
+        sourceMap: "Julich-Brain probabilistic cytoarchitectonic map",
+        probabilityThreshold: null,
+        coordinateTransform: null,
+        provenance: null,
+        confidence: null,
+        spatialStatus: "unavailable",
+        reason: "Tissue atlas maps are available in provider reference spaces, but no validated reference-space registration into Luna Local exists.",
+      },
+      spatialCapability: {
+        scale: "tissue",
+        datasetAvailable: true,
+        spatialDataAvailable: true,
+        referenceSpaceKnown: true,
+        structureMappingAvailable: false,
+        transformToLunaAvailable: false,
+        coordinateResolved: false,
+        targetTypeSupported: false,
+        operationEnabled: false,
+        reason: "Tissue atlas maps are available in provider reference spaces, but no validated reference-space registration into Luna Local exists.",
+      },
+    });
+
+    expect(target.position).toBeNull();
+    expect(target.spatialStatus).toBe("unavailable");
+    expect(target.message).toContain("no validated reference-space registration into Luna Local");
+    expect(target.spatialTarget?.coordinateType).toBe("region");
+  });
+});

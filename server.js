@@ -3973,7 +3973,13 @@ var BRAIN_REFERENCE_SPACES = [
     label: "Luna viewer local coordinates",
     kind: "viewer-local",
     provider: "luna",
+    template: null,
     units: null,
+    axisOrientation: null,
+    coordinateConvention: "Luna application rendering coordinates",
+    resolution: null,
+    version: null,
+    provenanceUrl: null,
     description: "Local coordinates of the existing Allen-derived Luna GLB. No validated transform to external scientific reference spaces is configured."
   },
   {
@@ -3981,7 +3987,13 @@ var BRAIN_REFERENCE_SPACES = [
     label: "MNI ICBM 152 2009c",
     kind: "template",
     provider: "ebrains",
+    template: "ICBM 152 2009c",
     units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention: "Provider MNI/ICBM template coordinates",
+    resolution: null,
+    version: "2009c nonlinear asymmetric",
+    provenanceUrl: "https://search.kg.ebrains.eu/instances/Dataset/4ac9f0bc-560d-47e0-8916-7b24da9bb0ce",
     description: "A human atlas reference space exposed by the EBRAINS multilevel human atlas."
   },
   {
@@ -3989,7 +4001,13 @@ var BRAIN_REFERENCE_SPACES = [
     label: "BigBrain reference space",
     kind: "histological",
     provider: "bigbrain",
+    template: "BigBrain",
     units: "micrometres",
+    axisOrientation: null,
+    coordinateConvention: "Provider histological reference coordinates",
+    resolution: "20 \u03BCm",
+    version: null,
+    provenanceUrl: "https://ebrains.eu/data-tools-services/brain-atlases/human-brain",
     description: "Microscopic 20 \u03BCm histological reference represented in the EBRAINS multilevel atlas."
   },
   {
@@ -3997,15 +4015,27 @@ var BRAIN_REFERENCE_SPACES = [
     label: "Allen Human Brain Atlas donor MR space",
     kind: "donor-native",
     provider: "allen-institute",
+    template: null,
     units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention: "Donor MR volume coordinates",
+    resolution: "1 mm isotropic donor T1 acquisition",
+    version: null,
+    provenanceUrl: "https://brain-map.org/support/documentation/human-brain-atlas-api",
     description: "Donor-specific MR-volume coordinates of Allen Human Brain Atlas sampling sites. These are not interchangeable with Luna viewer coordinates."
   },
   {
     id: "cellxgene-human-brain-anatomical-annotation",
     label: "CELLxGENE human-brain anatomical annotation",
-    kind: "template",
+    kind: "annotation",
     provider: "cellxgene",
+    template: null,
     units: null,
+    axisOrientation: null,
+    coordinateConvention: null,
+    resolution: null,
+    version: "Human Brain Cell Atlas v1.0",
+    provenanceUrl: "https://cellxgene.cziscience.com/collections/283d65eb-dd53-496d-adb7-7570c7caa443",
     description: "Dataset anatomical-region annotation metadata. It is not a 3D spatial coordinate system."
   }
 ];
@@ -4015,17 +4045,38 @@ var BRAIN_COORDINATE_TRANSFORMS = [
     sourceReferenceSpaceId: "luna-viewer-local",
     targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
     status: "unavailable",
+    transformType: "unavailable",
+    version: null,
     method: null,
     documentationUrl: null,
+    confidence: null,
+    reversible: null,
     note: "No validated transform from the Luna GLB coordinate frame to MNI is configured. Luna does not project external coordinates into the viewer."
+  },
+  {
+    id: "ebrains-mni-to-luna",
+    sourceReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+    targetReferenceSpaceId: "luna-viewer-local",
+    status: "unavailable",
+    transformType: "unavailable",
+    version: null,
+    method: null,
+    documentationUrl: null,
+    confidence: null,
+    reversible: null,
+    note: "No validated transform from MNI ICBM 152 2009c to the Luna GLB coordinate frame is configured. Provider coordinates are not projected into the viewer."
   },
   {
     id: "allen-donor-mr-to-mni",
     sourceReferenceSpaceId: "allen-human-donor-mr",
     targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
     status: "available",
+    transformType: "provider-service",
+    version: null,
     method: "Provider-documented donor-specific MR-to-MNI registration",
     documentationUrl: "https://brain-map.org/support/documentation/human-brain-atlas-api",
+    confidence: null,
+    reversible: null,
     note: "The Allen provider documents donor-specific transforms. Luna does not apply them client-side; returned sample coordinates remain provider provenance."
   }
 ];
@@ -4199,6 +4250,152 @@ function getScientificDatasetManifest() {
   };
 }
 
+// shared/brainScience.ts
+function isDatasetUsable(status) {
+  return status === "available" || status === "partial";
+}
+
+// server/scientificData/spatialTargetService.ts
+function unavailableState(options, details) {
+  const datasetAvailable = isDatasetUsable(
+    options.dataset.status
+  );
+  const referenceSpaceKnown = Boolean(
+    options.referenceSpace
+  );
+  const structureMappingAvailable = options.structureMapping?.status === "exact";
+  const transformToLunaAvailable = false;
+  const coordinateResolved = false;
+  return {
+    spatialTarget: {
+      structureId: options.structureMapping?.canonicalStructureId ?? null,
+      datasetId: options.dataset.id,
+      scale: options.scale,
+      referenceSpace: options.referenceSpace,
+      coordinate: null,
+      coordinateType: details.coordinateType ?? "unavailable",
+      resolution: options.referenceSpace?.resolution ?? null,
+      targetDerivation: details.targetDerivation ?? null,
+      sourceMap: details.sourceMap ?? null,
+      probabilityThreshold: null,
+      coordinateTransform: options.coordinateTransform,
+      provenance: options.provenance,
+      confidence: null,
+      spatialStatus: "unavailable",
+      reason: details.reason
+    },
+    spatialCapability: {
+      scale: options.scale,
+      datasetAvailable,
+      spatialDataAvailable: details.spatialDataAvailable,
+      referenceSpaceKnown,
+      structureMappingAvailable,
+      transformToLunaAvailable,
+      coordinateResolved,
+      targetTypeSupported: details.targetTypeSupported,
+      operationEnabled: false,
+      reason: details.reason
+    }
+  };
+}
+function createSpatialTargetState(options) {
+  switch (options.scale) {
+    case "macro":
+      return unavailableState(options, {
+        spatialDataAvailable: true,
+        targetTypeSupported: true,
+        coordinateType: "point",
+        targetDerivation: "Resolved only in BrainViewer from the selected local Three.js mesh.",
+        reason: "Macro target position is resolved by the active Luna viewer mesh and is not supplied by the server observation record."
+      });
+    case "tissue":
+      return unavailableState(options, {
+        spatialDataAvailable: true,
+        targetTypeSupported: false,
+        coordinateType: "region",
+        targetDerivation: "Provider probabilistic atlas region; no Luna point is derived.",
+        sourceMap: "Julich-Brain probabilistic cytoarchitectonic map",
+        reason: "Tissue atlas maps are available in provider reference spaces, but no validated reference-space registration into Luna Local exists."
+      });
+    case "cellular":
+      return unavailableState(options, {
+        spatialDataAvailable: false,
+        targetTypeSupported: false,
+        reason: "Human Brain Cell Atlas metadata is available, but the registered CELLxGENE collection provides no coordinate-resolved human cell positions or Luna reference-space mapping."
+      });
+    case "molecular":
+      return unavailableState(options, {
+        spatialDataAvailable: true,
+        targetTypeSupported: false,
+        coordinateType: "point",
+        targetDerivation: "Allen sample coordinates remain donor MR/MNI provenance until a Luna registration is documented.",
+        reason: "Allen donor-MR/MNI sample provenance is available, but no validated reference-space registration into Luna Local exists."
+      });
+    case "subcellular":
+      return unavailableState(options, {
+        spatialDataAvailable: false,
+        targetTypeSupported: false,
+        reason: "No coordinate-resolved human whole-brain subcellular dataset is registered for the selected Luna structure."
+      });
+  }
+}
+
+// server/scientificData/structureMappingService.ts
+function resolveCanonicalStructureMapping(query) {
+  if (!query.structureId || !query.structureName) {
+    return null;
+  }
+  if (query.provider === "luna") {
+    return {
+      canonicalStructureId: query.structureId,
+      provider: "luna",
+      externalId: query.structureId,
+      externalName: query.structureName,
+      status: "exact",
+      note: "Canonical Luna structure identity is the selected local Macro model structure."
+    };
+  }
+  return {
+    canonicalStructureId: query.structureId,
+    provider: query.provider,
+    externalId: null,
+    externalName: query.structureName,
+    status: "query-required",
+    note: "The canonical Luna structure is retained as the identity. Provider-specific assignment must be queried and reviewed; it is not a validated coordinate transform."
+  };
+}
+
+// server/scientificData/coordinateTransformService.ts
+function getTransform(sourceReferenceSpaceId, targetReferenceSpaceId) {
+  return BRAIN_COORDINATE_TRANSFORMS.find(
+    (transform) => transform.sourceReferenceSpaceId === sourceReferenceSpaceId && transform.targetReferenceSpaceId === targetReferenceSpaceId
+  ) ?? null;
+}
+function createIdentityTransform(referenceSpaceId) {
+  return {
+    id: `${referenceSpaceId}-identity`,
+    sourceReferenceSpaceId: referenceSpaceId,
+    targetReferenceSpaceId: referenceSpaceId,
+    status: "identity",
+    transformType: "identity",
+    version: null,
+    method: "Identity within the declared reference space",
+    documentationUrl: null,
+    confidence: "Exact within the same declared coordinate frame",
+    reversible: true,
+    note: "Identity is permitted only when source and target reference-space IDs are identical."
+  };
+}
+function getCoordinateTransform(sourceReferenceSpaceId, targetReferenceSpaceId) {
+  if (sourceReferenceSpaceId === targetReferenceSpaceId) {
+    return createIdentityTransform(sourceReferenceSpaceId);
+  }
+  return getTransform(
+    sourceReferenceSpaceId,
+    targetReferenceSpaceId
+  );
+}
+
 // server/scientificData/brainScienceService.ts
 var EBRAINS_HUMAN_ATLAS_URL = "https://siibra-api-stable.apps.hbp.eu/v3_0/atlases/juelich/iav/atlas/v1.0.0/1";
 var CELLXGENE_HBCA_URL = "https://api.cellxgene.cziscience.com/curation/v1/collections/283d65eb-dd53-496d-adb7-7570c7caa443";
@@ -4226,17 +4423,11 @@ function createProvenance(dataset, accessedAt) {
   };
 }
 function createStructureMapping(query, dataset) {
-  if (!query.structureId || !query.structureName) {
-    return null;
-  }
-  return {
-    canonicalStructureId: query.structureId,
-    provider: dataset.provider,
-    externalId: null,
-    externalName: query.structureName,
-    status: "query-required",
-    note: "The canonical Luna structure is retained as the identity. Provider-specific assignment is queried by dataset metadata and is not treated as a validated coordinate transform."
-  };
+  return resolveCanonicalStructureMapping({
+    structureId: query.structureId,
+    structureName: query.structureName,
+    provider: dataset.provider
+  });
 }
 function sanitizeStructureName(value) {
   if (!value) {
@@ -4279,6 +4470,14 @@ function createUnavailableObservation(dataset, query) {
     ),
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance: createProvenance(dataset, null),
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: createStructureMapping(query, dataset),
+      coordinateTransform: null
+    }),
     findings: [],
     message: dataset.limitations ?? "Scientific dataset unavailable for this observation context.",
     cached: false,
@@ -4291,6 +4490,10 @@ async function queryTissue(dataset, query) {
   const provenance = createProvenance(
     dataset,
     accessedAt
+  );
+  const coordinateTransform = getCoordinateTransform(
+    "ebrains-mni-icbm-152-2009c",
+    "luna-viewer-local"
   );
   const parcellationCount = payload.parcellations?.length ?? 0;
   const findings = [
@@ -4320,7 +4523,15 @@ async function queryTissue(dataset, query) {
       dataset
     ),
     referenceSpace: getReferenceSpace(dataset),
-    coordinateTransform: null,
+    coordinateTransform,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance,
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: createStructureMapping(query, dataset),
+      coordinateTransform
+    }),
     findings,
     message: "Live EBRAINS atlas metadata is available. Regional assignment and raw probabilistic maps remain provider queries rather than a binary in-viewer boundary.",
     cached: false,
@@ -4383,6 +4594,14 @@ async function queryCellular(dataset, query) {
     ),
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance,
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: createStructureMapping(query, dataset),
+      coordinateTransform: null
+    }),
     findings,
     message: structureName ? findings.length ? "Live CELLxGENE collection metadata matched this anatomical context. The values shown are provider-reported dataset counts, not visualized cell positions." : "CELLxGENE collection metadata is available, but no direct dataset-title match was found for this Luna structure." : "Select a Luna structure to discover bounded CELLxGENE cellular dataset metadata.",
     cached: false,
@@ -4439,6 +4658,21 @@ async function queryMolecular(dataset, query) {
     },
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
+    ...createSpatialTargetState({
+      scale: query.scale,
+      dataset,
+      provenance,
+      referenceSpace: getReferenceSpace(dataset),
+      structureMapping: {
+        canonicalStructureId: query.structureId ?? "unselected",
+        provider: dataset.provider,
+        externalId: matches.length === 1 && matches[0].id ? String(matches[0].id) : null,
+        externalName: matches.length === 1 ? matches[0].name ?? null : null,
+        status: matches.length === 1 ? "broad" : "query-required",
+        note: matches.length === 1 ? "A provider structure-name match was returned. This is not a coordinate transform and no expression value has been inferred." : "No unique provider structure assignment was made. Luna requires a more specific provider query before showing molecular measurements."
+      },
+      coordinateTransform: null
+    }),
     findings,
     message: findings.length ? "Allen Human Brain Atlas structure metadata is available. Molecular values require an explicit provider gene/probe query and retain donor/sample provenance." : "No Allen Human Brain Atlas structure metadata match was returned for this Luna structure.",
     cached: false,
@@ -4505,6 +4739,17 @@ async function queryBrainScientificObservation(query) {
           ),
           referenceSpace: getReferenceSpace(dataset),
           coordinateTransform: null,
+          ...createSpatialTargetState({
+            scale: query.scale,
+            dataset,
+            provenance: createProvenance(
+              dataset,
+              (/* @__PURE__ */ new Date()).toISOString()
+            ),
+            referenceSpace: getReferenceSpace(dataset),
+            structureMapping: createStructureMapping(query, dataset),
+            coordinateTransform: null
+          }),
           findings: [],
           message: "The local Luna Macro model remains available independently of external scientific providers.",
           cached: false,

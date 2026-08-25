@@ -702,7 +702,12 @@ export default function BrainViewer() {
         structure: selectedStructure,
         observationScale: observationContext.scale,
         macroPosition,
-        hasDatasetBackedCoordinates: false,
+        spatialTarget: observationContext.spatialTarget,
+        spatialCapability:
+          observationContext.spatialCapability,
+        referenceSpace: observationContext.referenceSpace,
+        coordinateTransform:
+          observationContext.coordinateTransform,
       });
 
       const previewTarget = {
@@ -715,6 +720,10 @@ export default function BrainViewer() {
         targetResolution: resolution.resolution,
         spatialStatus: resolution.spatialStatus,
         spatialMessage: resolution.message,
+        spatialTarget: resolution.spatialTarget,
+        spatialCapability: resolution.spatialCapability,
+        referenceSpace: resolution.referenceSpace,
+        coordinateTransform: resolution.coordinateTransform,
       } as const;
 
       const nanobot = nanobotRegistry.create(type);
@@ -1891,7 +1900,8 @@ export default function BrainViewer() {
   const nanobotDeploymentReason = !selectedStructure
     ? "Select a brain structure to resolve a Macro target."
     : activeScale !== "macro"
-      ? "Operation not supported: no coordinate-resolved mission data at this scale."
+      ? observationContext.spatialCapability?.reason ??
+        "Operation not supported: no coordinate-resolved mission data at this scale."
       : !observationContext.available
         ? "Macro anatomy asset is not available."
         : !getStructureTargetPosition(selectedStructure)
@@ -1951,9 +1961,10 @@ export default function BrainViewer() {
             {observationContext.scale !== "macro" && (
               <div className="mt-1 text-[10px] leading-relaxed text-white/50">
                 <span className="block text-red-100/70">
-                  Simulation visualization — no coordinate-resolved dataset.
+                  Simulation visualization — spatial operation unavailable.
                 </span>
-                {observationContext.message}
+                {observationContext.spatialCapability?.reason ??
+                  observationContext.message}
                 {observationContext.datasetLabel && (
                   <span className="mt-1 block text-white/35">
                     Source: {observationContext.datasetLabel} · {observationContext.scientificStatus ?? "local asset state"}

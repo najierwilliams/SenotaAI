@@ -104,7 +104,8 @@ export default function NanobotPanel({
   const deploymentReason = !selectedStructure
     ? "Select a structure to resolve a Macro target."
     : observationContext.scale !== "macro"
-      ? "Operation not supported: this scale has no coordinate-resolved mission data."
+      ? observationContext.spatialCapability?.reason ??
+        "Operation not supported: this scale has no coordinate-resolved mission data."
       : !observationContext.available
         ? "Macro anatomy asset is not available."
         : "Macro simulation mission uses a real viewer-mesh target and a simulated lifecycle.";
@@ -179,9 +180,14 @@ export default function NanobotPanel({
 
         {observationContext.scale !== "macro" && (
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-[11px] leading-relaxed text-red-100/65">
-            {observationContext.scientificAvailable
-              ? "Scientific metadata is available, but no provider-supported coordinate-resolved mission data is connected. Existing missions retain their targets; new lower-scale missions remain disabled."
-              : `${observationContext.scaleLabel} scientific dataset is ${observationContext.scientificStatus ?? "unavailable"}. Existing missions retain their targets, but new missions are unavailable at this observation scale.`}
+            <div className="font-medium">Spatial target unavailable</div>
+            <div className="mt-1">
+              {observationContext.spatialCapability?.reason ??
+                (observationContext.scientificAvailable
+                  ? "Scientific metadata is available, but no provider-supported coordinate-resolved mission data is connected."
+                  : `${observationContext.scaleLabel} scientific dataset is ${observationContext.scientificStatus ?? "unavailable"}.`)}
+            </div>
+            <div className="mt-1 text-red-100/45">Existing missions retain their original targets; new lower-scale missions remain disabled.</div>
           </div>
         )}
 
@@ -360,6 +366,35 @@ export default function NanobotPanel({
                   Spatial status: {labelize(selectedNanobot.target.spatialStatus)}{selectedNanobot.target.targetResolution ? ` · ${selectedNanobot.target.targetResolution}` : ""}
                 </div>
                 <div>{selectedNanobot.target.spatialMessage}</div>
+                {selectedNanobot.target.referenceSpace && (
+                  <div>
+                    Reference space: {selectedNanobot.target.referenceSpace.label}
+                    {selectedNanobot.target.referenceSpace.version
+                      ? ` · ${selectedNanobot.target.referenceSpace.version}`
+                      : ""}
+                  </div>
+                )}
+                {selectedNanobot.target.spatialTarget?.coordinateType !== "unavailable" && (
+                  <div>
+                    Target type: {selectedNanobot.target.spatialTarget?.coordinateType}
+                    {selectedNanobot.target.spatialTarget?.targetDerivation
+                      ? ` · ${selectedNanobot.target.spatialTarget.targetDerivation}`
+                      : ""}
+                  </div>
+                )}
+                {selectedNanobot.target.spatialTarget?.coordinate && (
+                  <div>
+                    Coordinate: [{selectedNanobot.target.spatialTarget.coordinate.x}, {selectedNanobot.target.spatialTarget.coordinate.y}, {selectedNanobot.target.spatialTarget.coordinate.z}]
+                    {selectedNanobot.target.spatialTarget.coordinate.units
+                      ? ` ${selectedNanobot.target.spatialTarget.coordinate.units}`
+                      : ""}
+                  </div>
+                )}
+                {selectedNanobot.target.coordinateTransform && (
+                  <div>
+                    Transform: {selectedNanobot.target.coordinateTransform.transformType} · {selectedNanobot.target.coordinateTransform.status}
+                  </div>
+                )}
                 <div>
                   Viewer presentation: {labelize(selectedNanobot.presentation.viewerScale)} · {selectedNanobot.presentation.contextLabel}
                 </div>
