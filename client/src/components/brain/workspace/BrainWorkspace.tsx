@@ -6,7 +6,8 @@ import {
 export type BrainWorkspacePanelId =
   | "anatomy"
   | "inspector"
-  | "nanobots";
+  | "nanobots"
+  | "luna";
 
 export interface BrainWorkspacePanelDefinition {
   id: BrainWorkspacePanelId;
@@ -29,6 +30,11 @@ export const DEFAULT_PANELS: BrainWorkspacePanelDefinition[] = [
     id: "nanobots",
     label: "Nanobots",
     description: "Control the nanobot fleet.",
+  },
+  {
+    id: "luna",
+    label: "Luna",
+    description: "Assisted, state-grounded brain control.",
   },
 ];
 
@@ -100,6 +106,7 @@ export function useBrainWorkspaceState(): BrainWorkspaceState {
       anatomy: true,
       inspector: true,
       nanobots: true,
+      luna: false,
     });
 
   const [
@@ -115,6 +122,7 @@ export function useBrainWorkspaceState(): BrainWorkspaceState {
       anatomy: false,
       inspector: false,
       nanobots: false,
+      luna: false,
     });
 
   const [openMenu, setOpenMenu] =

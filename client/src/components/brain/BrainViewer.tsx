@@ -70,6 +70,7 @@ import AnatomicalInspector from "./AnatomicalInspector";
 import BrainAnatomyNavigator from "./BrainAnatomyNavigator";
 import BrainScaleAssetLoader from "./BrainScaleAssetLoader";
 import NanobotPanel from "./NanobotPanel";
+import LunaBrainAssistant from "./LunaBrainAssistant";
 
 import BrainWorkspace, {
   DEFAULT_PANELS,
@@ -86,6 +87,11 @@ import {
   createBrainObservationContext,
   getObservationContextLabel,
 } from "./anatomy/BrainObservationContext";
+
+import {
+  registerLunaBrainCommandBridge,
+  updateLunaBrainState,
+} from "./anatomy/LunaBrainActions";
 
 import {
   useBrainScientificObservation,
@@ -716,8 +722,14 @@ export default function BrainViewer() {
     };
 
   const deployNanobot =
-    (type: NanobotType) => {
-      if (!selectedStructure) {
+    (
+      type: NanobotType,
+      requestedStructure?: BrainStructure,
+    ) => {
+      const targetStructure =
+        requestedStructure ?? selectedStructure;
+
+      if (!targetStructure) {
         setStatus(
           "Select a brain structure before deploying a nanobot",
         );
@@ -726,11 +738,11 @@ export default function BrainViewer() {
 
       const macroPosition =
         activeScale === "macro"
-          ? getStructureTargetPosition(selectedStructure)
+          ? getStructureTargetPosition(targetStructure)
           : null;
 
       const resolution = resolveNanobotTarget({
-        structure: selectedStructure,
+        structure: targetStructure,
         observationScale: observationContext.scale,
         macroPosition,
         macroTargetResolution:
@@ -768,7 +780,7 @@ export default function BrainViewer() {
 
       const assigned = nanobotRegistry.assignTarget(
         nanobot.id,
-        selectedStructure,
+        targetStructure,
         previewTarget,
       );
 
@@ -801,7 +813,7 @@ export default function BrainViewer() {
       setSelectedNanobotId(assigned.id);
       syncNanobotState();
       setStatus(
-        `${assigned.metadata.label} deployed into ${selectedStructure.displayName} · simulation mission`,
+        `${assigned.metadata.label} deployed into ${targetStructure.displayName} · simulation mission`,
       );
     };
 
@@ -975,6 +987,43 @@ export default function BrainViewer() {
         "Macro anatomy selected · whole-brain observation restored",
       );
     };
+
+  useEffect(() => {
+    updateLunaBrainState({
+      selectedStructure,
+      structures: brainStructures,
+      observationContext,
+      fleet: nanobots,
+      missionHistory,
+    });
+  }, [
+    selectedStructure,
+    brainStructures,
+    observationContext,
+    nanobots,
+    missionHistory,
+  ]);
+
+  useEffect(() =>
+    registerLunaBrainCommandBridge({
+      selectStructure: selectBrainStructure,
+      setObservationScale: handleScaleChange,
+      resolveMacroPosition: getStructureTargetPosition,
+      deployMission: (type, structure) =>
+        deployNanobot(type, structure),
+      pauseFleet: pauseNanobots,
+      resumeFleet: resumeNanobots,
+      returnFleet: returnNanobots,
+    }),
+  [
+    selectBrainStructure,
+    handleScaleChange,
+    getStructureTargetPosition,
+    deployNanobot,
+    pauseNanobots,
+    resumeNanobots,
+    returnNanobots,
+  ]);
 
   useEffect(() => {
     const brainRoot =
@@ -2265,6 +2314,41 @@ export default function BrainViewer() {
                     className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
                     title="Close"
                     aria-label="Close Nanobot System"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {workspace.isOpen("luna") &&
+          !workspace.isMinimized("luna") && (
+            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-50 w-[min(22rem,calc(100%-2rem))] md:right-[21rem]">
+              <div className="pointer-events-auto relative h-full">
+                <LunaBrainAssistant />
+
+                <div className="absolute right-2 top-2 z-20 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      workspace.minimizePanel("luna")
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white"
+                    title="Minimize"
+                    aria-label="Minimize Luna Brain Assistant"
+                  >
+                    −
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      workspace.closePanel("luna")
+                    }
+                    className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white"
+                    title="Close"
+                    aria-label="Close Luna Brain Assistant"
                   >
                     ×
                   </button>

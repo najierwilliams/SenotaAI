@@ -597,6 +597,84 @@ export default function BrainWorkspaceBar({
         </div>
 
         {/* =========================================================
+            LUNA
+        ========================================================= */}
+
+        <div className="relative">
+          <MenuButton
+            label="Luna"
+            active={
+              workspace.openMenu ===
+              "luna"
+            }
+            onClick={() =>
+              workspace.toggleWorkspaceMenu(
+                "luna",
+              )
+            }
+          />
+
+          {workspace.openMenu ===
+            "luna" && (
+            <MenuShell>
+              <div className="px-3 py-2">
+                <div className="text-[9px] uppercase tracking-[0.18em] text-violet-200/60">
+                  Luna Assistant
+                </div>
+
+                <div className="mt-1 text-xs text-white/75">
+                  Assisted brain control
+                </div>
+
+                <div className="mt-1 text-[9px] leading-relaxed text-white/40">
+                  State-grounded inspection and confirmation-gated Macro simulation plans.
+                </div>
+              </div>
+
+              <MenuItem
+                label={
+                  workspace.isOpen("luna")
+                    ? workspace.isMinimized("luna")
+                      ? "Restore Luna Assistant"
+                      : "Luna Assistant Open"
+                    : "Open Luna Assistant"
+                }
+                detail={
+                  panelById.get("luna")
+                    ?.description
+                }
+                onClick={() => {
+                  if (
+                    workspace.isOpen("luna") &&
+                    workspace.isMinimized("luna")
+                  ) {
+                    workspace.restorePanel("luna");
+                  } else {
+                    workspace.openPanel("luna");
+                  }
+                }}
+              />
+
+              <MenuItem
+                label="Minimize Luna Assistant"
+                disabled={!workspace.isOpen("luna")}
+                onClick={() =>
+                  workspace.minimizePanel("luna")
+                }
+              />
+
+              <MenuItem
+                label="Close Luna Assistant"
+                disabled={!workspace.isOpen("luna")}
+                onClick={() =>
+                  workspace.closePanel("luna")
+                }
+              />
+            </MenuShell>
+          )}
+        </div>
+
+        {/* =========================================================
             SCALES
         ========================================================= */}
 
