@@ -58,6 +58,10 @@ import {
   type NanobotVisual,
 } from "./anatomy/NanobotVisuals";
 
+import {
+  enableBrainMeshDepth,
+} from "./anatomy/BrainVisualPresentation";
+
 import AnatomicalInspector from "./AnatomicalInspector";
 import BrainAnatomyNavigator from "./BrainAnatomyNavigator";
 import BrainScaleAssetLoader from "./BrainScaleAssetLoader";
@@ -1298,8 +1302,10 @@ export default function BrainViewer() {
     const scene =
       new THREE.Scene();
 
-    scene.background =
-      new THREE.Color(0x080b10);
+    // Keep the background in the DOM layer so the WebGL canvas can render
+    // the anatomical model over a subdued clinical stage without adding a
+    // texture asset or a second scene.
+    scene.background = null;
 
     const camera =
       new THREE.PerspectiveCamera(
@@ -1315,6 +1321,7 @@ export default function BrainViewer() {
     const renderer =
       new THREE.WebGLRenderer({
         antialias: true,
+        alpha: true,
       });
 
     renderer.setPixelRatio(
@@ -1328,6 +1335,13 @@ export default function BrainViewer() {
 
     renderer.outputColorSpace =
       THREE.SRGBColorSpace;
+    renderer.toneMapping =
+      THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type =
+      THREE.PCFSoftShadowMap;
+    renderer.setClearColor(0x000000, 0);
 
     renderer.localClippingEnabled = true;
 
@@ -1335,31 +1349,56 @@ export default function BrainViewer() {
       renderer.domElement,
     );
 
+    // A restrained three-point clinical lighting rig reveals sulci and gyri
+    // while retaining the original GLB topology and materials as the source
+    // of anatomical truth. The warm key is deliberately diffuse, not glossy.
     const ambientLight =
       new THREE.AmbientLight(
-        0xffffff,
-        2.5,
+        0xffeadf,
+        0.7,
       );
 
-    scene.add(ambientLight);
+    const hemisphereLight =
+      new THREE.HemisphereLight(
+        0xdcecff,
+        0x1d1112,
+        1.15,
+      );
+
+    scene.add(ambientLight, hemisphereLight);
 
     const keyLight =
       new THREE.DirectionalLight(
-        0xffffff,
-        3,
+        0xffe2d5,
+        3.35,
       );
 
-    keyLight.position.set(2, 3, 4);
+    keyLight.position.set(-2.5, 3.8, 4.6);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.near = 0.01;
+    keyLight.shadow.camera.far = 8;
+    keyLight.shadow.bias = -0.00008;
+    keyLight.shadow.normalBias = 0.012;
     scene.add(keyLight);
 
     const fillLight =
       new THREE.DirectionalLight(
-        0xffffff,
-        1.5,
+        0xffb9ad,
+        1.1,
       );
 
-    fillLight.position.set(-3, 1, 2);
+    fillLight.position.set(3.2, 1.4, 2.6);
     scene.add(fillLight);
+
+    const rimLight =
+      new THREE.DirectionalLight(
+        0xff8f78,
+        1.55,
+      );
+
+    rimLight.position.set(-1.2, 2.1, -4.2);
+    scene.add(rimLight);
 
     const brainRoot =
       new THREE.Group();
@@ -1643,6 +1682,11 @@ export default function BrainViewer() {
 
           meshCount++;
 
+          // Preserve every GLB texture/map, color identity, geometry, name,
+          // and transform. This visual-only pass adds soft shadow participation
+          // and restrained tissue response for the upgraded clinical lighting.
+          enableBrainMeshDepth(object);
+
           if (object.name) {
             meshNames.push(object.name);
 
@@ -1913,7 +1957,7 @@ export default function BrainViewer() {
       <div className="relative h-full min-h-[600px] w-full overflow-hidden rounded-xl bg-black">
         <div
           ref={containerRef}
-          className="absolute inset-0"
+          className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_38%,#241214_0%,#0b0e15_48%,#030407_100%)]"
         />
 
         <BrainWorkspaceBar
