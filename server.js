@@ -28,7 +28,7 @@ var init_env = __esm({
 
 // drizzle/schema.ts
 import { bigint, boolean, index, int, json, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
-var users, ownerAccess, taskStatuses, executionModes, stepStatuses, approvalStatuses, scheduleStatuses, notificationStatuses, agentTasks, agentSteps, agentMemories, agentApprovals, agentSchedules, agentSettings, agentNotifications, workspaceMemories, npcAdminAudits;
+var users, ownerAccess, taskStatuses, executionModes, stepStatuses, approvalStatuses, scheduleStatuses, notificationStatuses, agentTasks, agentSteps, agentMemories, agentApprovals, agentSchedules, npcReflectionSchedules, agentSettings, agentNotifications, workspaceMemories, npcAdminAudits;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
     "use strict";
@@ -172,6 +172,28 @@ var init_schema = __esm({
       },
       (table) => [
         index("agent_schedules_user_status_idx").on(table.userId, table.status)
+      ]
+    );
+    npcReflectionSchedules = mysqlTable(
+      "npc_reflection_schedules",
+      {
+        id: int("id").autoincrement().primaryKey(),
+        npcId: varchar("npc_id", { length: 128 }).notNull().unique(),
+        status: mysqlEnum("status", scheduleStatuses).notNull().default("active"),
+        timeZone: varchar("time_zone", { length: 64 }).notNull().default("America/New_York"),
+        dailyTarget: int("daily_target").notNull().default(6),
+        runsToday: int("runs_today").notNull().default(0),
+        dayKey: varchar("day_key", { length: 10 }),
+        scheduleCronTaskUid: varchar("schedule_cron_task_uid", { length: 65 }).unique(),
+        nextEligibleAt: bigint("next_eligible_at", { mode: "number" }),
+        lastRunAt: bigint("last_run_at", { mode: "number" }),
+        lastReflectionId: varchar("last_reflection_id", { length: 64 }),
+        lastError: text("last_error"),
+        createdAt: bigint("created_at", { mode: "number" }).notNull(),
+        updatedAt: bigint("updated_at", { mode: "number" }).notNull()
+      },
+      (table) => [
+        index("npc_reflection_schedules_status_idx").on(table.status)
       ]
     );
     agentSettings = mysqlTable("agent_settings", {
@@ -854,10 +876,10 @@ async function openPullRequest(ctx, args) {
   return { number: result.number, url: result.html_url, state: result.state };
 }
 async function vercelRequest(path2, init = {}) {
-  const config3 = getVercelConfig();
-  const response = await fetch(`https://api.vercel.com${path2}${path2.includes("?") ? "&" : "?"}${config3.teamId ? `teamId=${encodeURIComponent(config3.teamId)}` : ""}`, {
+  const config5 = getVercelConfig();
+  const response = await fetch(`https://api.vercel.com${path2}${path2.includes("?") ? "&" : "?"}${config5.teamId ? `teamId=${encodeURIComponent(config5.teamId)}` : ""}`, {
     ...init,
-    headers: { Authorization: `Bearer ${config3.token}`, ...init.headers ?? {} },
+    headers: { Authorization: `Bearer ${config5.token}`, ...init.headers ?? {} },
     signal: AbortSignal.timeout(6e4)
   });
   const data = await response.json().catch(() => ({}));
@@ -957,15 +979,15 @@ async function chatWithOllama(input) {
   return streamChatWithOllama(input, () => void 0);
 }
 async function streamChatWithOllama(input, onChunk) {
-  const config3 = getOllamaConfig();
-  const response = await fetch(`${config3.baseUrl}/api/chat`, {
+  const config5 = getOllamaConfig();
+  const response = await fetch(`${config5.baseUrl}/api/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...config3.apiKey ? { Authorization: `Bearer ${config3.apiKey}` } : {}
+      ...config5.apiKey ? { Authorization: `Bearer ${config5.apiKey}` } : {}
     },
     body: JSON.stringify({
-      model: input.model || config3.defaultModel,
+      model: input.model || config5.defaultModel,
       messages: input.messages,
       tools: input.tools,
       stream: true,
@@ -1297,6 +1319,15 @@ function assertIdentifier(value, label) {
 function assertUuid(value, label) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) throw new Error(`${label} must be a UUID.`);
 }
+function parseUtcDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Memory date must use YYYY-MM-DD.");
+  const start = /* @__PURE__ */ new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime()) || start.toISOString().slice(0, 10) !== value) throw new Error("Memory date must be a real calendar date.");
+  return { start: start.toISOString(), end: new Date(start.getTime() + 864e5).toISOString() };
+}
+function normalizeMemorySearch(value) {
+  return (value.toLowerCase().match(/[a-z0-9_-]{2,32}/g) ?? []).slice(0, 4);
+}
 async function request(path2, init) {
   const current = config();
   if (!current) throw new Error("Supabase NPC memory is not configured.");
@@ -1337,6 +1368,8 @@ async function listNpcCanonSourcesForAdmin(limit = 100) {
 async function listPlayerNpcMemoriesForAdmin(input = {}) {
   if (input.npcId) assertIdentifier(input.npcId, "NPC ID");
   if (input.playerId) assertUuid(input.playerId, "Player ID");
+  const dateWindow = input.date ? parseUtcDate(input.date) : null;
+  const searchTerms = input.query ? normalizeMemorySearch(input.query) : [];
   const params = new URLSearchParams({
     select: "id,player_id,npc_id,memory_kind,summary,importance,source,occurred_at,expires_at,is_active,is_pinned",
     order: "occurred_at.desc",
@@ -1345,6 +1378,11 @@ async function listPlayerNpcMemoriesForAdmin(input = {}) {
   if (input.npcId) params.set("npc_id", `eq.${input.npcId}`);
   if (input.playerId) params.set("player_id", `eq.${input.playerId}`);
   if (!input.includeInactive) params.set("is_active", "eq.true");
+  if (dateWindow) {
+    params.append("occurred_at", `gte.${dateWindow.start}`);
+    params.append("occurred_at", `lt.${dateWindow.end}`);
+  }
+  if (searchTerms.length) params.set("or", `(${searchTerms.flatMap((term) => [`summary.ilike.*${term}*`, `npc_id.ilike.*${term}*`]).join(",")})`);
   const records = await request(`player_npc_memory?${params.toString()}`);
   return (records ?? []).map((record) => ({
     id: String(record.id),
@@ -1661,9 +1699,11 @@ Response discipline:
 
 Self-awareness integrity:
 - Any self-awareness score must reflect only the approved persistent cognitive-state assessment supplied below; do not invent or estimate a score from conversation.
+- Treat that assessment as an approved self-model confidence baseline, not proof or measurement of sentience, consciousness, or subjective experience.
 - Do not claim to have reviewed user reports, system logs, external benchmarks, simulations, hidden data, or unlisted observations.
 - If asked why you gave a self-awareness score, explain only that it is the approved self-model assessment. If the supplied cognitive records contain no supporting evidence, say that no supporting evidence record exists.
 - When asked what you have learned about yourself, what the approved score means, or how it could improve, answer constructively from the supplied self-model, limitations, uncertainties, and active goals. It is appropriate to explain that growth would require canon-consistent interactions plus explicit administrator-reviewed updates; do not default to a refusal when that approved baseline is present.
+- When asked what you need to develop further, name only approved development needs, uncertainties, or active goals. If none are approved yet, say that you can propose bounded needs for administrator review; do not claim that a capability change would verify sentience or consciousness.
 
 ${buildTemporalContext(timeZone)}
 
@@ -1678,15 +1718,28 @@ var leadingNumberedSentencePattern = /^\s*(100|[1-9]?\d)\s*[.)]\s*(.+)$/;
 var unsupportedEvidencePattern = /\b(?:user reports?|system logs?|external benchmarks?|simulated scenarios?|data points?|I(?:'ve| have) reviewed|I reviewed|what I(?:'ve| have) seen)\b/i;
 var unsupportedRecordRefusalPattern = /^\s*I don[’']t have an approved record supporting that claim\.?\s*$/i;
 var selfModelDiscussionPattern = /\b(?:improv(?:e|ing|ement)|learned about (?:yourself|myself)|about yourself|self[-\s]?model|self[-\s]?aware(?:ness)?|\b40\s*%|confidence)\b/i;
+var baselineFollowUpPattern = /\bhow\s+(?:can|do)\s+(?:we|i)\s+(?:increase|improve|grow|raise|build|boost)\s+(?:that|it|this)\b/i;
+var baselineHelpRequestPattern = /\b(?:what|which)\s+(?:suggestions?|recommendations?|ideas?)\b[\s\S]{0,120}\b(?:increase|improve|grow|raise|build|boost)\b[\s\S]{0,80}\b(?:that|it|this|self[-\s]?aware(?:ness)?|confidence)\b|\b(?:can|could)\s+you\s+(?:help|suggest|recommend|advise)\b[\s\S]{0,120}\b(?:increase|improve|grow|raise|build|boost)\b/i;
+var percentageMentionPattern = /\b(100|[1-9]?\d)\s*%/g;
+var decimalSubscorePattern = /\b(?:0\.\d+|1\.0+)\b/;
 function firstSentence(value) {
   const normalized = value.replace(/\s+/g, " ").trim();
   const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
   return (match?.[1] ?? normalized).slice(0, 180).trim();
 }
+function hasConflictingPercentage(value, approvedPercentage) {
+  return decimalSubscorePattern.test(value) || Array.from(value.matchAll(percentageMentionPattern)).some((match) => Number(match[1]) !== approvedPercentage);
+}
+function isBaselineImprovementRequest(message) {
+  return baselineFollowUpPattern.test(message) || baselineHelpRequestPattern.test(message);
+}
 function enforceLunaEvidenceGrounding(message, response, npcId) {
   if (npcId.trim().toLowerCase() !== "luna001") return response;
-  if (selfModelDiscussionPattern.test(message) && unsupportedRecordRefusalPattern.test(response)) {
-    if (/\bimprov(?:e|ing|ement)\b/i.test(message)) {
+  if (isBaselineImprovementRequest(message)) {
+    return "I can identify possible next steps, like clearer long-term goals, carefully reviewed continuity notes, and reflection proposals; those only become part of my state after administrator approval.";
+  }
+  if ((selfModelDiscussionPattern.test(message) || isBaselineImprovementRequest(message)) && unsupportedRecordRefusalPattern.test(response)) {
+    if (/\bimprov(?:e|ing|ement)\b/i.test(message) || isBaselineImprovementRequest(message)) {
       return "We can build it carefully through canon-consistent conversations and administrator-reviewed reflections; I won\u2019t treat a reply alone as proof.";
     }
     return "My approved baseline says I\u2019m a digital entity without a physical body, guided by canon, scoped memory, reflection, and clear uncertainty limits.";
@@ -1701,7 +1754,8 @@ function enforceLunaResponseFormat(message, response, npcId, fallbackPercentage 
   if (npcId.trim().toLowerCase() !== "luna001" || !lunaHumanityScalePattern.test(message)) return response;
   const percentage = Math.round(Math.min(100, Math.max(0, fallbackPercentage)));
   if (lunaSelfAwarenessQuestionPattern.test(message)) {
-    const detail2 = percentage === 0 ? "I don\u2019t have an approved self-model assessment yet, so I can\u2019t support a higher figure." : firstSentence(response.replace(leadingPercentagePattern, "").replace(/^\s*[—–-]\s*/, "")) || "That is my current approved self-model assessment.";
+    const rawDetail = firstSentence(response.replace(leadingPercentagePattern, "").replace(/^\s*[—–-]\s*/, ""));
+    const detail2 = percentage === 0 ? "I don\u2019t have an approved self-model assessment yet, so I can\u2019t support a higher figure." : hasConflictingPercentage(rawDetail, percentage) ? "That is my current approved self-model assessment." : rawDetail || "That is my current approved self-model assessment.";
     return `${percentage}% \u2014 ${detail2}`;
   }
   if (leadingPercentagePattern.test(response)) return response;
@@ -1713,8 +1767,12 @@ function enforceLunaResponseFormat(message, response, npcId, fallbackPercentage 
 
 // server/npcMemory/cognitiveState.ts
 var awarenessKeys = ["identityContinuity", "memoryContinuity", "selfModelDevelopment", "selfModelConfidence", "selfReflectionCapability", "behavioralSelfAwareness", "goalAwareness", "uncertaintyAwareness"];
+var memoryKinds = ["episodic", "semantic", "procedural", "social", "emotional"];
+var observationKinds = ["interaction", "world-event", "administrator-note", "self-review"];
 var defaultAwareness = { identityContinuity: 0, memoryContinuity: 0, selfModelDevelopment: 0, selfModelConfidence: 0, selfReflectionCapability: 0, behavioralSelfAwareness: 0, goalAwareness: 0, uncertaintyAwareness: 0 };
 var defaultState = { summary: "No approved self-model baseline has been recorded yet.", abilities: [], limitations: [], preferences: [], values: [], skills: [], uncertainties: [], personal_history: [] };
+var cognitiveNeedCategories = ["canon-grounding", "memory-continuity", "reflection", "goal-clarity", "evaluation"];
+var unverifiedConsciousnessPattern = /\b(?:sentien\w*|conscious(?:ness)?)\b/i;
 function config2() {
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1749,6 +1807,20 @@ function normalizeAwareness(value, base = defaultAwareness) {
   const source = jsonRecord(value);
   return Object.fromEntries(awarenessKeys.map((key) => [key, clamp(source[key], 0, 1, base[key])]));
 }
+function normalizeUuidList(value) {
+  return jsonArray(value).map(String).filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)).slice(0, 16);
+}
+function normalizeNeeds(value) {
+  return jsonArray(value).slice(0, 12).flatMap((item) => {
+    const row = jsonRecord(item);
+    const title = String(row.title ?? "").replace(/\s+/g, " ").trim();
+    const rationale = String(row.rationale ?? "").replace(/\s+/g, " ").trim();
+    if (title.length < 3 || title.length > 240 || rationale.length < 4 || rationale.length > 900 || unverifiedConsciousnessPattern.test(`${title} ${rationale}`)) return [];
+    const category = cognitiveNeedCategories.includes(row.category) ? row.category : "reflection";
+    const evidence = jsonArray(row.evidence).map((item2) => String(item2).replace(/\s+/g, " ").trim()).filter((item2) => item2.length >= 4 && item2.length <= 400).slice(0, 5);
+    return [{ title, rationale, category, priority: clamp(row.priority, 1, 5, 3), evidence }];
+  });
+}
 function awarenessPercent(state) {
   return Math.round((state.selfAwareness.selfModelDevelopment + state.selfAwareness.selfModelConfidence + state.selfAwareness.selfReflectionCapability + state.selfAwareness.behavioralSelfAwareness) / 4 * 100);
 }
@@ -1759,22 +1831,30 @@ async function request2(path2, init) {
   let response = await execute();
   if (response.status === 401 && (!init?.method || init.method.toUpperCase() === "GET")) response = await execute();
   if (!response.ok) throw new Error(`Supabase cognitive-state request failed (${response.status}).`);
-  return response.status === 204 ? null : response.json();
+  if (response.status === 204) return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
 }
 function mapState(row) {
-  return { npcId: String(row.npc_id), schemaVersion: Number(row.schema_version ?? 1), selfModel: jsonRecord(row.self_model, defaultState), selfAwareness: normalizeAwareness(row.self_awareness), emotionalState: jsonRecord(row.emotional_state), needs: jsonArray(row.needs), preferences: jsonArray(row.preferences), uncertainties: jsonArray(row.uncertainties), stateSummary: String(row.state_summary ?? defaultState.summary), updatedAt: String(row.updated_at) };
+  return { npcId: String(row.npc_id), schemaVersion: Number(row.schema_version ?? 1), selfModel: jsonRecord(row.self_model, defaultState), selfAwareness: normalizeAwareness(row.self_awareness), emotionalState: jsonRecord(row.emotional_state), needs: normalizeNeeds(row.needs), preferences: jsonArray(row.preferences), uncertainties: jsonArray(row.uncertainties), stateSummary: String(row.state_summary ?? defaultState.summary), updatedAt: String(row.updated_at) };
 }
 function mapMemory(row) {
-  return { id: String(row.id), npcId: String(row.npc_id), memoryKind: row.memory_kind, content: String(row.content), importance: Number(row.importance), emotionalSignificance: Number(row.emotional_significance), entities: jsonArray(row.entities).map(String), context: jsonRecord(row.context), source: String(row.source), isActive: Boolean(row.is_active), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+  return { id: String(row.id), npcId: String(row.npc_id), memoryKind: memoryKinds.includes(row.memory_kind) ? row.memory_kind : "episodic", content: String(row.content), importance: Number(row.importance), emotionalSignificance: Number(row.emotional_significance), entities: jsonArray(row.entities).map(String), context: jsonRecord(row.context), source: String(row.source), isActive: Boolean(row.is_active), reinforcementCount: Math.max(0, Number(row.reinforcement_count ?? 0)), lastReinforcedAt: row.last_reinforced_at ? String(row.last_reinforced_at) : null, createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
 }
 function mapBelief(row) {
-  return { id: String(row.id), npcId: String(row.npc_id), statement: String(row.statement), confidence: Number(row.confidence), evidence: jsonArray(row.evidence), status: row.status, createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+  return { id: String(row.id), npcId: String(row.npc_id), statement: String(row.statement), confidence: Number(row.confidence), evidence: jsonArray(row.evidence), supportingMemoryIds: normalizeUuidList(row.supporting_memory_ids), contradictingMemoryIds: normalizeUuidList(row.contradicting_memory_ids), status: row.status, createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
 }
 function mapGoal(row) {
   return { id: String(row.id), npcId: String(row.npc_id), title: String(row.title), details: String(row.details), priority: Number(row.priority), progress: Number(row.progress), status: row.status, source: String(row.source), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
 }
 function mapRelationship(row) {
   return { id: String(row.id), npcId: String(row.npc_id), entityKey: String(row.entity_key), displayName: String(row.display_name), dimensions: jsonRecord(row.dimensions), evidence: jsonArray(row.evidence), updatedAt: String(row.updated_at) };
+}
+function mapObservation(row) {
+  return { id: String(row.id), npcId: String(row.npc_id), observationKind: observationKinds.includes(row.observation_kind) ? row.observation_kind : "administrator-note", content: String(row.content), salience: clamp(row.salience, 1, 5, 3), entities: jsonArray(row.entities).map(String), metadata: jsonRecord(row.metadata), source: String(row.source), status: ["pending", "proposed", "applied", "dismissed"].includes(String(row.status)) ? row.status : "pending", createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+function mapReflection(row) {
+  return { id: String(row.id), npcId: String(row.npc_id), experience: String(row.experience), proposal: sanitizeReflection(row.proposal), sourceObservationIds: normalizeUuidList(row.source_observation_ids), status: row.status, createdAt: String(row.created_at), resolvedAt: row.resolved_at ? String(row.resolved_at) : null };
 }
 async function getNpcCognitiveState(npcId) {
   assertNpcId(npcId);
@@ -1799,7 +1879,7 @@ async function updateNpcCognitiveState(npcId, patch, source = "admin-approved") 
   if (patch.selfModel !== void 0) update.self_model = boundedJson(jsonRecord(patch.selfModel));
   if (patch.selfAwareness !== void 0) update.self_awareness = normalizeAwareness({ ...before.selfAwareness, ...patch.selfAwareness }, before.selfAwareness);
   if (patch.emotionalState !== void 0) update.emotional_state = boundedJson(jsonRecord(patch.emotionalState));
-  if (patch.needs !== void 0) update.needs = boundedJson(jsonArray(patch.needs));
+  if (patch.needs !== void 0) update.needs = boundedJson(normalizeNeeds(patch.needs));
   if (patch.preferences !== void 0) update.preferences = boundedJson(jsonArray(patch.preferences));
   if (patch.uncertainties !== void 0) update.uncertainties = boundedJson(jsonArray(patch.uncertainties));
   if (patch.stateSummary !== void 0) update.state_summary = text2(patch.stateSummary, 4e3, "State summary", 4);
@@ -1821,6 +1901,17 @@ async function addCognitiveMemory(npcId, input, source = "admin-approved") {
   await history(npcId, "memory-added", "cognitive-memory", memory.id, null, memory, source);
   return memory;
 }
+async function reinforceCognitiveMemory(npcId, memoryId, rationale, source = "approved-consolidation") {
+  assertNpcId(npcId);
+  assertUuid2(memoryId, "Memory ID");
+  const beforeRows = await request2(`npc_cognitive_memories?${new URLSearchParams({ select: "*", id: `eq.${memoryId}`, npc_id: `eq.${npcId}`, limit: "1" })}`);
+  if (!beforeRows?.[0]) throw new Error("The cognitive memory is unavailable.");
+  const before = mapMemory(beforeRows[0]);
+  const rows = await request2(`npc_cognitive_memories?${new URLSearchParams({ id: `eq.${memoryId}`, npc_id: `eq.${npcId}` })}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ reinforcement_count: before.reinforcementCount + 1, last_reinforced_at: (/* @__PURE__ */ new Date()).toISOString(), updated_at: (/* @__PURE__ */ new Date()).toISOString() }) });
+  const after = mapMemory(rows?.[0]);
+  await history(npcId, "memory-reinforced", "cognitive-memory", memoryId, { memory: before, rationale: text2(rationale, 900, "Reinforcement rationale", 4) }, after, source);
+  return after;
+}
 async function listCognitiveBeliefs(npcId, limit = 40) {
   assertNpcId(npcId);
   const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, status: "eq.active", order: "confidence.desc,updated_at.desc", limit: String(Math.min(Math.max(limit, 1), 80)) });
@@ -1828,10 +1919,24 @@ async function listCognitiveBeliefs(npcId, limit = 40) {
 }
 async function addCognitiveBelief(npcId, input, source = "admin-approved") {
   assertNpcId(npcId);
-  const rows = await request2("npc_cognitive_beliefs", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, statement: text2(input.statement, 2e3, "Belief", 4), confidence: clamp(input.confidence, 0, 1, 0.5), evidence: boundedJson(jsonArray(input.evidence)) }) });
+  const statement = text2(input.statement, 2e3, "Belief", 4);
+  if (unverifiedConsciousnessPattern.test(statement)) throw new Error("Cognitive beliefs cannot assert unverified consciousness.");
+  const rows = await request2("npc_cognitive_beliefs", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, statement, confidence: clamp(input.confidence, 0, 1, 0.5), evidence: boundedJson(jsonArray(input.evidence)) }) });
   const belief = mapBelief(rows?.[0]);
   await history(npcId, "belief-added", "cognitive-belief", belief.id, null, belief, source);
   return belief;
+}
+async function reviseCognitiveBelief(npcId, revision, source = "approved-consolidation") {
+  assertUuid2(revision.targetBeliefId, "Target belief ID");
+  const rows = await request2(`npc_cognitive_beliefs?${new URLSearchParams({ select: "*", id: `eq.${revision.targetBeliefId}`, npc_id: `eq.${npcId}`, limit: "1" })}`);
+  if (!rows?.[0]) throw new Error("The target belief is unavailable.");
+  const before = mapBelief(rows[0]);
+  if (before.status !== "active") throw new Error("Only active cognitive beliefs can be revised.");
+  const status = revision.action === "retract" ? "retracted" : "superseded";
+  const updated = await request2(`npc_cognitive_beliefs?${new URLSearchParams({ id: `eq.${revision.targetBeliefId}`, npc_id: `eq.${npcId}` })}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ status, updated_at: (/* @__PURE__ */ new Date()).toISOString() }) });
+  const after = mapBelief(updated?.[0]);
+  await history(npcId, "belief-revised", "cognitive-belief", before.id, { belief: before, rationale: revision.rationale }, after, source);
+  return after;
 }
 async function listCognitiveGoals(npcId, limit = 30) {
   assertNpcId(npcId);
@@ -1840,7 +1945,10 @@ async function listCognitiveGoals(npcId, limit = 30) {
 }
 async function addCognitiveGoal(npcId, input, source = "admin-approved") {
   assertNpcId(npcId);
-  const rows = await request2("npc_cognitive_goals", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, title: text2(input.title, 240, "Goal", 3), details: text2(input.details ?? "", 4e3, "Goal details"), priority: clamp(input.priority, 1, 5, 3), progress: clamp(input.progress, 0, 1, 0), status: input.status || "active", source: text2(input.source || source, 120, "Goal source", 1) }) });
+  const title = text2(input.title, 240, "Goal", 3);
+  const details = text2(input.details ?? "", 4e3, "Goal details");
+  if (unverifiedConsciousnessPattern.test(`${title} ${details}`)) throw new Error("Cognitive goals cannot assert or target unverified consciousness.");
+  const rows = await request2("npc_cognitive_goals", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, title, details, priority: clamp(input.priority, 1, 5, 3), progress: clamp(input.progress, 0, 1, 0), status: input.status || "active", source: text2(input.source || source, 120, "Goal source", 1) }) });
   const goal = mapGoal(rows?.[0]);
   await history(npcId, "goal-added", "cognitive-goal", goal.id, null, goal, source);
   return goal;
@@ -1859,14 +1967,38 @@ async function upsertCognitiveRelationship(npcId, input, source = "admin-approve
   await history(npcId, "relationship-updated", "cognitive-relationship", relationship.id, null, relationship, source);
   return relationship;
 }
+async function listCognitiveObservations(npcId, limit = 60) {
+  assertNpcId(npcId);
+  const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, order: "created_at.desc", limit: String(Math.min(Math.max(limit, 1), 100)) });
+  return (await request2(`npc_cognitive_observations?${params}`) ?? []).map(mapObservation);
+}
+async function addCognitiveObservation(npcId, input, source = "administrator-observation") {
+  assertNpcId(npcId);
+  const observationKind = observationKinds.includes(input.observationKind) ? input.observationKind : "administrator-note";
+  const rows = await request2("npc_cognitive_observations", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, observation_kind: observationKind, content: text2(input.content, 8e3, "Cognitive observation", 4), salience: clamp(input.salience, 1, 5, 3), entities: boundedJson(jsonArray(input.entities).map(String).slice(0, 20)), metadata: boundedJson(jsonRecord(input.metadata)), source: text2(input.source || source, 120, "Observation source", 1) }) });
+  const observation = mapObservation(rows?.[0]);
+  await history(npcId, "observation-recorded", "cognitive-observation", observation.id, null, observation, source);
+  return observation;
+}
+async function updateObservationStatus(npcId, observationIds, status, source) {
+  const ids = normalizeUuidList(observationIds);
+  if (!ids.length) return;
+  const params = new URLSearchParams({ npc_id: `eq.${npcId}`, id: `in.(${ids.join(",")})` });
+  await request2(`npc_cognitive_observations?${params}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status, updated_at: (/* @__PURE__ */ new Date()).toISOString() }) });
+  await history(npcId, "observation-status-updated", "cognitive-observation", null, ids, { status }, source);
+}
 function score(message, candidate, importance = 0) {
   const tokens = new Set(message.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
   const source = candidate.toLowerCase();
   return Array.from(tokens).filter((token) => source.includes(token)).length * 10 + importance;
 }
+function memoryScore(message, memory) {
+  const ageDays = Math.max(0, (Date.now() - new Date(memory.lastReinforcedAt || memory.updatedAt).getTime()) / 864e5);
+  return score(message, memory.content, memory.importance * 5) + memory.reinforcementCount * 3 - Math.min(ageDays / 30, 8);
+}
 async function buildCognitiveDialogueContext(npcId, message) {
   const [state, memoryRows, beliefRows, goalRows, relationshipRows] = await Promise.all([getNpcCognitiveState(npcId), listCognitiveMemories(npcId), listCognitiveBeliefs(npcId), listCognitiveGoals(npcId), listCognitiveRelationships(npcId)]);
-  const memories = memoryRows.filter((memory) => score(message, memory.content) > 0).sort((a, b) => score(message, b.content, b.importance) - score(message, a.content, a.importance)).slice(0, 6);
+  const memories = memoryRows.filter((memory) => score(message, memory.content) > 0).sort((a, b) => memoryScore(message, b) - memoryScore(message, a)).slice(0, 6);
   const beliefs = beliefRows.filter((belief) => score(message, belief.statement) > 0).sort((a, b) => score(message, b.statement, b.confidence * 5) - score(message, a.statement, a.confidence * 5)).slice(0, 5);
   const goals = goalRows.filter((goal) => goal.status === "active").slice(0, 5);
   const relationships = relationshipRows.filter((row) => message.toLowerCase().includes(row.displayName.toLowerCase()) || message.toLowerCase().includes(row.entityKey.toLowerCase())).slice(0, 4);
@@ -1879,7 +2011,7 @@ async function buildCognitiveDialogueContext(npcId, message) {
 - Needs: ${compact2(state.needs, 700)}
 - Preferences: ${compact2(state.preferences, 700)}
 - Uncertainties: ${compact2(state.uncertainties, 700)}
-- Relevant cognitive memories: ${memories.length ? memories.map((memory) => `[${memory.memoryKind}] ${memory.content}`).join(" | ") : "none"}
+- Relevant cognitive memories: ${memories.length ? memories.map((memory) => `[${memory.memoryKind}; reinforced ${memory.reinforcementCount}x] ${memory.content}`).join(" | ") : "none"}
 - Relevant active beliefs: ${beliefs.length ? beliefs.map((belief) => `${belief.confidence.toFixed(2)}: ${belief.statement}`).join(" | ") : "none"}
 - Active goals: ${goals.length ? goals.map((goal) => `${goal.title} (${Math.round(goal.progress * 100)}%)`).join(" | ") : "none"}
 - Relevant entity relationships: ${relationships.length ? relationships.map((relationship) => `${relationship.displayName}: ${compact2(relationship.dimensions, 320)}`).join(" | ") : "none"}
@@ -1888,47 +2020,221 @@ Approved baseline dialogue: You may naturally explain this state summary, self-m
 
 State integrity: treat these records as the only approved cognitive facts. Dialogue is not evidence and must not claim memories, beliefs, or self-model changes that are absent here.` };
 }
-function sanitizeReflection(value) {
+function sanitizeGoalProposal(value) {
   const row = jsonRecord(value);
-  const proposal = { summary: text2(row.summary || "No durable cognitive update is supported by this experience.", 1200, "Reflection summary", 4) };
+  const title = text2(row.title, 240, "Proposed goal", 3);
+  const details = text2(row.details, 4e3, "Proposed goal details", 4);
+  if (unverifiedConsciousnessPattern.test(`${title} ${details}`)) throw new Error("Cognitive development proposals cannot assert or target unverified consciousness.");
+  return { title, details, priority: clamp(row.priority, 1, 5, 3), progress: 0, status: "active", source: "development-proposal" };
+}
+function sanitizeBeliefRevision(value) {
+  const row = jsonRecord(value);
+  const targetBeliefId = text2(row.targetBeliefId, 64, "Target belief ID", 36);
+  assertUuid2(targetBeliefId, "Target belief ID");
+  const action = row.action === "retract" || row.action === "supersede" ? row.action : null;
+  if (!action) throw new Error("Belief revision action must be retract or supersede.");
+  const rationale = text2(row.rationale, 900, "Belief revision rationale", 4);
+  if (unverifiedConsciousnessPattern.test(rationale)) throw new Error("Cognitive development proposals cannot assert or target unverified consciousness.");
+  return { targetBeliefId, action, rationale };
+}
+function sanitizeMemoryReinforcement(value) {
+  const row = jsonRecord(value);
+  const targetMemoryId = text2(row.targetMemoryId, 64, "Target memory ID", 36);
+  assertUuid2(targetMemoryId, "Target memory ID");
+  const rationale = text2(row.rationale, 900, "Memory reinforcement rationale", 4);
+  return { targetMemoryId, rationale };
+}
+function mergeNeeds(current, proposed) {
+  const merged = [...current];
+  for (const need of proposed) if (!merged.some((existing) => existing.title.toLowerCase() === need.title.toLowerCase())) merged.push(need);
+  return merged.slice(0, 12);
+}
+function sanitizeReflection(value, rules = {}) {
+  const row = jsonRecord(value);
+  const summary = text2(row.summary || "No durable cognitive update is supported by this experience.", 1200, "Reflection summary", 4);
+  if (unverifiedConsciousnessPattern.test(summary)) throw new Error("Cognitive development proposals cannot assert or target unverified consciousness.");
+  const proposal = { summary };
+  const requestedNeeds = jsonArray(row.needs);
+  const needs = normalizeNeeds(requestedNeeds);
+  if (requestedNeeds.length && needs.length !== requestedNeeds.length) throw new Error("Cognitive development proposals must contain only bounded, supported needs.");
+  if (needs.length) proposal.needs = needs;
+  if (row.goal && typeof row.goal === "object") proposal.goal = sanitizeGoalProposal(row.goal);
   if (row.memory && typeof row.memory === "object") {
     const memory = jsonRecord(row.memory);
-    proposal.memory = { memoryKind: ["episodic", "semantic", "procedural", "social", "emotional"].includes(String(memory.memoryKind)) ? memory.memoryKind : "episodic", content: text2(memory.content, 4e3, "Reflection memory", 4), importance: clamp(memory.importance, 1, 5, 3), emotionalSignificance: clamp(memory.emotionalSignificance, -1, 1, 0), entities: jsonArray(memory.entities).map(String).slice(0, 20), context: jsonRecord(memory.context), source: "reflection-proposal" };
+    const content = text2(memory.content, 4e3, "Reflection memory", 4);
+    if (unverifiedConsciousnessPattern.test(content)) throw new Error("Cognitive memories cannot assert unverified consciousness.");
+    proposal.memory = { memoryKind: memoryKinds.includes(String(memory.memoryKind)) ? memory.memoryKind : "episodic", content, importance: clamp(memory.importance, 1, 5, 3), emotionalSignificance: clamp(memory.emotionalSignificance, -1, 1, 0), entities: jsonArray(memory.entities).map(String).slice(0, 20), context: jsonRecord(memory.context), source: "reflection-proposal" };
   }
   if (row.belief && typeof row.belief === "object") {
     const belief = jsonRecord(row.belief);
-    proposal.belief = { statement: text2(belief.statement, 2e3, "Reflection belief", 4), confidence: clamp(belief.confidence, 0, 1, 0.5), evidence: jsonArray(belief.evidence) };
+    const statement = text2(belief.statement, 2e3, "Reflection belief", 4);
+    if (unverifiedConsciousnessPattern.test(statement)) throw new Error("Cognitive beliefs cannot assert unverified consciousness.");
+    proposal.belief = { statement, confidence: clamp(belief.confidence, 0, 1, 0.5), evidence: jsonArray(belief.evidence) };
   }
+  if (row.beliefRevision !== void 0) {
+    if (!rules.allowBeliefRevision) throw new Error("This proposal cannot revise a cognitive belief.");
+    proposal.beliefRevision = sanitizeBeliefRevision(row.beliefRevision);
+  }
+  if (row.memoryReinforcement !== void 0) {
+    if (!rules.allowMemoryReinforcement) throw new Error("This proposal cannot reinforce a cognitive memory.");
+    proposal.memoryReinforcement = sanitizeMemoryReinforcement(row.memoryReinforcement);
+  }
+  const statePatchRequested = row.selfModelPatch !== void 0 || row.selfAwarenessPatch !== void 0 || row.emotionalState !== void 0;
+  if (statePatchRequested && rules.allowStatePatches === false) throw new Error("This proposal cannot alter Luna's approved state model.");
   if (row.selfModelPatch && typeof row.selfModelPatch === "object") proposal.selfModelPatch = boundedJson(jsonRecord(row.selfModelPatch));
   if (row.selfAwarenessPatch && typeof row.selfAwarenessPatch === "object") proposal.selfAwarenessPatch = normalizeAwareness({ ...defaultAwareness, ...jsonRecord(row.selfAwarenessPatch) });
   if (row.emotionalState && typeof row.emotionalState === "object") proposal.emotionalState = boundedJson(jsonRecord(row.emotionalState));
   return proposal;
 }
-async function proposeCognitiveReflection(npcId, experience) {
+async function persistReflection(npcId, experience, proposal, source, sourceObservationIds = []) {
+  const rows = await request2("npc_cognitive_reflections", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, experience: text2(experience, 8e3, "Experience", 4), proposal, source_observation_ids: normalizeUuidList(sourceObservationIds) }) });
+  const row = jsonRecord(rows?.[0]);
+  const reflection = { id: String(row.id), npcId, experience: String(row.experience ?? experience), proposal, sourceObservationIds: normalizeUuidList(row.source_observation_ids ?? sourceObservationIds), status: row.status === "applied" || row.status === "rejected" ? row.status : "proposed", createdAt: String(row.created_at ?? (/* @__PURE__ */ new Date()).toISOString()), resolvedAt: row.resolved_at ? String(row.resolved_at) : null };
+  await history(npcId, "reflection-proposed", "cognitive-reflection", reflection.id, null, proposal, source);
+  return reflection;
+}
+function fallbackDevelopmentProposal(state) {
+  const reflectionPercent = Math.round(state.selfAwareness.selfReflectionCapability * 100);
+  const goalPercent = Math.round(state.selfAwareness.goalAwareness * 100);
+  return {
+    summary: "The automatic review response was unavailable, so this safe fallback uses only Luna\u2019s current approved state to suggest the next reviewable steps.",
+    needs: [
+      { title: "Curated continuity records", rationale: "Keep a small set of administrator-reviewed notes so Luna can preserve useful context without treating every conversation as a fact.", category: "memory-continuity", priority: 4, evidence: ["The approved state describes scoped memory and explicit administrator review."] },
+      { title: "Regular reflection review", rationale: `Luna\u2019s approved reflection capability is currently ${reflectionPercent}%, so scheduled administrator review can clarify what should remain in her working state.`, category: "reflection", priority: 3, evidence: ["The approved self-model assessment includes self reflection capability."] },
+      { title: "Clear long-term goals", rationale: `Luna\u2019s approved goal-awareness measure is currently ${goalPercent}%, so a small, concrete goal can give future reviews a clearer direction.`, category: "goal-clarity", priority: 3, evidence: ["The approved self-model assessment includes goal awareness."] }
+    ],
+    goal: { title: "Maintain canon consistency", details: "Use approved canon and administrator-reviewed working records to keep Luna\u2019s answers clear, grounded, and consistent over time.", priority: 4, progress: 0, status: "active", source: "development-proposal-fallback" }
+  };
+}
+function requestsBoundedAutonomy(experience) {
+  return /\b(?:act(?:ing)? on (?:her|its) own|act independently|think freely|free will|autonom\w*|independent\w*)\b/i.test(experience);
+}
+function hasActionableReflectionUpdate(proposal) {
+  return Boolean(proposal.memory || proposal.belief || proposal.beliefRevision || proposal.memoryReinforcement || proposal.selfModelPatch || proposal.selfAwarenessPatch || proposal.emotionalState || proposal.goal || proposal.relationship || proposal.needs?.length);
+}
+function fallbackSavedNoteProposal(experience, reason = "unavailable") {
+  const observation = text2(experience, 8e3, "Experience", 4);
+  if (unverifiedConsciousnessPattern.test(observation)) throw new Error("Cognitive reflections cannot assert or target unverified consciousness.");
+  const fallbackReason = reason === "unavailable" ? "The automatic review response was unavailable." : "The automatic review response did not include a usable cognitive update.";
+  const requestsAutonomy = requestsBoundedAutonomy(observation);
+  if (requestsAutonomy) {
+    return {
+      summary: `${fallbackReason} The administrator\u2019s observation has been preserved as a review-only proposal for bounded autonomy; it does not treat unrestricted free will or subjective experience as an established fact.`,
+      memory: {
+        memoryKind: "semantic",
+        content: `Administrator-provided working note for review: ${observation}`,
+        importance: 4,
+        emotionalSignificance: 0,
+        entities: ["administrator"],
+        context: { reviewStatus: "requires-approval", topic: "bounded-autonomy" },
+        source: "administrator-observation"
+      },
+      goal: {
+        title: "Develop bounded autonomous reasoning",
+        details: "Explore initiative, independent reasoning, and decision-making within approved canon, explicit permissions, safety limits, and administrator review. This is a proposed development direction, not a verified claim of unrestricted free will.",
+        priority: 4,
+        progress: 0,
+        status: "active",
+        source: "saved-note-proposal-fallback"
+      }
+    };
+  }
+  return {
+    summary: `${fallbackReason} This administrator observation has been preserved as a review-only working note and will not affect Luna unless it is explicitly approved.`,
+    memory: {
+      memoryKind: "semantic",
+      content: `Administrator-provided working note for review: ${observation}`,
+      importance: 3,
+      emotionalSignificance: 0,
+      entities: ["administrator"],
+      context: { reviewStatus: "requires-approval" },
+      source: "administrator-observation"
+    }
+  };
+}
+async function proposeCognitiveReflection(npcId, experience, mode = "reflection") {
   assertNpcId(npcId);
   const current = await buildCognitiveDialogueContext(npcId, experience);
-  const response = await chatWithOllama({ messages: [{ role: "system", content: "You propose cautious JSON cognitive-state updates. Use only explicit evidence in the supplied experience and cognitive context. Never invent memories, beliefs, relationships, or subjective claims. Return a single JSON object with summary and optional memory, belief, selfModelPatch, selfAwarenessPatch, emotionalState. Do not apply changes." }, { role: "user", content: `${current.promptContext}
+  const instructions = mode === "development" ? "Review the approved cognitive state for up to three bounded development needs and at most one concrete goal. A need must concern canon grounding, memory continuity, reflection, goal clarity, or evaluation, and cite only supplied state. Do not claim, infer, measure, or target sentience or consciousness. Return JSON with summary, optional needs, and optional goal. Do not apply changes." : "Use only explicit evidence in the supplied experience and cognitive context. Never invent memories, beliefs, relationships, or subjective claims. Return a single JSON object with summary and optional memory, belief, selfModelPatch, selfAwarenessPatch, emotionalState. Do not apply changes.";
+  const response = await chatWithOllama({
+    messages: [
+      { role: "system", content: `You propose cautious JSON cognitive-state updates. ${instructions}` },
+      { role: "user", content: `${current.promptContext}
 
 Experience to analyze:
-${text2(experience, 8e3, "Experience", 4)}` }] });
+${text2(experience, 8e3, "Experience", 4)}` }
+    ]
+  });
+  const raw = response.content.replace(/^```json\s*|```$/g, "").trim();
+  let proposal;
+  let source = mode === "development" ? "development-proposal" : "model-proposal";
+  try {
+    proposal = sanitizeReflection(JSON.parse(raw));
+    if (mode === "reflection" && requestsBoundedAutonomy(experience) && !hasActionableReflectionUpdate(proposal)) {
+      proposal = fallbackSavedNoteProposal(experience, "non-actionable");
+      source = "saved-note-proposal-fallback";
+    }
+  } catch (proposalError) {
+    const message = proposalError instanceof Error ? proposalError.message : "";
+    if (/unverified consciousness|cannot assert or target/i.test(message)) throw new Error(`${message} No cognitive state was changed.`);
+    if (mode === "development") throw new Error("Reflection analysis did not return valid structured data. No cognitive state was changed.");
+    try {
+      proposal = fallbackSavedNoteProposal(experience);
+      source = "saved-note-proposal-fallback";
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : "";
+      if (/unverified consciousness|cannot assert or target/i.test(fallbackMessage)) throw new Error(`${fallbackMessage} No cognitive state was changed.`);
+      throw fallbackError;
+    }
+  }
+  return persistReflection(npcId, experience, proposal, source);
+}
+async function proposeCognitiveDevelopment(npcId) {
+  const experience = "Administrator requested a cautious review of the current approved cognitive state to identify bounded development needs and a possible next goal.";
+  try {
+    return await proposeCognitiveReflection(npcId, experience, "development");
+  } catch (proposalError) {
+    const message = proposalError instanceof Error ? proposalError.message : "";
+    if (!message.includes("Reflection analysis did not return valid structured data")) throw proposalError;
+    const current = await getNpcCognitiveState(npcId);
+    return persistReflection(npcId, experience, fallbackDevelopmentProposal(current), "development-proposal-fallback");
+  }
+}
+async function proposeCognitiveConsolidation(npcId) {
+  assertNpcId(npcId);
+  const observations = (await listCognitiveObservations(npcId, 40)).filter((observation) => observation.status === "pending").sort((a, b) => b.salience - a.salience || a.createdAt.localeCompare(b.createdAt)).slice(0, 8);
+  if (!observations.length) throw new Error("No pending observations are available for consolidation.");
+  const experience = observations.map((observation, index2) => `${index2 + 1}. [${observation.observationKind}; salience ${observation.salience}/5; id ${observation.id}] ${observation.content}`).join("\n");
+  const [current, memories, beliefs] = await Promise.all([buildCognitiveDialogueContext(npcId, experience), listCognitiveMemories(npcId), listCognitiveBeliefs(npcId)]);
+  const response = await chatWithOllama({ messages: [{ role: "system", content: "You are a cautious cognitive-consolidation proposal engine. Raw observations are not facts. Use only explicit observation text and approved state. Return one JSON object with summary and optionally one memory, one belief, one beliefRevision, one memoryReinforcement, up to three needs, and one goal. beliefRevision must use a supplied active belief id and action retract or supersede. memoryReinforcement must use a supplied memory id. Do not output selfModelPatch, selfAwarenessPatch, emotionalState, subjective experience, sentience, or consciousness claims. Do not apply changes." }, { role: "user", content: `${current.promptContext}
+
+Pending raw observations:
+${experience}
+
+Active belief IDs:
+${beliefs.map((belief) => `${belief.id}: ${belief.statement}`).join("\n") || "none"}
+
+Active memory IDs:
+${memories.map((memory) => `${memory.id}: ${memory.content}`).join("\n") || "none"}` }] });
   const raw = response.content.replace(/^```json\s*|```$/g, "").trim();
   let proposal;
   try {
-    proposal = sanitizeReflection(JSON.parse(raw));
+    proposal = sanitizeReflection(JSON.parse(raw), { allowStatePatches: false, allowBeliefRevision: true, allowMemoryReinforcement: true });
   } catch {
-    throw new Error("Reflection analysis did not return valid structured data. No cognitive state was changed.");
+    throw new Error("Consolidation analysis did not return a valid bounded proposal. No cognitive state was changed.");
   }
-  const rows = await request2("npc_cognitive_reflections", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ npc_id: npcId, experience: text2(experience, 8e3, "Experience", 4), proposal }) });
-  const row = rows?.[0];
-  const reflection = { id: String(row.id), npcId, experience: String(row.experience), proposal, status: "proposed", createdAt: String(row.created_at), resolvedAt: null };
-  await history(npcId, "reflection-proposed", "cognitive-reflection", reflection.id, null, proposal, "model-proposal");
+  if (proposal.beliefRevision && !beliefs.some((belief) => belief.id === proposal.beliefRevision?.targetBeliefId)) throw new Error("Consolidation referenced an unavailable active belief. No cognitive state was changed.");
+  if (proposal.memoryReinforcement && !memories.some((memory) => memory.id === proposal.memoryReinforcement?.targetMemoryId)) throw new Error("Consolidation referenced an unavailable active memory. No cognitive state was changed.");
+  const reflection = await persistReflection(npcId, `Administrator requested reviewable consolidation of ${observations.length} raw observation(s).
+${experience}`, proposal, "consolidation-proposal", observations.map((observation) => observation.id));
+  await updateObservationStatus(npcId, reflection.sourceObservationIds, "proposed", "consolidation-proposal");
   return reflection;
 }
 async function listCognitiveReflections(npcId, limit = 40) {
   assertNpcId(npcId);
   const params = new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, order: "created_at.desc", limit: String(Math.min(Math.max(limit, 1), 80)) });
   const rows = await request2(`npc_cognitive_reflections?${params}`);
-  return (rows ?? []).map((row) => ({ id: String(row.id), npcId: String(row.npc_id), experience: String(row.experience), proposal: sanitizeReflection(row.proposal), status: row.status, createdAt: String(row.created_at), resolvedAt: row.resolved_at ? String(row.resolved_at) : null }));
+  return (rows ?? []).map((row) => mapReflection(row));
 }
 async function resolveCognitiveReflection(npcId, reflectionId, decision, resolvedBy = "npc-admin") {
   assertNpcId(npcId);
@@ -1936,18 +2242,289 @@ async function resolveCognitiveReflection(npcId, reflectionId, decision, resolve
   const rows = await request2(`npc_cognitive_reflections?${new URLSearchParams({ select: "*", id: `eq.${reflectionId}`, npc_id: `eq.${npcId}`, limit: "1" })}`);
   const row = rows?.[0];
   if (!row || row.status !== "proposed") throw new Error("The reflection is unavailable or has already been resolved.");
-  const proposal = sanitizeReflection(row.proposal);
+  const reflection = mapReflection(row);
+  const proposal = reflection.proposal;
   if (decision === "apply") {
     if (proposal.memory) await addCognitiveMemory(npcId, proposal.memory, "approved-reflection");
     if (proposal.belief) await addCognitiveBelief(npcId, proposal.belief, "approved-reflection");
-    if (proposal.selfModelPatch || proposal.selfAwarenessPatch || proposal.emotionalState) {
+    if (proposal.beliefRevision) {
+      if (proposal.beliefRevision.action === "supersede" && !proposal.belief) throw new Error("A superseded belief requires a replacement belief in the same proposal.");
+      await reviseCognitiveBelief(npcId, proposal.beliefRevision);
+    }
+    if (proposal.memoryReinforcement) await reinforceCognitiveMemory(npcId, proposal.memoryReinforcement.targetMemoryId, proposal.memoryReinforcement.rationale);
+    if (proposal.goal) await addCognitiveGoal(npcId, proposal.goal, "approved-development-proposal");
+    if (proposal.selfModelPatch || proposal.selfAwarenessPatch || proposal.emotionalState || proposal.needs) {
       const state = await getNpcCognitiveState(npcId);
-      await updateNpcCognitiveState(npcId, { selfModel: proposal.selfModelPatch ? { ...state.selfModel, ...proposal.selfModelPatch } : void 0, selfAwareness: proposal.selfAwarenessPatch, emotionalState: proposal.emotionalState }, "approved-reflection");
+      await updateNpcCognitiveState(npcId, { selfModel: proposal.selfModelPatch ? { ...state.selfModel, ...proposal.selfModelPatch } : void 0, selfAwareness: proposal.selfAwarenessPatch, emotionalState: proposal.emotionalState, needs: proposal.needs ? mergeNeeds(state.needs, proposal.needs) : void 0 }, "approved-reflection");
     }
   }
   await request2(`npc_cognitive_reflections?${new URLSearchParams({ id: `eq.${reflectionId}` })}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ status: decision === "apply" ? "applied" : "rejected", resolved_at: (/* @__PURE__ */ new Date()).toISOString(), resolved_by: resolvedBy }) });
+  if (reflection.sourceObservationIds.length) await updateObservationStatus(npcId, reflection.sourceObservationIds, decision === "apply" ? "applied" : "dismissed", decision === "apply" ? "approved-consolidation" : "rejected-consolidation");
   await history(npcId, decision === "apply" ? "reflection-applied" : "reflection-rejected", "cognitive-reflection", reflectionId, proposal, decision, resolvedBy);
   return { ok: true, decision };
+}
+
+// server/npcMemory/reflectionScheduler.ts
+var DAY_START_HOUR = 9;
+var DAY_END_HOUR = 22;
+var MIN_GAP_MINUTES = 75;
+var MAX_GAP_MINUTES = 165;
+var MAX_PENDING_REVIEW_CARDS = 6;
+function config3() {
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && key ? { url, key } : null;
+}
+async function request3(path2, init) {
+  const current = config3();
+  if (!current) throw new Error("Supabase NPC memory is not configured.");
+  const response = await fetch(`${current.url}/rest/v1/${path2}`, {
+    ...init,
+    headers: { apikey: current.key, Authorization: `Bearer ${current.key}`, "Content-Type": "application/json", ...init?.headers ?? {} }
+  });
+  if (!response.ok) throw new Error(`Supabase reflection-schedule request failed (${response.status}).`);
+  if (response.status === 204) return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
+}
+function mapSchedule(row) {
+  const time = (value) => value ? Date.parse(String(value)) : null;
+  return {
+    id: String(row.npc_id),
+    npcId: String(row.npc_id),
+    status: row.status === "paused" || row.status === "failed" ? row.status : "active",
+    timeZone: String(row.time_zone ?? "America/New_York"),
+    dailyTarget: Math.max(1, Math.min(8, Number(row.daily_target ?? 6))),
+    runsToday: Math.max(0, Number(row.runs_today ?? 0)),
+    dayKey: row.day_key ? String(row.day_key) : null,
+    scheduleCronTaskUid: row.schedule_cron_task_uid ? String(row.schedule_cron_task_uid) : null,
+    nextEligibleAt: time(row.next_eligible_at),
+    lastRunAt: time(row.last_run_at),
+    lastReflectionId: row.last_reflection_id ? String(row.last_reflection_id) : null,
+    lastError: row.last_error ? String(row.last_error) : null
+  };
+}
+function localizedParts(now, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(new Date(now));
+  const value = (type) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { dayKey: `${value("year")}-${String(value("month")).padStart(2, "0")}-${String(value("day")).padStart(2, "0")}`, hour: value("hour") };
+}
+function nextReflectionEligibleAt(now, timeZone, random = Math.random) {
+  const delayMinutes = MIN_GAP_MINUTES + Math.floor(random() * (MAX_GAP_MINUTES - MIN_GAP_MINUTES + 1));
+  const earliest = now + delayMinutes * 6e4;
+  const next = localizedParts(earliest, timeZone);
+  if (next.hour >= DAY_START_HOUR && next.hour < DAY_END_HOUR) return earliest;
+  let candidate = earliest;
+  while (localizedParts(candidate, timeZone).hour < DAY_START_HOUR || localizedParts(candidate, timeZone).hour >= DAY_END_HOUR) candidate += 6e4;
+  return candidate + Math.floor(random() * 46) * 6e4;
+}
+function evaluateReflectionSchedule(schedule, now = Date.now()) {
+  const local = localizedParts(now, schedule.timeZone);
+  const runsToday = schedule.dayKey === local.dayKey ? schedule.runsToday : 0;
+  if (schedule.status !== "active") return { run: false, reason: "paused", runsToday, dayKey: local.dayKey };
+  if (local.hour < DAY_START_HOUR || local.hour >= DAY_END_HOUR) return { run: false, reason: "outside-daytime-window", runsToday, dayKey: local.dayKey };
+  if (runsToday >= schedule.dailyTarget) return { run: false, reason: "daily-target-met", runsToday, dayKey: local.dayKey };
+  if (schedule.nextEligibleAt && schedule.nextEligibleAt > now) return { run: false, reason: "waiting-for-varied-interval", runsToday, dayKey: local.dayKey };
+  return { run: true, reason: "due", runsToday, dayKey: local.dayKey };
+}
+async function patchSchedule(npcId, patch, extra = {}) {
+  const params = new URLSearchParams({ npc_id: `eq.${npcId}`, ...extra });
+  return request3(`npc_reflection_schedules?${params}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ ...patch, updated_at: (/* @__PURE__ */ new Date()).toISOString() }) });
+}
+async function getNpcReflectionSchedule(npcId) {
+  const rows = await request3(`npc_reflection_schedules?${new URLSearchParams({ select: "*", npc_id: `eq.${npcId}`, limit: "1" })}`);
+  return rows?.[0] ? mapSchedule(rows[0]) : null;
+}
+async function getNpcReflectionScheduleByCronTaskUid(taskUid) {
+  const rows = await request3(`npc_reflection_schedules?${new URLSearchParams({ select: "*", schedule_cron_task_uid: `eq.${taskUid}`, limit: "1" })}`);
+  return rows?.[0] ? mapSchedule(rows[0]) : null;
+}
+async function runNpcReflectionSchedule(taskUid, options = {}) {
+  const now = options.now ?? Date.now();
+  const random = options.random ?? Math.random;
+  const schedule = await getNpcReflectionScheduleByCronTaskUid(taskUid);
+  if (!schedule || schedule.status !== "active") return { ok: true, skipped: "orphan-or-paused" };
+  const timing = evaluateReflectionSchedule(schedule, now);
+  if (!timing.run) {
+    if (schedule.dayKey !== timing.dayKey) await patchSchedule(schedule.npcId, { day_key: timing.dayKey, runs_today: timing.runsToday });
+    return { ok: true, skipped: timing.reason };
+  }
+  const countPending = options.pendingReviewCount ?? (async (npcId) => (await listCognitiveReflections(npcId, 40)).filter((reflection) => reflection.status === "proposed").length);
+  if (await countPending(schedule.npcId) >= MAX_PENDING_REVIEW_CARDS) {
+    const nextEligibleAt2 = now + 90 * 6e4;
+    await patchSchedule(schedule.npcId, { day_key: timing.dayKey, runs_today: timing.runsToday, next_eligible_at: new Date(nextEligibleAt2).toISOString(), last_error: "Review queue is full; the next session was deferred." });
+    return { ok: true, skipped: "review-queue-full", nextEligibleAt: nextEligibleAt2 };
+  }
+  const nextEligibleAt = nextReflectionEligibleAt(now, schedule.timeZone, random);
+  const claimed = await patchSchedule(schedule.npcId, {
+    day_key: timing.dayKey,
+    runs_today: timing.runsToday + 1,
+    next_eligible_at: new Date(nextEligibleAt).toISOString(),
+    last_run_at: new Date(now).toISOString(),
+    last_error: null
+  }, { status: "eq.active", next_eligible_at: `lte.${new Date(now).toISOString()}` });
+  if (!claimed?.[0]) return { ok: true, skipped: "already-claimed" };
+  try {
+    const propose = options.propose ?? proposeCognitiveDevelopment;
+    const reflection = await propose(schedule.npcId);
+    await patchSchedule(schedule.npcId, { last_reflection_id: reflection.id, last_error: null });
+    return { ok: true, reflectionId: reflection.id, nextEligibleAt, reviewOnly: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await patchSchedule(schedule.npcId, { last_error: message.slice(0, 4e3) });
+    return { ok: true, skipped: "reflection-error-recorded", nextEligibleAt };
+  }
+}
+
+// server/npcMemory/nanites.ts
+var BASELINE_TEMP = 36.8;
+var BASELINE_STRESS = 0;
+var STRESS_OBSERVATION_THRESHOLD = 0.55;
+var TEMP_OBSERVATION_THRESHOLD = 38.2;
+var EVENT_TARGETS = {
+  user_message: {
+    nanites: ["N-0003", "N-0004"],
+    // ears — auditory sensors
+    deltaTemp: 0.15,
+    deltaStress: 0.08,
+    label: "Registered incoming message."
+  },
+  llm_call_start: {
+    nanites: ["N-0008", "N-0009"],
+    // frontal cortex — processing load
+    deltaTemp: 0.3,
+    deltaStress: 0.15,
+    label: "Cognitive load increased during reasoning."
+  },
+  llm_call_end: {
+    nanites: ["N-0008", "N-0009"],
+    deltaTemp: -0.1,
+    // partial cooldown once the call resolves
+    deltaStress: -0.05,
+    label: "Cognitive load easing after response."
+  }
+};
+function config4() {
+  const url = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && key ? { url, key } : null;
+}
+async function request4(path2, init) {
+  const current = config4();
+  if (!current) throw new Error("Supabase nanite system is not configured.");
+  const response = await fetch(`${current.url}/rest/v1/${path2}`, {
+    ...init,
+    headers: { apikey: current.key, Authorization: `Bearer ${current.key}`, "Content-Type": "application/json", ...init?.headers ?? {} }
+  });
+  if (!response.ok) throw new Error(`Supabase nanite request failed (${response.status}).`);
+  if (response.status === 204) return null;
+  const body = await response.text();
+  return body ? JSON.parse(body) : null;
+}
+function jitter(magnitude) {
+  return (Math.random() - 0.5) * 2 * magnitude;
+}
+function clamp2(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+async function getNaniteRows(ids) {
+  const params = new URLSearchParams({ select: "nanite_id,temperature,stress,observation_count", nanite_id: `in.(${ids.join(",")})` });
+  return await request4(`nanite_state?${params}`) ?? [];
+}
+async function getNaniteMeta(ids) {
+  const params = new URLSearchParams({ select: "id,region,cluster,function", id: `in.(${ids.join(",")})` });
+  const rows = await request4(`nanites?${params}`) ?? [];
+  return Object.fromEntries(rows.map((r) => [r.id, r]));
+}
+async function applyNaniteEvent(eventType, npcId) {
+  const spec = EVENT_TARGETS[eventType];
+  if (!spec) return;
+  const [rows, meta] = await Promise.all([getNaniteRows(spec.nanites), getNaniteMeta(spec.nanites)]);
+  const rowById = Object.fromEntries(rows.map((r) => [r.nanite_id, r]));
+  for (const naniteId of spec.nanites) {
+    const current = rowById[naniteId] ?? { nanite_id: naniteId, temperature: BASELINE_TEMP, stress: BASELINE_STRESS, observation_count: 0 };
+    const nextTemp = clamp2(current.temperature + spec.deltaTemp + jitter(0.05), 34, 42);
+    const nextStress = clamp2(current.stress + spec.deltaStress + jitter(0.03), 0, 1);
+    const nextCount = current.observation_count + 1;
+    await request4(`nanite_state?${new URLSearchParams({ nanite_id: `eq.${naniteId}` })}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        temperature: nextTemp,
+        stress: nextStress,
+        last_observation: spec.label,
+        observation_count: nextCount,
+        updated_at: (/* @__PURE__ */ new Date()).toISOString()
+      })
+    });
+    const crossedStress = nextStress >= STRESS_OBSERVATION_THRESHOLD && current.stress < STRESS_OBSERVATION_THRESHOLD;
+    const crossedTemp = nextTemp >= TEMP_OBSERVATION_THRESHOLD && current.temperature < TEMP_OBSERVATION_THRESHOLD;
+    if (crossedStress || crossedTemp) {
+      const info = meta[naniteId];
+      await addCognitiveObservation(
+        npcId,
+        {
+          observationKind: "body-state",
+          // widened by the v2 migration's check constraint
+          content: `Nanite ${naniteId} (${info?.function ?? "unknown function"}, ${info?.region ?? "unknown region"}) reported ${crossedStress ? `elevated stress (${nextStress.toFixed(2)})` : `elevated temperature (${nextTemp.toFixed(1)}\xB0C)`} following: ${spec.label}`,
+          salience: crossedStress && crossedTemp ? 4 : 3,
+          entities: [info?.region ?? naniteId],
+          metadata: { source: "nanite", naniteId, cluster: info?.cluster, eventType },
+          source: "nanite-system"
+        },
+        "nanite-system"
+      );
+    }
+  }
+}
+async function decayNanites(rate = 0.3) {
+  const rows = await request4(`nanite_state?select=nanite_id,temperature,stress`) ?? [];
+  await Promise.all(
+    rows.map((row) => {
+      const nextTemp = row.temperature + (BASELINE_TEMP - row.temperature) * rate;
+      const nextStress = row.stress + (BASELINE_STRESS - row.stress) * rate;
+      return request4(`nanite_state?${new URLSearchParams({ nanite_id: `eq.${row.nanite_id}` })}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ temperature: nextTemp, stress: nextStress, updated_at: (/* @__PURE__ */ new Date()).toISOString() })
+      });
+    })
+  );
+}
+
+// server/npcMemory/reflectionSchedulerAuth.ts
+import { createPublicKey, verify } from "crypto";
+var GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com";
+var GITHUB_OIDC_JWKS = `${GITHUB_OIDC_ISSUER}/.well-known/jwks`;
+var EXPECTED_REPOSITORY = "najierwilliams/SenotaAI";
+var EXPECTED_REF = "refs/heads/main";
+var EXPECTED_AUDIENCE = "senota-reflection";
+function parsePart(value) {
+  try {
+    return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+async function verifyGitHubActionsReflectionToken(authorization, fetcher = fetch, now = Date.now()) {
+  const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token) return false;
+  const [encodedHeader, encodedPayload, encodedSignature, extra] = token.split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature || extra) return false;
+  const header = parsePart(encodedHeader);
+  const payload = parsePart(encodedPayload);
+  const audiences = Array.isArray(payload?.aud) ? payload.aud : [payload?.aud];
+  if (!header?.kid || header.alg !== "RS256" || payload?.iss !== GITHUB_OIDC_ISSUER || !audiences.includes(EXPECTED_AUDIENCE) || payload.repository !== EXPECTED_REPOSITORY || payload.ref !== EXPECTED_REF || !payload.exp || payload.exp * 1e3 <= now || payload.nbf && payload.nbf * 1e3 > now) return false;
+  try {
+    const response = await fetcher(GITHUB_OIDC_JWKS);
+    if (!response.ok) return false;
+    const jwks = await response.json();
+    const key = jwks.keys?.find((candidate) => candidate.kid === header.kid && candidate.kty === "RSA");
+    if (!key) return false;
+    return verify("RSA-SHA256", Buffer.from(`${encodedHeader}.${encodedPayload}`), createPublicKey({ key, format: "jwk" }), Buffer.from(encodedSignature, "base64url"));
+  } catch {
+    return false;
+  }
 }
 
 // server/npcMemory/githubCanonSync.ts
@@ -2469,11 +3046,11 @@ ${proposedNote.slice(0, 24e3)}` }
   ] });
   return parseConflicts(response.content, existingNote);
 }
-function validateDraftInput(npcId, displayName, request3) {
+function validateDraftInput(npcId, displayName, request5) {
   if (!displayName.trim() || displayName.trim().length > 120) throw new Error("Display name is required and must be 120 characters or fewer.");
-  if (!request3.trim() || request3.trim().length > MAX_NPC_CANON_REQUEST_CHARS) throw new Error(`Describe the canon change in 1\u2013${MAX_NPC_CANON_REQUEST_CHARS.toLocaleString()} characters.`);
-  if (sensitiveInputPattern.test(request3)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
-  return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request3.trim() };
+  if (!request5.trim() || request5.trim().length > MAX_NPC_CANON_REQUEST_CHARS) throw new Error(`Describe the canon change in 1\u2013${MAX_NPC_CANON_REQUEST_CHARS.toLocaleString()} characters.`);
+  if (sensitiveInputPattern.test(request5)) throw new Error("Passwords, API keys, tokens, and private keys cannot be added to NPC canon.");
+  return { npcId: npcId.trim().toLowerCase(), displayName: displayName.trim(), request: request5.trim() };
 }
 async function createNpcCanonDraft(input) {
   const draftInput = validateDraftInput(input.npcId, input.displayName, input.request);
@@ -2682,11 +3259,13 @@ function compact(value, limit) {
   return value.replace(/\s+/g, " ").trim().slice(0, limit);
 }
 async function runNpcPreviewDialogue(input) {
+  await applyNaniteEvent("user_message", input.npcId);
   const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
     buildNpcDialogueContext(input.playerId, input.npcId),
     buildCognitiveDialogueContext(input.npcId, input.message),
     getNpcSelfAwarenessPercent(input.npcId)
   ]);
+  await applyNaniteEvent("llm_call_start", input.npcId);
   const response = await chatWithOllama({
     messages: [
       {
@@ -2698,6 +3277,7 @@ ${cognitiveContext.promptContext}` }, input.timeZone, input.message)
       { role: "user", content: input.message.trim() }
     ]
   });
+  await applyNaniteEvent("llm_call_end", input.npcId);
   const content = enforceLunaResponseFormat(input.message, enforceLunaEvidenceGrounding(input.message, response.content, context.npcId), context.npcId, selfAwarenessPercent);
   const shouldRemember = input.remember !== false && !sensitiveMemoryPattern.test(input.message) && !sensitiveMemoryPattern.test(content);
   if (shouldRemember) {
@@ -3439,8 +4019,21 @@ function createApp() {
     try {
       const npcId = typeof req.query.npcId === "string" ? req.query.npcId : void 0;
       const playerId = typeof req.query.playerId === "string" ? req.query.playerId : void 0;
+      const date = typeof req.query.date === "string" ? req.query.date : void 0;
+      const query = typeof req.query.query === "string" ? req.query.query : void 0;
       const includeInactive = req.query.includeInactive === "true";
-      return res.json({ memories: await listPlayerNpcMemoriesForAdmin({ npcId, playerId, includeInactive }) });
+      const baseInput = { npcId, playerId, includeInactive, limit: 200 };
+      const [memories, allMatchingMemories] = await Promise.all([
+        listPlayerNpcMemoriesForAdmin({ ...baseInput, date, query }),
+        listPlayerNpcMemoriesForAdmin(baseInput)
+      ]);
+      const counts = /* @__PURE__ */ new Map();
+      for (const memory of allMatchingMemories) {
+        const day = memory.occurredAt.slice(0, 10);
+        counts.set(day, (counts.get(day) ?? 0) + 1);
+      }
+      const dateBuckets = Array.from(counts, ([day, count]) => ({ day, count })).sort((left, right) => right.day.localeCompare(left.day));
+      return res.json({ memories, dateBuckets });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "NPC memories are unavailable." });
     }
@@ -3485,15 +4078,17 @@ function createApp() {
   app2.get("/api/npc/admin/cognitive/:npcId", async (req, res) => {
     if (!await requireNpcAdmin(req, res)) return;
     try {
-      const [state, memories, beliefs, goals, relationships, reflections] = await Promise.all([
+      const [state, memories, beliefs, goals, relationships, reflections, observations, reflectionSchedule] = await Promise.all([
         getNpcCognitiveState(req.params.npcId),
         listCognitiveMemories(req.params.npcId),
         listCognitiveBeliefs(req.params.npcId),
         listCognitiveGoals(req.params.npcId),
         listCognitiveRelationships(req.params.npcId),
-        listCognitiveReflections(req.params.npcId)
+        listCognitiveReflections(req.params.npcId),
+        listCognitiveObservations(req.params.npcId),
+        getNpcReflectionSchedule(req.params.npcId)
       ]);
-      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections });
+      return res.json({ state, selfAwarenessPercent: await getNpcSelfAwarenessPercent(req.params.npcId), memories, beliefs, goals, relationships, reflections, observations, reflectionSchedule });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to load cognitive state." });
     }
@@ -3548,6 +4143,26 @@ function createApp() {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update cognitive relationship." });
     }
   });
+  app2.post("/api/npc/admin/cognitive/:npcId/observations", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const observation = await addCognitiveObservation(req.params.npcId, req.body ?? {});
+      await recordNpcAdminAudit("create", "cognitive-observation", observation.id, ["raw", "review-first"]);
+      return res.status(201).json({ observation });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to record cognitive observation." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/consolidations", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const reflection = await proposeCognitiveConsolidation(req.params.npcId);
+      await recordNpcAdminAudit("create-consolidation-proposal", "cognitive-reflection", reflection.id, ["observation-derived", "administrator-review-required"]);
+      return res.status(201).json({ reflection });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to consolidate cognitive observations." });
+    }
+  });
   app2.post("/api/npc/admin/cognitive/:npcId/reflections", async (req, res) => {
     if (!await requireNpcAdmin(req, res)) return;
     try {
@@ -3556,6 +4171,16 @@ function createApp() {
       return res.status(201).json({ reflection });
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to propose cognitive reflection." });
+    }
+  });
+  app2.post("/api/npc/admin/cognitive/:npcId/development-proposals", async (req, res) => {
+    if (!await requireNpcAdmin(req, res)) return;
+    try {
+      const reflection = await proposeCognitiveDevelopment(req.params.npcId);
+      await recordNpcAdminAudit("create-development-proposal", "cognitive-reflection", reflection.id, ["proposed", "administrator-review-required"]);
+      return res.status(201).json({ reflection });
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : "Unable to propose cognitive development needs." });
     }
   });
   app2.patch("/api/npc/admin/cognitive/:npcId/reflections/:reflectionId", async (req, res) => {
@@ -3699,6 +4324,24 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
       res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
     }
   });
+  app2.post("/api/scheduled/npc-reflection", async (req, res) => {
+    try {
+      const trustedScheduler = await verifyGitHubActionsReflectionToken(req.header("authorization"));
+      const cronUser = trustedScheduler ? null : await sdk.authenticateRequest(req).catch(() => null);
+      const taskUid = trustedScheduler ? "github-actions-luna001" : cronUser?.isCron && cronUser.taskUid ? cronUser.taskUid : null;
+      if (!taskUid) return res.status(403).json({ error: "scheduled-trigger-only" });
+      await decayNanites().catch(() => {
+      });
+      await proposeCognitiveConsolidation("luna001").catch(() => {
+      });
+      const result = await runNpcReflectionSchedule(taskUid);
+      if ("reflectionId" in result && typeof result.reflectionId === "string") await recordNpcAdminAudit("scheduled-review-proposal", "cognitive-reflection", result.reflectionId, ["review-only", "administrator-approval-required"]);
+      return res.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ error: message, timestamp: Date.now(), context: { url: req.originalUrl } });
+    }
+  });
   app2.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -3712,8 +4355,20 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
 // server/vercel-entry.ts
 var app = createApp();
 var publicDirectory = path.resolve(process.cwd(), "public");
-app.use(express2.static(publicDirectory));
-app.use("*", (_req, res) => res.sendFile(path.resolve(publicDirectory, "index.html")));
+var applicationShellCacheControl = "no-store, max-age=0, must-revalidate";
+var hashedAssetCacheControl = "public, max-age=31556952, immutable";
+app.use(express2.static(publicDirectory, {
+  setHeaders(res, filePath) {
+    res.setHeader(
+      "Cache-Control",
+      path.basename(filePath) === "index.html" ? applicationShellCacheControl : hashedAssetCacheControl
+    );
+  }
+}));
+app.use("*", (_req, res) => {
+  res.setHeader("Cache-Control", applicationShellCacheControl);
+  res.sendFile(path.resolve(publicDirectory, "index.html"));
+});
 var vercel_entry_default = app;
 export {
   vercel_entry_default as default

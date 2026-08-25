@@ -14,6 +14,58 @@ export type BrainStructureCategory =
   | "white_matter"
   | "other";
 
+export type BrainStructureDepth =
+  | "surface"
+  | "intermediate"
+  | "deep"
+  | "central";
+
+export type BrainScale =
+  | "macro"
+  | "tissue"
+  | "cellular"
+  | "subcellular"
+  | "molecular";
+
+export interface BrainScaleOption {
+  value: BrainScale;
+  label: string;
+  description: string;
+}
+
+export const BRAIN_SCALE_OPTIONS: BrainScaleOption[] = [
+  {
+    value: "macro",
+    label: "Macro",
+    description:
+      "Whole-brain and anatomical structure scale.",
+  },
+  {
+    value: "tissue",
+    label: "Tissue",
+    description:
+      "Tissue architecture and local microanatomy.",
+  },
+  {
+    value: "cellular",
+    label: "Cellular",
+    description:
+      "Individual cells and cellular organization.",
+  },
+  {
+    value: "subcellular",
+    label: "Subcellular",
+    description:
+      "Intracellular structures and organelles.",
+  },
+  {
+    value: "molecular",
+    label: "Molecular",
+    description:
+      "Molecular components, pathways, and interactions.",
+  },
+];
+
 export interface BrainStructure {
   id: string;
   sourceName: string;
@@ -21,19 +73,11 @@ export interface BrainStructure {
   hemisphere: BrainHemisphere;
   category: BrainStructureCategory;
   parentRegion: string | null;
+  depth: BrainStructureDepth;
+  scale: BrainScale;
+  searchText: string;
 }
 
-/**
- * Converts a GLB mesh/node name into a stable ID.
- *
- * Example:
- *
- * Allen_head_of_hippocampus_L
- *
- * becomes:
- *
- * allen_head_of_hippocampus_l
- */
 export function createStructureId(
   sourceName: string,
 ): string {
@@ -44,16 +88,11 @@ export function createStructureId(
     .replace(/^_+|_+$/g, "");
 }
 
-/**
- * Determines the hemisphere encoded in the
- * Allen atlas mesh name.
- */
 export function detectHemisphere(
   sourceName: string,
 ): BrainHemisphere {
-  const normalized = sourceName
-    .trim()
-    .toLowerCase();
+  const normalized =
+    sourceName.trim().toLowerCase();
 
   if (
     normalized.endsWith("_l") ||
@@ -72,10 +111,6 @@ export function detectHemisphere(
   return "unknown";
 }
 
-/**
- * Converts the source mesh name into a human-readable
- * display name.
- */
 export function createDisplayName(
   sourceName: string,
 ): string {
@@ -104,21 +139,13 @@ export function createDisplayName(
     .join(" ");
 }
 
-/**
- * Determines a broad anatomical category.
- *
- * This is deliberately conservative. We are not assigning
- * neurological functions here.
- */
 export function detectCategory(
   sourceName: string,
 ): BrainStructureCategory {
   const name =
     sourceName.toLowerCase();
 
-  if (
-    name.includes("cerebell")
-  ) {
+  if (name.includes("cerebell")) {
     return "cerebellar";
   }
 
@@ -180,9 +207,6 @@ export function detectCategory(
   return "other";
 }
 
-/**
- * Attempts to determine the broad parent anatomical region.
- */
 export function detectParentRegion(
   sourceName: string,
 ): string | null {
@@ -225,54 +249,125 @@ export function detectParentRegion(
   return null;
 }
 
-/**
- * Creates the Luna anatomical metadata record
- * for an individual GLB mesh.
- */
+export function detectDepth(
+  category: BrainStructureCategory,
+  parentRegion: string | null,
+): BrainStructureDepth {
+  const region =
+    parentRegion?.toLowerCase() ?? "";
+
+  if (
+    category === "brainstem" ||
+    category === "cerebellar"
+  ) {
+    return "central";
+  }
+
+  if (
+    category === "subcortical" ||
+    category === "limbic" ||
+    region === "thalamus" ||
+    region === "hypothalamus"
+  ) {
+    return "deep";
+  }
+
+  if (
+    category === "white_matter" ||
+    category === "ventricular"
+  ) {
+    return "intermediate";
+  }
+
+  if (category === "cortical") {
+    return "surface";
+  }
+
+  return "intermediate";
+}
+
+export function detectScale(
+  _depth: BrainStructureDepth,
+): BrainScale {
+  return "macro";
+}
+
+export function getBrainScaleOption(
+  scale: BrainScale,
+): BrainScaleOption {
+  return (
+    BRAIN_SCALE_OPTIONS.find(
+      (option) =>
+        option.value === scale,
+    ) ?? BRAIN_SCALE_OPTIONS[0]
+  );
+}
+
 export function createBrainStructure(
   sourceName: string,
 ): BrainStructure {
+  const category =
+    detectCategory(sourceName);
+
+  const parentRegion =
+    detectParentRegion(sourceName);
+
+  const displayName =
+    createDisplayName(sourceName);
+
+  const id =
+    createStructureId(sourceName);
+
+  const depth =
+    detectDepth(
+      category,
+      parentRegion,
+    );
+
+  const scale =
+    detectScale(depth);
+
   return {
-    id: createStructureId(
-      sourceName,
-    ),
-
+    id,
     sourceName,
-
-    displayName:
-      createDisplayName(
-        sourceName,
-      ),
-
+    displayName,
     hemisphere:
-      detectHemisphere(
-        sourceName,
-      ),
-
-    category:
-      detectCategory(
-        sourceName,
-      ),
-
-    parentRegion:
-      detectParentRegion(
-        sourceName,
-      ),
+      detectHemisphere(sourceName),
+    category,
+    parentRegion,
+    depth,
+    scale,
+    searchText: [
+      id,
+      sourceName,
+      displayName,
+      parentRegion ?? "",
+      category,
+      depth,
+      scale,
+    ]
+      .join(" ")
+      .toLowerCase(),
   };
 }
 
-/**
- * Builds a registry from the names found in the GLB.
- */
 export function buildBrainStructureRegistry(
   sourceNames: string[],
 ): BrainStructure[] {
+  const seen = new Set<string>();
+
   return sourceNames
     .filter(
       (name) =>
         Boolean(name?.trim()),
     )
-    .map(
-      createBrainStructure,
-    );
+    .map(createBrainStructure)
+    .filter((structure) => {
+      if (seen.has(structure.id)) {
+        return false;
+      }
+
+      seen.add(structure.id);
+      return true;
+    });
 }
