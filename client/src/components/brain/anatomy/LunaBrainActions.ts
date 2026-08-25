@@ -10,7 +10,14 @@ import type {
 
 import {
   nanobotActions,
+  type NanobotFleetInspection,
 } from "./NanobotActions";
+
+import {
+  nanobotMissionSequenceRegistry,
+  type CreateNanobotMissionSequenceInput,
+  type NanobotMissionSequence,
+} from "./NanobotMissionSequence";
 
 import type {
   Nanobot,
@@ -60,7 +67,10 @@ export interface LunaBrainCommandBridge {
   deployMission: (
     type: NanobotType,
     structure: BrainStructure,
-  ) => void;
+  ) => string | null;
+  pauseNanobot: (id: string) => boolean;
+  resumeNanobot: (id: string) => boolean;
+  returnNanobot: (id: string) => boolean;
   pauseFleet: () => void;
   resumeFleet: () => void;
   returnFleet: () => void;
@@ -328,6 +338,10 @@ export const lunaBrainActions = {
     return nanobotActions.getFleet();
   },
 
+  inspectFleet(): NanobotFleetInspection {
+    return nanobotActions.inspectFleet();
+  },
+
   getNanobot(id: string): Nanobot | null {
     return nanobotActions.getFleet().find(
       (nanobot) => nanobot.id === id,
@@ -349,7 +363,7 @@ export const lunaBrainActions = {
   deployMission(
     type: NanobotType,
     structureId: string,
-  ): LunaBrainActionResult<null> {
+  ): LunaBrainActionResult<string | null> {
     const state = activeState();
     const structure = state?.structures.find(
       (candidate) => candidate.id === structureId,
@@ -379,13 +393,166 @@ export const lunaBrainActions = {
       };
     }
 
-    currentBridge.deployMission(type, structure);
+    const nanobotId = currentBridge.deployMission(type, structure);
+    return nanobotId
+      ? {
+          ok: true,
+          message:
+            `Requested ${type} simulation deployment for ${structure.displayName}.`,
+          data: nanobotId,
+        }
+      : {
+          ok: false,
+          message:
+            `The ${type} mission could not be created for ${structure.displayName}.`,
+          data: null,
+        };
+  },
+
+  pauseNanobot(id: string): LunaBrainActionResult<boolean> {
+    if (!currentBridge) {
+      return { ok: false, message: "Luna Brain is not open.", data: false };
+    }
+    const paused = currentBridge.pauseNanobot(id);
     return {
-      ok: true,
-      message:
-        `Requested ${type} simulation deployment for ${structure.displayName}.`,
-      data: null,
+      ok: paused,
+      message: paused
+        ? `Paused nanobot ${id}; other fleet missions remain unchanged.`
+        : `Nanobot ${id} cannot be paused in its current state.`,
+      data: paused,
     };
+  },
+
+  resumeNanobot(id: string): LunaBrainActionResult<boolean> {
+    if (!currentBridge) {
+      return { ok: false, message: "Luna Brain is not open.", data: false };
+    }
+    const resumed = currentBridge.resumeNanobot(id);
+    return {
+      ok: resumed,
+      message: resumed
+        ? `Resumed nanobot ${id}; other fleet missions remain unchanged.`
+        : `Nanobot ${id} cannot be resumed in its current state.`,
+      data: resumed,
+    };
+  },
+
+  returnNanobot(id: string): LunaBrainActionResult<boolean> {
+    if (!currentBridge) {
+      return { ok: false, message: "Luna Brain is not open.", data: false };
+    }
+    const returning = currentBridge.returnNanobot(id);
+    return {
+      ok: returning,
+      message: returning
+        ? `Requested physical return for nanobot ${id}; other fleet missions remain unchanged.`
+        : `Nanobot ${id} cannot return in its current state.`,
+      data: returning,
+    };
+  },
+
+  planSequence(
+    input: CreateNanobotMissionSequenceInput,
+  ): LunaBrainActionResult<NanobotMissionSequence> {
+    const state = activeState();
+    if (!state || !currentBridge) {
+      return {
+        ok: false,
+        message: "Luna Brain is not open, so a live sequence cannot be planned.",
+        data: null as never,
+      };
+    }
+
+    for (const step of input.steps) {
+      const structure = state.structures.find(
+        (candidate) => candidate.id === step.structureId,
+      );
+      if (!structure) {
+        return {
+          ok: false,
+          message: `Sequence step ${step.id} does not name a loaded canonical target.`,
+          data: null as never,
+        };
+      }
+      const target = this.resolveSpatialTarget(structure.id);
+      if (state.observationContext.scale !== "macro" || !target.ok) {
+        return {
+          ok: false,
+          message: `Sequence step ${step.id} cannot be planned: ${target.message}`,
+          data: null as never,
+        };
+      }
+    }
+
+    const created = nanobotMissionSequenceRegistry.create(input);
+    return created.sequence
+      ? {
+          ok: true,
+          message: `Planned sequence ${created.sequence.label} with ${created.sequence.steps.length} dependency-safe step${created.sequence.steps.length === 1 ? "" : "s"}. Confirmation is required before dispatch.`,
+          data: created.sequence,
+        }
+      : {
+          ok: false,
+          message: created.error ?? "Sequence plan could not be created.",
+          data: null as never,
+        };
+  },
+
+  inspectSequence(id: string): NanobotMissionSequence | null {
+    return nanobotMissionSequenceRegistry.get(id);
+  },
+
+  listSequences(): NanobotMissionSequence[] {
+    return nanobotMissionSequenceRegistry.list();
+  },
+
+  executeSequence(
+    id: string,
+    confirmationToken: string | null | undefined,
+  ): LunaBrainActionResult<NanobotMissionSequence> {
+    const sequence = nanobotMissionSequenceRegistry.execute(
+      id,
+      confirmationToken,
+      {
+      startStep: (step) => {
+        const deployment = this.deployMission(
+          step.mission,
+          step.structureId,
+        );
+        return {
+          ok: deployment.ok,
+          missionId: deployment.data,
+          message: deployment.message,
+        };
+      },
+      },
+    );
+    return sequence
+      ? {
+          ok: sequence.status === "active" || sequence.status === "completed",
+          message: `Sequence ${sequence.label} is ${sequence.status}.`,
+          data: sequence,
+        }
+      : {
+          ok: false,
+          message: "The sequence is unavailable or is not in a planned state.",
+          data: null as never,
+        };
+  },
+
+  cancelSequence(id: string): LunaBrainActionResult<NanobotMissionSequence> {
+    const sequence = nanobotMissionSequenceRegistry.cancel(id);
+    return sequence
+      ? {
+          ok: true,
+          message: `Sequence ${sequence.label} was cancelled. Any already-dispatched mission remains under the user's direct return controls.`,
+          data: sequence,
+        }
+      : {
+          ok: false,
+          message: "The sequence cannot be cancelled in its current state.",
+          data: null as never,
+        };
   },
 
   pauseFleet(): LunaBrainActionResult<number> {
@@ -421,6 +588,16 @@ export const lunaBrainActions = {
       ok: true,
       message: "Requested physical return for the active fleet.",
       data: nanobotActions.getFleet().length,
+    };
+  },
+
+  cancelFleet(): LunaBrainActionResult<number> {
+    const result = this.returnFleet();
+    return {
+      ...result,
+      message: result.ok
+        ? "Cancelled pending fleet work by requesting physical return for active agents; archived results are preserved."
+        : result.message,
     };
   },
 };

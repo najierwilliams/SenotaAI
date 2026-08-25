@@ -14,12 +14,13 @@ export const BRAIN_REFERENCE_SPACES: BrainReferenceSpace[] = [
     template: null,
     units: null,
     axisOrientation: null,
-    coordinateConvention: "Luna application rendering coordinates",
+    coordinateConvention:
+      "Undocumented native glTF mesh coordinates after BrainViewer presentation centering and display scaling.",
     resolution: null,
     version: null,
     provenanceUrl: null,
     description:
-      "Local coordinates of the existing Allen-derived Luna GLB. No validated transform to external scientific reference spaces is configured.",
+      "Repository-local Luna GLB coordinate frame. The asset contains no declared units, axis orientation, anatomical template, reference-space ID, or external registration metadata; BrainViewer centres and display-scales it. No validated transform to external scientific reference spaces is configured.",
   },
   {
     id: "ebrains-mni-icbm-152-2009c",
@@ -150,9 +151,9 @@ export const BRAIN_DATASETS: BrainDataset[] = [
     citation: null,
     referenceSpaceIds: ["luna-viewer-local"],
     description:
-      "The existing local model used by the Luna Brain Macro viewer.",
+      "The repository-local GLB used by the Luna Brain Macro viewer. Its filename includes an Allen label, but no source package, asset-specific citation, coordinate declaration, or registration record is retained in this repository.",
     limitations:
-      "Its local coordinate frame is not a registered MNI or BigBrain transform.",
+      "Its native glTF mesh frame has undocumented units, orientation, origin, and anatomical template. It is not a registered MNI, ICBM, donor-MR, or BigBrain transform; display normalization is never a scientific transform.",
   },
   {
     id: "ebrains-multilevel-human-atlas",

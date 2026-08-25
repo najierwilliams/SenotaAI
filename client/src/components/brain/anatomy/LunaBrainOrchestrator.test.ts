@@ -21,6 +21,7 @@ import {
 
 import {
   executeLunaBrainMissionPlan,
+  executeLunaBrainMissionSequence,
   interpretLunaBrainCommand,
 } from "./LunaBrainOrchestrator";
 
@@ -122,7 +123,11 @@ function configureLiveBrain(
         : { x: -0.01, y: 0.02, z: 0.03 },
     deployMission: (type, structure) => {
       calls.deployed.push(`${type}:${structure.id}`);
+      return `bot-${calls.deployed.length}`;
     },
+    pauseNanobot: () => true,
+    resumeNanobot: () => true,
+    returnNanobot: () => true,
     pauseFleet: () => {
       calls.paused += 1;
     },
@@ -204,6 +209,36 @@ describe("Luna Brain orchestration", () => {
     expect(approved.action).toBe("mission-executed");
     expect(calls.deployed).toEqual([
       "diagnostic:left_hippocampus",
+    ]);
+  });
+
+  it("plans a dependency-safe sequence and dispatches only its first step after exact confirmation", () => {
+    const calls = configureLiveBrain();
+    const planned = interpretLunaBrainCommand(
+      "Plan a sequence: scout then diagnostic to left hippocampus.",
+    );
+
+    expect(planned.action).toBe("sequence-planned");
+    expect(planned.sequencePlan?.steps.map((step) => step.mission)).toEqual([
+      "scout",
+      "diagnostic",
+    ]);
+    expect(calls.deployed).toEqual([]);
+
+    const rejected = executeLunaBrainMissionSequence(
+      planned.sequencePlan!,
+      "stale-token",
+    );
+    expect(rejected.action).toBe("none");
+    expect(calls.deployed).toEqual([]);
+
+    const approved = executeLunaBrainMissionSequence(
+      planned.sequencePlan!,
+      planned.sequencePlan!.confirmationToken,
+    );
+    expect(approved.action).toBe("sequence-executed");
+    expect(calls.deployed).toEqual([
+      "scout:left_hippocampus",
     ]);
   });
 

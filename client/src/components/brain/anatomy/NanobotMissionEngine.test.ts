@@ -30,6 +30,10 @@ import {
   createNanobotVisual,
 } from "./NanobotVisuals";
 
+import type {
+  NanobotType,
+} from "./NanobotTypes";
+
 const structure: BrainStructure = {
   id: "left-hippocampus",
   sourceName: "Left_Hippocampus",
@@ -44,7 +48,7 @@ const structure: BrainStructure = {
 
 function assignMacroMission(
   registry: NanobotRegistry,
-  type: "scout" | "diagnostic" = "scout",
+  type: NanobotType = "scout",
 ) {
   const nanobot = registry.create(type);
   nanobot.position = { x: 0, y: 0, z: 0 };
@@ -67,6 +71,10 @@ function assignMacroMission(
     targetResolution: resolved.resolution,
     spatialStatus: resolved.spatialStatus,
     spatialMessage: resolved.message,
+    spatialTarget: resolved.spatialTarget,
+    spatialCapability: resolved.spatialCapability,
+    referenceSpace: resolved.referenceSpace,
+    coordinateTransform: resolved.coordinateTransform,
   });
 
   if (!assigned || !assigned.target) {
@@ -113,6 +121,9 @@ describe("NanobotMissionEngine", () => {
     expect(nanobot.position).toEqual(nanobot.deploymentPosition);
     expect(completion.completedResult?.completedAt).toBe(21_600);
     expect(completion.completedResult?.operationMode).toBe("simulation");
+    expect(completion.completedResult?.classification).toBe("simulation-result");
+    expect(completion.completedResult?.target.scientificSnapshot.observationScale).toBe("macro");
+    expect(completion.completedResult?.target.scientificSnapshot.spatialTarget?.coordinateTransform).toBeNull();
 
     const visualRoot = new THREE.Group();
     const visual = createNanobotVisual(nanobot);
@@ -142,6 +153,34 @@ describe("NanobotMissionEngine", () => {
       x: 0.001,
       y: 0,
       z: 0,
+    });
+    const returnedHistory = registry.getMissionHistory();
+    returnedHistory[0]!.target.scientificSnapshot.observationMessage = "mutated caller copy";
+    expect(registry.getMissionHistory()[0]?.target.scientificSnapshot.observationMessage).not.toBe("mutated caller copy");
+  });
+
+  it("gives every mission type a distinct, explicitly simulated result classification", () => {
+    const expectedFindings: Record<NanobotType, string> = {
+      scout: "Simulated spatial route observation",
+      diagnostic: "Simulated diagnostic assessment context",
+      repair: "Simulated intervention verification",
+      delivery: "Simulated payload handoff verification",
+      monitor: "Simulated telemetry observation",
+    };
+
+    (Object.keys(expectedFindings) as NanobotType[]).forEach((type) => {
+      const registry = new NanobotRegistry();
+      const engine = new NanobotMissionEngine();
+      const nanobot = assignMacroMission(registry, type);
+      engine.start(nanobot, nanobot.target!, 1_000);
+      engine.tick(nanobot, { deltaSeconds: 0.4, now: 1_400 });
+      engine.tick(nanobot, { deltaSeconds: 0.1, now: 1_500 });
+      engine.tick(nanobot, { deltaSeconds: 0.1, now: 1_600 });
+      engine.tick(nanobot, { deltaSeconds: 10, now: 11_600 });
+
+      expect(nanobot.mission.result?.classification).toBe("simulation-result");
+      expect(nanobot.mission.result?.findings[0]?.title).toBe(expectedFindings[type]);
+      expect(nanobot.mission.result?.summary).toContain("Simulation result:");
     });
   });
 

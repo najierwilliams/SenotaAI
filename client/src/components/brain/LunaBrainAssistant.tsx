@@ -10,14 +10,20 @@ import {
 
 import {
   executeLunaBrainMissionPlan,
+  executeLunaBrainMissionSequence,
   interpretLunaBrainCommand,
   type NanobotMissionPlan,
 } from "./anatomy/LunaBrainOrchestrator";
 
 import {
+  lunaBrainActions,
   subscribeToLunaBrainState,
   type LunaBrainState,
 } from "./anatomy/LunaBrainActions";
+
+import type {
+  NanobotMissionSequence,
+} from "./anatomy/NanobotMissionSequence";
 
 const SUGGESTED_PROMPTS = [
   "What am I looking at?",
@@ -47,23 +53,30 @@ export default function LunaBrainAssistant() {
     useState<NanobotMissionPlan | null>(null);
   const [state, setState] =
     useState<LunaBrainState | null>(null);
+  const [pendingSequence, setPendingSequence] =
+    useState<NanobotMissionSequence | null>(null);
 
   useEffect(() =>
     subscribeToLunaBrainState(setState),
   []);
 
   const cancelPendingPlan = () => {
-    if (!pendingPlan) {
+    if (!pendingPlan && !pendingSequence) {
       return;
     }
 
+    const sequenceResult = pendingSequence
+      ? lunaBrainActions.cancelSequence(pendingSequence.id)
+      : null;
     setPendingPlan(null);
+    setPendingSequence(null);
     setMessages([
       ...messages,
       {
         role: "assistant",
-        content:
-          "The pending mission plan was cancelled. No deployment occurred.",
+        content: sequenceResult?.ok
+          ? sequenceResult.message
+          : "The pending mission plan was cancelled. No deployment occurred.",
       },
     ]);
   };
@@ -76,15 +89,42 @@ export default function LunaBrainAssistant() {
 
     let response;
 
-    if (pendingPlan && isConfirmation(content)) {
+    if (pendingSequence && isConfirmation(content)) {
+      response = executeLunaBrainMissionSequence(
+        pendingSequence,
+        pendingSequence.confirmationToken,
+      );
+      setPendingPlan(
+        response.needsConfirmation ? response.plan : null,
+      );
+      setPendingSequence(
+        response.needsConfirmation
+          ? response.sequencePlan ?? null
+          : null,
+      );
+    } else if (pendingPlan && isConfirmation(content)) {
       response = executeLunaBrainMissionPlan(
         pendingPlan,
         pendingPlan.confirmationToken,
       );
-      setPendingPlan(response.plan);
+      setPendingPlan(
+        response.needsConfirmation ? response.plan : null,
+      );
+      setPendingSequence(
+        response.needsConfirmation
+          ? response.sequencePlan ?? null
+          : null,
+      );
     } else {
       response = interpretLunaBrainCommand(content);
-      setPendingPlan(response.plan);
+      setPendingPlan(
+        response.needsConfirmation ? response.plan : null,
+      );
+      setPendingSequence(
+        response.needsConfirmation
+          ? response.sequencePlan ?? null
+          : null,
+      );
     }
 
     setMessages([
@@ -130,10 +170,12 @@ export default function LunaBrainAssistant() {
         />
       </div>
 
-      {pendingPlan && (
+      {(pendingPlan || pendingSequence) && (
         <footer className="border-t border-amber-300/15 bg-amber-300/[0.035] px-4 py-3 text-[10px] leading-relaxed text-amber-100/80">
           <p>
-            Pending plan: {pendingPlan.missionType} → {pendingPlan.targetStructureName}. Confirm to execute the supported Macro simulation, or cancel to discard this plan without deploying.
+            {pendingSequence
+              ? `Pending sequence: ${pendingSequence.steps.map((step) => step.mission).join(" → ")} → ${pendingSequence.steps[0]?.structureName ?? "canonical target"}. Confirm to dispatch only the first supported Macro simulation step; each later step requires its archived prerequisite result.`
+              : `Pending plan: ${pendingPlan?.missionType} → ${pendingPlan?.targetStructureName}. Confirm to execute the supported Macro simulation, or cancel to discard this plan without deploying.`}
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -141,7 +183,7 @@ export default function LunaBrainAssistant() {
               onClick={() => onSendMessage("confirm")}
               className="rounded-md border border-amber-200/25 bg-amber-300/10 px-2 py-1 text-[10px] font-medium text-amber-50 transition hover:bg-amber-300/20"
             >
-              Confirm mission
+              {pendingSequence ? "Confirm sequence" : "Confirm mission"}
             </button>
             <button
               type="button"

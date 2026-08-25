@@ -58,15 +58,15 @@ function phaseMessage(
 
   switch (nanobot.type) {
     case "scout":
-      return `Simulated anatomical scan in progress for ${target}`;
+      return `Recording simulated spatial route and target-lock observation for ${target}`;
     case "diagnostic":
-      return `Simulated diagnostic context review in progress for ${target}`;
+      return `Reviewing simulated dataset and target context for ${target}; no diagnosis is produced`;
     case "repair":
-      return `Simulated repair operation in progress for ${target}`;
+      return `Running simulated intervention state for ${target}; no tissue repair is performed`;
     case "delivery":
-      return `Simulated payload delivery in progress for ${target}`;
+      return `Tracking simulated payload handoff state for ${target}; no physical payload is delivered`;
     case "monitor":
-      return `Simulated monitoring cycle in progress for ${target}`;
+      return `Sampling simulation telemetry and mission state for ${target}; no biological time series is asserted`;
   }
 }
 
@@ -77,28 +77,55 @@ function operationSummary(
 
   switch (nanobot.type) {
     case "scout":
-      return `Simulated scout route completed for ${target}`;
+      return `Simulation result: route and mesh-derived target lock completed for ${target}`;
     case "diagnostic":
-      return `Simulated diagnostic context review completed for ${target}`;
+      return `Simulation result: target and dataset context review completed for ${target}; no diagnosis was generated`;
     case "repair":
-      return `Simulated repair workflow completed for ${target}`;
+      return `Simulation result: simulated intervention lifecycle completed for ${target}; no tissue was repaired`;
     case "delivery":
-      return `Simulated delivery workflow completed for ${target}`;
+      return `Simulation result: simulated payload handoff lifecycle completed for ${target}; no physical payload was delivered`;
     case "monitor":
-      return `Simulated monitoring cycle completed for ${target}`;
+      return `Simulation result: telemetry and mission-state cycle completed for ${target}; no biological time series was measured`;
   }
 }
 
 function simulationFinding(
   nanobot: Nanobot,
 ): NanobotFinding {
+  const target = nanobot.target?.structureName ?? "the target";
+  const detailByMission: Record<Nanobot["type"], {
+    title: string;
+    detail: string;
+  }> = {
+    scout: {
+      title: "Simulated spatial route observation",
+      detail: `The agent reached the mesh-derived Luna Local work point for ${target} and verified simulated navigation. This is not an external scientific coordinate or biological measurement.`,
+    },
+    diagnostic: {
+      title: "Simulated diagnostic assessment context",
+      detail: `The mission reviewed the available target and dataset context for ${target}. No diagnosis, disease finding, or biological measurement was generated.`,
+    },
+    monitor: {
+      title: "Simulated telemetry observation",
+      detail: `The mission recorded ${nanobot.telemetry.sampleCount} simulation telemetry samples for ${target}. No physiological or biological time series was measured.`,
+    },
+    repair: {
+      title: "Simulated intervention verification",
+      detail: `The mission completed a simulated intervention and verification lifecycle for ${target}. No tissue repair or treatment effect was performed or claimed.`,
+    },
+    delivery: {
+      title: "Simulated payload handoff verification",
+      detail: `The mission tracked a simulated payload handoff and return lifecycle for ${target}. No physical payload was delivered.`,
+    },
+  };
+  const detail = detailByMission[nanobot.type];
+
   return {
     id: `${nanobot.mission.id}-simulation-context`,
     timestamp: Date.now(),
     severity: "info",
-    title: "Simulation context completed",
-    detail:
-      "The mission verified its simulated navigation and lifecycle state. No biological measurement, diagnosis, treatment effect, or physical nanobot claim was generated.",
+    title: detail.title,
+    detail: detail.detail,
     scale:
       nanobot.mission.originalScale ??
       nanobot.target?.observationScale ??
@@ -149,6 +176,7 @@ function createSimulationResult(
     ],
     verificationStatus: "simulation-verified",
     operationMode: "simulation",
+    classification: "simulation-result",
   };
 }
 
@@ -368,6 +396,7 @@ export class NanobotMissionEngine {
           ],
           verificationStatus: "failed",
           operationMode: "unavailable",
+          classification: "unavailable-measurement",
         }
       : null;
     setState(nanobot, "error", reason);

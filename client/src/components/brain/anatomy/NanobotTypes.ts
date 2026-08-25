@@ -7,10 +7,14 @@ import type {
 
 import type {
   BrainCoordinateTransform,
+  BrainDataset,
+  BrainDatasetProvenance,
   BrainDatasetStatus,
   BrainReferenceSpace,
+  BrainScientificObservation,
   BrainSpatialCapability,
   BrainSpatialTarget,
+  BrainStructureMapping,
 } from "@shared/brainScience";
 
 export type NanobotState =
@@ -62,6 +66,16 @@ export type NanobotVerificationStatus =
   | "dataset-verified"
   | "unavailable"
   | "failed";
+
+/**
+ * Declares what a result represents; it is intentionally independent of a
+ * mission name such as `diagnostic` so no biological conclusion is implied.
+ */
+export type NanobotMissionResultClassification =
+  | "simulation-result"
+  | "spatial-observation"
+  | "dataset-backed-result"
+  | "unavailable-measurement";
 
 export type NanobotSpatialStatus =
   | "resolved"
@@ -117,6 +131,23 @@ export const NANOBOT_SCALE_PROFILES: Record<
   },
 };
 
+export interface NanobotScientificSnapshot {
+  /** Captured at target assignment, never recomputed from later viewer state. */
+  capturedAt: number;
+  observationScale: BrainScale;
+  observationStatus: "ready" | "unavailable" | "loading" | "error";
+  scientificStatus: BrainDatasetStatus | null;
+  dataset: BrainDataset | null;
+  provenance: BrainDatasetProvenance | null;
+  referenceSpace: BrainReferenceSpace | null;
+  coordinateTransform: BrainCoordinateTransform | null;
+  structureMapping: BrainStructureMapping | null;
+  spatialTarget: BrainSpatialTarget | null;
+  spatialCapability: BrainSpatialCapability | null;
+  observationMessage: string;
+  limitations: string | null;
+}
+
 export interface NanobotTarget {
   structureId: string;
   structureName: string;
@@ -138,6 +169,7 @@ export interface NanobotTarget {
   spatialCapability: BrainSpatialCapability | null;
   referenceSpace: BrainReferenceSpace | null;
   coordinateTransform: BrainCoordinateTransform | null;
+  scientificSnapshot: NanobotScientificSnapshot;
 }
 
 export interface NanobotScaleTransition {
@@ -185,6 +217,7 @@ export interface NanobotMissionResult {
   recommendations: string[];
   verificationStatus: NanobotVerificationStatus;
   operationMode: NanobotOperationMode;
+  classification: NanobotMissionResultClassification;
 }
 
 export interface NanobotTelemetry {
@@ -256,12 +289,44 @@ export interface NanobotObservationTarget {
   spatialCapability?: BrainSpatialCapability | null;
   referenceSpace?: BrainReferenceSpace | null;
   coordinateTransform?: BrainCoordinateTransform | null;
+  scientificObservation?: BrainScientificObservation | null;
 }
 
 export function getNanobotScaleProfile(
   scale: BrainScale,
 ): NanobotScaleProfile {
   return NANOBOT_SCALE_PROFILES[scale];
+}
+
+function createNanobotScientificSnapshot(
+  observation: NanobotObservationTarget,
+  target: Omit<NanobotTarget, "scientificSnapshot">,
+): NanobotScientificSnapshot {
+  const scientificObservation =
+    observation.scientificObservation ?? null;
+
+  return {
+    capturedAt: Date.now(),
+    observationScale: target.observationScale,
+    observationStatus: target.observationStatus,
+    scientificStatus: target.observationScientificStatus,
+    dataset: scientificObservation?.dataset ?? null,
+    provenance:
+      target.spatialTarget?.provenance ??
+      scientificObservation?.spatialTarget?.provenance ??
+      null,
+    referenceSpace: target.referenceSpace,
+    coordinateTransform: target.coordinateTransform,
+    structureMapping:
+      scientificObservation?.structureMapping ?? null,
+    spatialTarget: target.spatialTarget,
+    spatialCapability: target.spatialCapability,
+    observationMessage:
+      scientificObservation?.message ??
+      target.observationContextLabel,
+    limitations:
+      scientificObservation?.dataset?.limitations ?? null,
+  };
 }
 
 export function createNanobotTarget(
@@ -272,7 +337,7 @@ export function createNanobotTarget(
     status: "ready",
   },
 ): NanobotTarget {
-  return {
+  const target: Omit<NanobotTarget, "scientificSnapshot"> = {
     structureId: structure.id,
     structureName: structure.displayName,
     hemisphere: structure.hemisphere,
@@ -307,6 +372,14 @@ export function createNanobotTarget(
     referenceSpace: observation.referenceSpace ?? null,
     coordinateTransform:
       observation.coordinateTransform ?? null,
+  };
+
+  return {
+    ...target,
+    scientificSnapshot: createNanobotScientificSnapshot(
+      observation,
+      target,
+    ),
   };
 }
 

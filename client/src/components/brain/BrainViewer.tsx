@@ -34,6 +34,10 @@ import {
 } from "./anatomy/NanobotMissionEngine";
 
 import {
+  nanobotActions,
+} from "./anatomy/NanobotActions";
+
+import {
   resolveNanobotTarget,
 } from "./anatomy/NanobotTargetResolver";
 
@@ -61,6 +65,10 @@ import {
 import {
   archiveCompletedNanobot,
 } from "./anatomy/NanobotCompletion";
+
+import {
+  nanobotMissionSequenceRegistry,
+} from "./anatomy/NanobotMissionSequence";
 
 import {
   enableBrainMeshDepth,
@@ -153,6 +161,12 @@ export default function BrainViewer() {
 
   const nanobotReturnStartedRef =
     useRef<Map<string, number>>(new Map());
+
+  const deployNanobotRef =
+    useRef<(
+      type: NanobotType,
+      requestedStructure?: BrainStructure,
+    ) => string | null>(() => null);
 
   const [status, setStatus] =
     useState("Loading Luna's brain...");
@@ -725,7 +739,7 @@ export default function BrainViewer() {
     (
       type: NanobotType,
       requestedStructure?: BrainStructure,
-    ) => {
+    ): string | null => {
       const targetStructure =
         requestedStructure ?? selectedStructure;
 
@@ -733,7 +747,7 @@ export default function BrainViewer() {
         setStatus(
           "Select a brain structure before deploying a nanobot",
         );
-        return;
+        return null;
       }
 
       const macroPosition =
@@ -755,6 +769,8 @@ export default function BrainViewer() {
         referenceSpace: observationContext.referenceSpace,
         coordinateTransform:
           observationContext.coordinateTransform,
+        scientificObservation:
+          observationContext.scientificObservation,
       });
 
       const previewTarget = {
@@ -771,6 +787,8 @@ export default function BrainViewer() {
         spatialCapability: resolution.spatialCapability,
         referenceSpace: resolution.referenceSpace,
         coordinateTransform: resolution.coordinateTransform,
+        scientificObservation:
+          observationContext.scientificObservation,
       } as const;
 
       const nanobot = nanobotRegistry.create(type);
@@ -792,7 +810,7 @@ export default function BrainViewer() {
         nanobotRegistry.remove(nanobot.id);
         setStatus(permission.reason);
         syncNanobotState();
-        return;
+        return null;
       }
 
       nanobotMissionEngine.start(
@@ -815,12 +833,84 @@ export default function BrainViewer() {
       setStatus(
         `${assigned.metadata.label} deployed into ${targetStructure.displayName} · simulation mission`,
       );
+      return assigned.id;
     };
+
+  deployNanobotRef.current = deployNanobot;
 
   const deployMission =
     (type: NanobotType) => {
       deployNanobot(type);
       workspace.closeMenu();
+    };
+
+  const pauseNanobotById =
+    (id: string): boolean => {
+      const paused = nanobotActions.pause(id);
+      syncNanobotState();
+      return paused;
+    };
+
+  const resumeNanobotById =
+    (id: string): boolean => {
+      const resumed = nanobotActions.resume(id);
+      syncNanobotState();
+      return resumed;
+    };
+
+  const returnNanobotById =
+    (id: string): boolean => {
+      const returning = nanobotActions.requestReturn(id);
+      syncNanobotState();
+      return returning;
+    };
+
+  const pauseSelectedNanobot =
+    () => {
+      const nanobot = selectedNanobotId
+        ? nanobotRegistry.get(selectedNanobotId)
+        : null;
+      const paused = nanobot
+        ? nanobotActions.pause(nanobot.id)
+        : false;
+      syncNanobotState();
+      setStatus(
+        paused && nanobot
+          ? `${nanobot.metadata.label} paused; other fleet missions continue.`
+          : "Select an active nanobot mission to pause.",
+      );
+    };
+
+  const resumeSelectedNanobot =
+    () => {
+      const nanobot = selectedNanobotId
+        ? nanobotRegistry.get(selectedNanobotId)
+        : null;
+      const resumed = nanobot
+        ? nanobotActions.resume(nanobot.id)
+        : false;
+      syncNanobotState();
+      setStatus(
+        resumed && nanobot
+          ? `${nanobot.metadata.label} resumed; other fleet missions were unchanged.`
+          : "Select a paused nanobot mission to resume.",
+      );
+    };
+
+  const returnSelectedNanobot =
+    () => {
+      const nanobot = selectedNanobotId
+        ? nanobotRegistry.get(selectedNanobotId)
+        : null;
+      const returning = nanobot
+        ? nanobotActions.requestReturn(nanobot.id)
+        : false;
+      syncNanobotState();
+      setStatus(
+        returning && nanobot
+          ? `${nanobot.metadata.label} returning; other fleet missions continue.`
+          : "Select an active nanobot mission to return.",
+      );
     };
 
   const pauseNanobots =
@@ -1011,6 +1101,9 @@ export default function BrainViewer() {
       resolveMacroPosition: getStructureTargetPosition,
       deployMission: (type, structure) =>
         deployNanobot(type, structure),
+      pauseNanobot: pauseNanobotById,
+      resumeNanobot: resumeNanobotById,
+      returnNanobot: returnNanobotById,
       pauseFleet: pauseNanobots,
       resumeFleet: resumeNanobots,
       returnFleet: returnNanobots,
@@ -1020,6 +1113,9 @@ export default function BrainViewer() {
     handleScaleChange,
     getStructureTargetPosition,
     deployNanobot,
+    pauseNanobotById,
+    resumeNanobotById,
+    returnNanobotById,
     pauseNanobots,
     resumeNanobots,
     returnNanobots,
@@ -1894,6 +1990,38 @@ export default function BrainViewer() {
               setSelectedNanobotId((current) =>
                 current === nanobot.id ? null : current,
               );
+              nanobotMissionSequenceRegistry.acceptMissionResult(
+                missionTick.completedResult,
+                {
+                  startStep: (step) => {
+                    const structure = brainStructuresRef.current.find(
+                      (candidate) => candidate.id === step.structureId,
+                    );
+                    if (!structure) {
+                      return {
+                        ok: false,
+                        missionId: null,
+                        message: `Sequence target ${step.structureName} is no longer a loaded canonical structure.`,
+                      };
+                    }
+                    const missionId = deployNanobotRef.current(
+                      step.mission,
+                      structure,
+                    );
+                    return missionId
+                      ? {
+                          ok: true,
+                          missionId,
+                          message: `Dispatched dependent ${step.mission} simulation for ${structure.displayName}.`,
+                        }
+                      : {
+                          ok: false,
+                          missionId: null,
+                          message: `Unable to dispatch dependent ${step.mission} simulation for ${structure.displayName}.`,
+                        };
+                  },
+                },
+              );
               setStatus(
                 `${nanobot.metadata.label} returned and archived after simulated ${nanobot.type} verification`,
               );
@@ -2286,9 +2414,9 @@ export default function BrainViewer() {
                   selectedStructure={selectedStructure}
                   observationContext={observationContext}
                   onDeploy={deployNanobot}
-                  onPause={pauseNanobots}
-                  onResume={resumeNanobots}
-                  onReturn={returnNanobots}
+                  onPause={pauseSelectedNanobot}
+                  onResume={resumeSelectedNanobot}
+                  onReturn={returnSelectedNanobot}
                   onClear={clearNanobots}
                   onSelectNanobot={selectNanobot}
                 />

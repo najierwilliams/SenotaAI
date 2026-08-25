@@ -6,6 +6,7 @@ import type {
 import type {
   BrainCoordinateTransform,
   BrainReferenceSpace,
+  BrainScientificObservation,
   BrainSpatialCapability,
   BrainSpatialTarget,
 } from "@shared/brainScience";
@@ -42,6 +43,8 @@ export interface ResolveNanobotTargetOptions {
   spatialCapability?: BrainSpatialCapability | null;
   referenceSpace?: BrainReferenceSpace | null;
   coordinateTransform?: BrainCoordinateTransform | null;
+  /** Forwarded to target assignment for immutable mission provenance capture. */
+  scientificObservation?: BrainScientificObservation | null;
 }
 
 /**

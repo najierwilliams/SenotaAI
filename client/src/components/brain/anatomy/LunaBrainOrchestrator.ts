@@ -14,6 +14,10 @@ import {
   type LunaStructureResolution,
 } from "./LunaBrainActions";
 
+import type {
+  NanobotMissionSequence,
+} from "./NanobotMissionSequence";
+
 export interface NanobotMissionPlan {
   id: string;
   targetStructureId: string;
@@ -35,6 +39,8 @@ export interface NanobotMissionPlan {
 export interface LunaBrainCommandResponse {
   message: string;
   plan: NanobotMissionPlan | null;
+  /** Present only for an inspectable, confirmation-gated linear sequence. */
+  sequencePlan?: NanobotMissionSequence | null;
   needsConfirmation: boolean;
   action:
     | "none"
@@ -43,7 +49,9 @@ export interface LunaBrainCommandResponse {
     | "fleet-paused"
     | "fleet-resumed"
     | "fleet-returning"
-    | "mission-executed";
+    | "mission-executed"
+    | "sequence-planned"
+    | "sequence-executed";
 }
 
 const MISSION_TYPES: NanobotType[] = [
@@ -90,6 +98,16 @@ function requestedMission(
   return MISSION_TYPES.find((type) =>
     normalized.includes(type),
   ) ?? null;
+}
+
+function requestedMissionSequence(
+  message: string,
+): NanobotType[] {
+  return clean(message)
+    .split(" ")
+    .filter((token): token is NanobotType =>
+      MISSION_TYPES.includes(token as NanobotType),
+    );
 }
 
 function structureQueryFromMessage(
@@ -226,6 +244,31 @@ function buildPlan(
     };
   }
 
+  if (
+    context.status === "loading" ||
+    context.scientificStatus === "loading"
+  ) {
+    return {
+      id: `luna-plan-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      targetStructureId: structure.id,
+      targetStructureName: structure.displayName,
+      missionType,
+      observationScale: scale,
+      datasetId: context.datasetId,
+      spatialTarget: null,
+      capabilityStatus: "unavailable",
+      rationale:
+        `${displayScale(scale)} scientific observation is still loading. Luna will wait for the live provider/reference-space status instead of reusing a prior Macro target.`,
+      warnings: [
+        ...warnings,
+        "Wait for the observation status to finish or retry the provider before planning a lower-scale operation.",
+      ],
+      simulationStatus: "unavailable",
+      executionAllowed: false,
+      confirmationToken: null,
+    };
+  }
+
   const spatial = lunaBrainActions.resolveSpatialTarget(
     structure.id,
   );
@@ -295,6 +338,17 @@ function formatPlan(
   ].join("\n\n");
 }
 
+function mentionedNanobot(
+  message: string,
+) {
+  const normalized = clean(message);
+  return lunaBrainActions.getNanobotFleet().find((nanobot) =>
+    [nanobot.id, nanobot.metadata.label]
+      .map(clean)
+      .some((identifier) => identifier && normalized.includes(identifier)),
+  ) ?? null;
+}
+
 function missionStatusMessage(): string {
   const fleet = lunaBrainActions.getNanobotFleet();
 
@@ -347,6 +401,74 @@ export function interpretLunaBrainCommand(
     };
   }
 
+  const sequenceMissions = requestedMissionSequence(message);
+  const isSequenceRequest =
+    /\b(?:sequence|workflow|then)\b/.test(normalized) &&
+    sequenceMissions.length >= 2;
+
+  if (isSequenceRequest) {
+    const resolved = structureFromMessage(message);
+    const targetStructure =
+      resolved.structure ??
+      (resolved.candidates.length
+        ? null
+        : state.selectedStructure);
+
+    if (!targetStructure) {
+      const clarification = resolved.candidates.length
+        ? `I found multiple candidates: ${resolved.candidates.map((candidate) => candidate.displayName).join(", ")}.`
+        : resolved.reason ?? "I could not resolve a canonical structure.";
+      return {
+        message: `${clarification} Please clarify the exact target before I make a sequence plan.`,
+        plan: null,
+        sequencePlan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+
+    const scale = requestedScale(message) ?? state.observationContext.scale;
+    if (scale !== "macro" || state.observationContext.scale !== "macro") {
+      return {
+        message: `I cannot plan that sequence at ${displayScale(scale)} scale: ${state.observationContext.spatialCapability?.reason ?? "the current sequence dispatcher requires a coordinate-resolved Macro simulation target."}`,
+        plan: null,
+        sequencePlan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+
+    const sequence = lunaBrainActions.planSequence({
+      label: `${sequenceMissions.map((mission) => mission.charAt(0).toUpperCase() + mission.slice(1)).join(" → ")} · ${targetStructure.displayName}`,
+      steps: sequenceMissions.map((mission, index) => ({
+        id: `step-${index + 1}-${mission}`,
+        mission,
+        structureId: targetStructure.id,
+        structureName: targetStructure.displayName,
+        dependsOnStepId: index
+          ? `step-${index}-${sequenceMissions[index - 1]}`
+          : null,
+      })),
+    });
+
+    return {
+      message: sequence.ok
+        ? [
+            `**Mission sequence — Ready for confirmation**`,
+            `Target: **${targetStructure.displayName}**`,
+            `Steps: ${sequence.data.steps.map((step) => `${step.id}: ${step.mission}${step.dependsOnStepId ? ` after ${step.dependsOnStepId}` : ""}`).join(" → ")}`,
+            "Each step uses the existing mission engine, and the next step dispatches only after the prior archived result succeeds.",
+            "Disclosure: Macro simulation only; no biological measurement, diagnosis, treatment effect, or physical nanobot claim is generated.",
+            "Reply **confirm** to dispatch the first step, or cancel to discard the sequence.",
+          ].join("\n\n")
+        : `I could not prepare that sequence: ${sequence.message}`,
+      plan: null,
+      sequencePlan: sequence.ok ? sequence.data : null,
+      needsConfirmation: sequence.ok,
+      action: sequence.ok ? "sequence-planned" : "none",
+    };
+  }
+
   const missionType = requestedMission(message);
   const isMissionRequest = Boolean(
     missionType && /(?:send|deploy|plan|mission|nanobot|bot)/.test(normalized),
@@ -390,7 +512,18 @@ export function interpretLunaBrainCommand(
   }
 
   if (/\b(?:pause|hold)\b/.test(normalized)) {
-    const result = lunaBrainActions.pauseFleet();
+    const nanobot = mentionedNanobot(message);
+    if (/\b(?:nanobot|bot)\b/.test(normalized) && !/\bfleet\b/.test(normalized) && !nanobot) {
+      return {
+        message: "Name an active nanobot ID or label for an individual pause; I will not guess which fleet mission to change.",
+        plan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+    const result = nanobot
+      ? lunaBrainActions.pauseNanobot(nanobot.id)
+      : lunaBrainActions.pauseFleet();
     return {
       message: result.message,
       plan: null,
@@ -400,7 +533,18 @@ export function interpretLunaBrainCommand(
   }
 
   if (/\bresume\b/.test(normalized)) {
-    const result = lunaBrainActions.resumeFleet();
+    const nanobot = mentionedNanobot(message);
+    if (/\b(?:nanobot|bot)\b/.test(normalized) && !/\bfleet\b/.test(normalized) && !nanobot) {
+      return {
+        message: "Name an active nanobot ID or label for an individual resume; I will not guess which fleet mission to change.",
+        plan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+    const result = nanobot
+      ? lunaBrainActions.resumeNanobot(nanobot.id)
+      : lunaBrainActions.resumeFleet();
     return {
       message: result.message,
       plan: null,
@@ -409,8 +553,21 @@ export function interpretLunaBrainCommand(
     };
   }
 
-  if (/\b(?:return|recall)\b/.test(normalized)) {
-    const result = lunaBrainActions.returnFleet();
+  if (/\b(?:return|recall|cancel)\b/.test(normalized)) {
+    const nanobot = mentionedNanobot(message);
+    if (/\b(?:nanobot|bot)\b/.test(normalized) && !/\bfleet\b/.test(normalized) && !nanobot) {
+      return {
+        message: "Name an active nanobot ID or label for an individual return; I will not guess which fleet mission to change.",
+        plan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+    const result = nanobot
+      ? lunaBrainActions.returnNanobot(nanobot.id)
+      : /\bcancel\b/.test(normalized)
+        ? lunaBrainActions.cancelFleet()
+        : lunaBrainActions.returnFleet();
     return {
       message: result.message,
       plan: null,
@@ -528,7 +685,7 @@ export function executeLunaBrainMissionPlan(
     };
   }
 
-  const execution: LunaBrainActionResult<null> =
+  const execution: LunaBrainActionResult<string | null> =
     lunaBrainActions.deployMission(
       plan.missionType,
       plan.targetStructureId,
@@ -541,5 +698,41 @@ export function executeLunaBrainMissionPlan(
     plan: execution.ok ? null : plan,
     needsConfirmation: false,
     action: execution.ok ? "mission-executed" : "none",
+  };
+}
+
+
+export function executeLunaBrainMissionSequence(
+  sequence: NanobotMissionSequence,
+  confirmationToken: string | null,
+): LunaBrainCommandResponse {
+  if (
+    sequence.status !== "planned" ||
+    !confirmationToken ||
+    confirmationToken !== sequence.confirmationToken
+  ) {
+    return {
+      message:
+        "This sequence is not executable, or its confirmation is missing or stale. No sequence step was dispatched.",
+      plan: null,
+      sequencePlan: sequence,
+      needsConfirmation: false,
+      action: "none",
+    };
+  }
+
+  const execution = lunaBrainActions.executeSequence(
+    sequence.id,
+    confirmationToken,
+  );
+
+  return {
+    message: execution.ok
+      ? `${execution.message} The first step is a Macro simulation; dependent steps remain blocked until their prerequisite result is archived successfully.`
+      : `I did not execute the sequence: ${execution.message}`,
+    plan: null,
+    sequencePlan: execution.ok ? null : sequence,
+    needsConfirmation: false,
+    action: execution.ok ? "sequence-executed" : "none",
   };
 }

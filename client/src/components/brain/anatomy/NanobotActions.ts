@@ -26,6 +26,23 @@ import type {
   NanobotTarget,
 } from "./NanobotTypes";
 
+export interface NanobotFleetInspection {
+  total: number;
+  active: number;
+  paused: number;
+  returning: number;
+  failed: number;
+  entries: Array<{
+    id: string;
+    type: Nanobot["type"];
+    state: Nanobot["state"];
+    targetStructureId: string | null;
+    targetStructureName: string | null;
+    missionId: string;
+    progress: number;
+  }>;
+}
+
 export interface NanobotSpatialResolutionInput {
   structure: BrainStructure;
   observationContext: BrainObservationContext;
@@ -59,6 +76,34 @@ export const nanobotActions = {
     return nanobotRegistry.inspectTarget(structureId);
   },
 
+  inspectNanobot(id: string): Nanobot | null {
+    return nanobotRegistry.get(id);
+  },
+
+  inspectFleet(): NanobotFleetInspection {
+    const fleet = nanobotRegistry.getAll();
+    return {
+      total: fleet.length,
+      active: fleet.filter((nanobot) =>
+        ["deploying", "navigating", "arrived", "working"].includes(
+          nanobot.state,
+        ),
+      ).length,
+      paused: fleet.filter((nanobot) => nanobot.state === "paused").length,
+      returning: fleet.filter((nanobot) => nanobot.state === "returning").length,
+      failed: fleet.filter((nanobot) => nanobot.state === "error").length,
+      entries: fleet.map((nanobot) => ({
+        id: nanobot.id,
+        type: nanobot.type,
+        state: nanobot.state,
+        targetStructureId: nanobot.target?.structureId ?? null,
+        targetStructureName: nanobot.target?.structureName ?? null,
+        missionId: nanobot.mission.id,
+        progress: nanobot.mission.progress,
+      })),
+    };
+  },
+
   evaluateTarget(target: NanobotTarget | null) {
     return nanobotMissionEngine.canDeploy(target);
   },
@@ -76,6 +121,8 @@ export const nanobotActions = {
       referenceSpace: input.observationContext.referenceSpace,
       coordinateTransform:
         input.observationContext.coordinateTransform,
+      scientificObservation:
+        input.observationContext.scientificObservation,
     });
   },
 
@@ -122,6 +169,21 @@ export const nanobotActions = {
     return observationContext.provenance;
   },
 
+  pause(id: string): boolean {
+    const nanobot = nanobotRegistry.get(id);
+    return nanobot ? nanobotMissionEngine.pause(nanobot) : false;
+  },
+
+  resume(id: string): boolean {
+    const nanobot = nanobotRegistry.get(id);
+    return nanobot ? nanobotMissionEngine.resume(nanobot) : false;
+  },
+
+  requestReturn(id: string): boolean {
+    const nanobot = nanobotRegistry.get(id);
+    return nanobot ? nanobotMissionEngine.requestReturn(nanobot) : false;
+  },
+
   pauseFleet(): number {
     let count = 0;
     nanobotRegistry.getAll().forEach((nanobot) => {
@@ -144,6 +206,10 @@ export const nanobotActions = {
       if (nanobotMissionEngine.requestReturn(nanobot)) count += 1;
     });
     return count;
+  },
+
+  cancelFleet(): number {
+    return this.returnFleet();
   },
 };
 

@@ -396,6 +396,22 @@ export default function NanobotPanel({
                   </div>
                 )}
                 <div>
+                  Snapshot dataset: {selectedNanobot.target.scientificSnapshot.dataset?.name ?? "No provider dataset registered"}
+                  {selectedNanobot.target.scientificSnapshot.dataset?.version
+                    ? ` · ${selectedNanobot.target.scientificSnapshot.dataset.version}`
+                    : ""}
+                </div>
+                {selectedNanobot.target.scientificSnapshot.provenance && (
+                  <div>
+                    Source: {selectedNanobot.target.scientificSnapshot.provenance.provider} · {selectedNanobot.target.scientificSnapshot.provenance.sourceUrl || "no external source URL"}
+                  </div>
+                )}
+                {selectedNanobot.target.scientificSnapshot.limitations && (
+                  <div className="text-amber-100/70">
+                    Limitation: {selectedNanobot.target.scientificSnapshot.limitations}
+                  </div>
+                )}
+                <div>
                   Viewer presentation: {labelize(selectedNanobot.presentation.viewerScale)} · {selectedNanobot.presentation.contextLabel}
                 </div>
                 {selectedNanobot.presentation.transition && (
@@ -415,7 +431,7 @@ export default function NanobotPanel({
 
             {selectedNanobot.mission.result && (
               <div className="mt-3 rounded-md border border-red-500/15 bg-red-500/5 p-2 text-[9px] leading-relaxed text-red-50/70">
-                <div className="font-medium text-red-100">Mission result · {selectedNanobot.mission.result.success ? "completed" : "failed"}</div>
+                <div className="font-medium text-red-100">Mission result · {selectedNanobot.mission.result.success ? "completed" : "failed"} · {labelize(selectedNanobot.mission.result.classification)}</div>
                 <div className="mt-1">{selectedNanobot.mission.result.summary}</div>
                 {selectedNanobot.mission.result.findings.map((finding) => (
                   <div key={finding.id} className="mt-1 text-white/55">{finding.title}: {finding.detail}</div>
@@ -573,7 +589,7 @@ export default function NanobotPanel({
                     <span>#{result.missionNumber} · {labelize(result.mission)}</span>
                     <span>{result.success ? "Verified" : result.status}</span>
                   </div>
-                  <div>{result.target.structureName} · original {labelize(result.originalScale)} · {labelize(result.operationMode)}</div>
+                  <div>{result.target.structureName} · original {labelize(result.originalScale)} · {labelize(result.classification)}</div>
                   <div>{result.summary}</div>
                 </div>
               ))}

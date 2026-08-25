@@ -18,6 +18,12 @@ import {
   type NanobotType,
 } from "./NanobotTypes";
 
+function cloneMissionResult(
+  result: NanobotMissionResult,
+): NanobotMissionResult {
+  return structuredClone(result);
+}
+
 export class NanobotRegistry {
   private nanobots = new Map<string, Nanobot>();
   private missionHistory: NanobotMissionResult[] = [];
@@ -67,7 +73,7 @@ export class NanobotRegistry {
   }
 
   getMissionHistory(): NanobotMissionResult[] {
-    return [...this.missionHistory];
+    return this.missionHistory.map(cloneMissionResult);
   }
 
   getMission(
@@ -240,14 +246,10 @@ export class NanobotRegistry {
 
     this.missionCounter += 1;
 
-    const stored: NanobotMissionResult = {
+    const stored = cloneMissionResult({
       ...result,
       missionNumber: this.missionCounter,
-      target: { ...result.target },
-      findings: [...result.findings],
-      warnings: [...result.warnings],
-      recommendations: [...result.recommendations],
-    };
+    });
 
     this.missionHistory.unshift(stored);
     nanobot.mission.result = stored;
