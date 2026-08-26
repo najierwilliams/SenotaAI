@@ -86,6 +86,8 @@ import BrainWorkspace, {
 } from "./workspace/BrainWorkspace";
 
 import BrainWorkspaceBar from "./workspace/BrainWorkspaceBar";
+import ScientificReviewCenter from "./scientificReview/ScientificReviewCenter";
+import { useScientificReviewRegistry } from "./scientificReview/useScientificReviewRegistry";
 
 import type {
   BrainScaleAsset,
@@ -247,6 +249,22 @@ export default function BrainViewer() {
 
   const workspace =
     useBrainWorkspaceState();
+
+  const scientificReview =
+    useScientificReviewRegistry();
+
+  const [reviewFocusStructureId, setReviewFocusStructureId] =
+    useState<string | null>(null);
+
+  useEffect(() => {
+    const openFocusedReview = (event: Event) => {
+      const detail = (event as CustomEvent<{ structureId?: string }>).detail;
+      setReviewFocusStructureId(detail?.structureId ?? null);
+      workspace.openPanel("review");
+    };
+    window.addEventListener("luna-open-scientific-review", openFocusedReview);
+    return () => window.removeEventListener("luna-open-scientific-review", openFocusedReview);
+  }, [workspace]);
 
   const {
     observation: scientificObservation,
@@ -2267,6 +2285,9 @@ export default function BrainViewer() {
           onToggleInterior={
             handleViewInterior
           }
+          reviewRemaining={scientificReview.summary.requiresReview}
+          reviewCompleted={scientificReview.summary.approved + scientificReview.summary.rejected}
+          reviewTotal={scientificReview.summary.total}
         />
 
         <BrainScaleAssetLoader
@@ -2337,6 +2358,7 @@ export default function BrainViewer() {
                   onSelectStructure={selectBrainStructure}
                   observationContext={observationContext}
                   onReturnToMacro={returnToMacro}
+                  reviewStatuses={scientificReview.statusByStructureId}
                 />
 
                 <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
@@ -2515,6 +2537,29 @@ export default function BrainViewer() {
                     ×
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+        {workspace.isOpen("review") &&
+          !workspace.isMinimized("review") && (
+            <div className="pointer-events-none absolute inset-x-4 bottom-4 top-16 z-50">
+              <div className="pointer-events-auto h-full">
+                <ScientificReviewCenter
+                  records={scientificReview.records}
+                  loading={scientificReview.loading}
+                  summary={scientificReview.summary}
+                  effectiveStatus={scientificReview.effectiveStatus}
+                  setDecision={scientificReview.setDecision}
+                  resetToReview={scientificReview.resetToReview}
+                  structures={brainStructures}
+                  onSelectStructure={selectBrainStructure}
+                  focusStructureId={reviewFocusStructureId}
+                />
+              </div>
+              <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
+                <button type="button" onClick={() => workspace.minimizePanel("review")} className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white" title="Minimize" aria-label="Minimize Scientific Review">−</button>
+                <button type="button" onClick={() => workspace.closePanel("review")} className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white" title="Close" aria-label="Close Scientific Review">×</button>
               </div>
             </div>
           )}

@@ -261,7 +261,16 @@ export default function AnatomicalInspector({
                   {structureEvidence.canonicalIdentity ? <p className="mt-1 text-cyan-100/75">Canonical: {structureEvidence.canonicalIdentity.ontology} {structureEvidence.canonicalIdentity.id} · {structureEvidence.canonicalIdentity.hraEntityLabel ?? "HRA evidence-backed structure"}</p> : <p className="mt-1 text-white/45">Canonical identity: Unmapped — no identifier inferred from the mesh name.</p>}
                   <p className="mt-1 text-white/40">Evidence tier: {structureEvidence.evidenceTier.replace(/-/g, " ")} · {structureEvidence.canonicalIdentity?.reviewStatus ?? "not applicable"}.</p>
                   {structureEvidence.canonicalIdentity?.reviewStatus === "evidence-backed-requires-review" && (
-                    <div className="mt-2 rounded border border-red-300/35 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-red-100 shadow-[0_0_12px_rgba(248,113,113,0.35)]">Review required · Human anatomical identity review only</div>
+                    <div className="mt-2 rounded border border-red-300/35 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-red-100 shadow-[0_0_12px_rgba(248,113,113,0.35)]">
+                      <div>Review required · Human anatomical identity review only</div>
+                      <button
+                        type="button"
+                        onClick={() => window.dispatchEvent(new CustomEvent("luna-open-scientific-review", { detail: { structureId: structureEvidence.lunaStructure.id } }))}
+                        className="mt-1 text-[9px] normal-case tracking-normal text-red-100 underline decoration-red-200/50 underline-offset-2 hover:text-white"
+                      >
+                        Review This Structure
+                      </button>
+                    </div>
                   )}
                   {structureEvidence.canonicalIdentity && (
                     <div className="mt-2 space-y-1 border-t border-white/8 pt-2 text-white/40">

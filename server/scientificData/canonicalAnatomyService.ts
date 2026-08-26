@@ -73,6 +73,10 @@ export function getCanonicalAnatomyIdentity(lunaStructureId: string) {
   return CANONICAL_ANATOMY_IDENTITIES.find((record) => record.lunaStructureId === lunaStructureId) ?? null;
 }
 
+export function getCanonicalAnatomyIdentities() {
+  return CANONICAL_ANATOMY_IDENTITIES;
+}
+
 export function getCanonicalAnatomyReviewStatuses() {
   return CANONICAL_ANATOMY_IDENTITIES.map((record) => ({
     lunaStructureId: record.lunaStructureId,

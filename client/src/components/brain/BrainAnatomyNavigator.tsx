@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -23,6 +22,7 @@ interface BrainAnatomyNavigatorProps {
   ) => void;
   observationContext: BrainObservationContext;
   onReturnToMacro: () => void;
+  reviewStatuses: Map<string, string>;
 }
 
 interface TreeNodeProps {
@@ -128,12 +128,12 @@ function TreeNode({
     node.children.length > 0;
 
   const reviewStatus = structure
-    ? reviewStatuses.get(structure.id) ?? "unmapped"
-    : "unmapped";
+    ? reviewStatuses.get(structure.id) ?? "UNMAPPED"
+    : "UNMAPPED";
 
   const needsHumanReview =
-    reviewStatus === "evidence-backed-requires-review" ||
-    reviewStatus === "rejected";
+    reviewStatus === "REQUIRES_REVIEW" ||
+    reviewStatus === "REJECTED";
 
   if (
     query &&
@@ -209,9 +209,9 @@ function TreeNode({
         {needsHumanReview && (
           <span
             className="rounded border border-red-300/45 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-red-200 shadow-[0_0_10px_rgba(248,113,113,0.55)]"
-            title={reviewStatus === "rejected" ? "Human review rejected" : "Human review required"}
+            title={reviewStatus === "REJECTED" ? "Human review rejected" : "Human review required"}
           >
-            {reviewStatus === "rejected" ? "Rejected" : "Review"}
+            {reviewStatus === "REJECTED" ? "Rejected" : "Review"}
           </span>
         )}
 
@@ -257,6 +257,7 @@ export default function BrainAnatomyNavigator({
   onSelectStructure,
   observationContext,
   onReturnToMacro,
+  reviewStatuses,
 }: BrainAnatomyNavigatorProps) {
   const hierarchy = useMemo(
     () =>
@@ -281,29 +282,6 @@ export default function BrainAnatomyNavigator({
   const [query, setQuery] =
     useState("");
 
-  const [reviewStatuses, setReviewStatuses] = useState<Map<string, string>>(
-    () => new Map(),
-  );
-
-  useEffect(() => {
-    let active = true;
-
-    fetch("/api/brain-science/canonical-review-statuses")
-      .then((response) => response.ok ? response.json() : null)
-      .then((payload: { statuses?: Array<{ lunaStructureId?: string; reviewStatus?: string }> } | null) => {
-        if (!active || !payload?.statuses) return;
-        setReviewStatuses(new Map(payload.statuses.flatMap((entry) =>
-          entry.lunaStructureId && entry.reviewStatus
-            ? [[entry.lunaStructureId, entry.reviewStatus] as const]
-            : [],
-        )));
-      })
-      .catch(() => {
-        if (active) setReviewStatuses(new Map());
-      });
-
-    return () => { active = false; };
-  }, []);
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
