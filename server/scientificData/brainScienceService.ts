@@ -326,19 +326,9 @@ async function queryCellular(
     accessedAt,
   );
 
-  const structureName = sanitizeStructureName(
-    query.structureName,
-  );
-
-  const matchedDatasets =
-    (payload.datasets ?? [])
-      .filter((entry) =>
-        matchesCellxgeneDataset(
-          entry,
-          structureName,
-        ),
-      )
-      .slice(0, 5);
+  // Collection metadata may be shown, but no Luna structure is matched to a
+  // cellular dataset by name. A future sample-scoped relation must be explicit.
+  const matchedDatasets: CellxgeneDataset[] = [];
 
   const findings = matchedDatasets.map(
     (entry, index): BrainScientificFinding => ({
@@ -378,11 +368,7 @@ async function queryCellular(
       coordinateTransform: null,
     }),
     findings,
-    message: structureName
-      ? findings.length
-        ? "Live CELLxGENE collection metadata matched this anatomical context. The values shown are provider-reported dataset counts, not visualized cell positions."
-        : "CELLxGENE collection metadata is available, but no direct dataset-title match was found for this Luna structure."
-      : "Select a Luna structure to discover bounded CELLxGENE cellular dataset metadata.",
+    message: "CELLxGENE collection metadata is available as sample-scoped context. No Luna structure-to-dataset relation is inferred from titles, tissue labels, or display names.",
     cached: false,
     fetchedAt: accessedAt,
   };
@@ -400,41 +386,11 @@ async function queryMolecular(
   dataset: BrainDataset,
   query: BrainScientificQuery,
 ): Promise<BrainScientificObservation> {
-  const structureName = sanitizeStructureName(
-    query.structureName,
-  );
-
-  if (!structureName) {
-    return {
-      ...createUnavailableObservation(
-        dataset,
-        query,
-      ),
-      status: "partial",
-      message:
-        "Select a Luna structure before querying the Allen Human Brain Atlas structure metadata service.",
-    };
-  }
-
-  const criteria =
-    "model::Structure,rma::criteria," +
-    `[name$il'${structureName}']` +
-    ",rma::options[num_rows$eq5]";
-
-  const url = new URL(ALLEN_BASE_URL);
-  url.searchParams.set("criteria", criteria);
-
-  const payload = await fetchJson<AllenStructureResponse>(
-    url.toString(),
-  );
-
+  // Allen sample/structure lookups require an explicit provider structure or
+  // sample identifier. Luna display names are not submitted as provider queries.
   const accessedAt = new Date().toISOString();
-  const provenance = createProvenance(
-    dataset,
-    accessedAt,
-  );
-
-  const matches = (payload.msg ?? []).slice(0, 5);
+  const provenance = createProvenance(dataset, accessedAt);
+  const matches: NonNullable<AllenStructureResponse["msg"]> = [];
 
   const findings = matches.map(
     (entry): BrainScientificFinding => ({
@@ -471,10 +427,7 @@ async function queryMolecular(
         matches.length === 1
           ? "broad"
           : "query-required",
-      note:
-        matches.length === 1
-          ? "A provider structure-name match was returned. This is not a coordinate transform and no expression value has been inferred."
-          : "No unique provider structure assignment was made. Luna requires a more specific provider query before showing molecular measurements.",
+      note: "No Allen provider structure is assigned from a Luna name. Molecular evidence requires an explicit Allen sample or provider structure identifier with donor/sample provenance.",
     },
     referenceSpace: getReferenceSpace(dataset),
     coordinateTransform: null,
@@ -507,9 +460,7 @@ async function queryMolecular(
       coordinateTransform: null,
     }),
     findings,
-    message: findings.length
-      ? "Allen Human Brain Atlas structure metadata is available. Molecular values require an explicit provider gene/probe query and retain donor/sample provenance."
-      : "No Allen Human Brain Atlas structure metadata match was returned for this Luna structure.",
+    message: "Allen Human Brain Atlas is exposed only as sample-scoped molecular context. No Luna structure-to-Allen assignment is inferred from a display name.",
     cached: false,
     fetchedAt: accessedAt,
   };
