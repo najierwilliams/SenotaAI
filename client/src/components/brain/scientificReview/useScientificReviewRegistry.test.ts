@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildScientificReviewSummary,
   createPersistedReviewDecision,
   resolveScientificReviewStatus,
   type CanonicalReviewRecord,
 } from "./useScientificReviewRegistry";
+import { CANONICAL_ANATOMY_IDENTITIES } from "../../../../../server/scientificData/canonicalAnatomyService";
 
 const reviewRecord: CanonicalReviewRecord = {
   lunaStructureId: "allen_hypothalamus_l",
@@ -54,5 +56,18 @@ describe("scientific review decision state", () => {
     const rejection = createPersistedReviewDecision("REJECTED", "Reviewer", "Scope requires domain review", "2026-08-26T00:00:00.000Z");
     expect(rejection.reviewReason).toBe("Scope requires domain review");
     expect(resolveScientificReviewStatus(reviewRecord, { [reviewRecord.lunaStructureId]: rejection })).toBe("REJECTED");
+  });
+
+  it("derives the exact immutable source inventory counts without hardcoding them in the UI", () => {
+    const summary = buildScientificReviewSummary(CANONICAL_ANATOMY_IDENTITIES, {});
+    expect(summary).toEqual({
+      total: 102,
+      highConfidence: 97,
+      ambiguous: 5,
+      approved: 0,
+      rejected: 0,
+      requiresReview: 102,
+      unmapped: 181,
+    });
   });
 });

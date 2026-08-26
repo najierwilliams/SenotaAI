@@ -61,8 +61,40 @@ export function createPersistedReviewDecision(status: "APPROVED" | "REJECTED", r
   };
 }
 
-function isComposite(record: CanonicalReviewRecord) {
+export function isCompositeReviewRecord(record: CanonicalReviewRecord) {
   return /(complex|region|matter|part_of|body)/i.test(record.lunaStructureName);
+}
+
+export interface ScientificReviewSummary {
+  total: number;
+  highConfidence: number;
+  ambiguous: number;
+  approved: number;
+  rejected: number;
+  requiresReview: number;
+  unmapped: number;
+}
+
+/**
+ * Derives presentation-only review state from immutable canonical records and
+ * locally persisted reviewer decisions. It never changes source evidence.
+ */
+export function buildScientificReviewSummary(
+  records: CanonicalReviewRecord[],
+  decisions: Record<string, PersistedReviewDecision>,
+): ScientificReviewSummary {
+  const reviewedRecords = records.filter((record) => record.reviewStatus === "evidence-backed-requires-review");
+  const effectiveStatus = (record: CanonicalReviewRecord) => resolveScientificReviewStatus(record, decisions);
+
+  return {
+    total: reviewedRecords.length,
+    highConfidence: reviewedRecords.filter((record) => !isCompositeReviewRecord(record)).length,
+    ambiguous: reviewedRecords.filter(isCompositeReviewRecord).length,
+    approved: reviewedRecords.filter((record) => effectiveStatus(record) === "APPROVED").length,
+    rejected: reviewedRecords.filter((record) => effectiveStatus(record) === "REJECTED").length,
+    requiresReview: reviewedRecords.filter((record) => effectiveStatus(record) === "REQUIRES_REVIEW").length,
+    unmapped: records.filter((record) => effectiveStatus(record) === "UNMAPPED").length,
+  };
 }
 
 export function useScientificReviewRegistry() {
@@ -108,17 +140,9 @@ export function useScientificReviewRegistry() {
 
   const statusByStructureId = useMemo(() => new Map(records.map((record) => [record.lunaStructureId, effectiveStatus(record)])), [records, effectiveStatus]);
   const reviewedRecords = useMemo(() => records.filter((record) => record.reviewStatus === "evidence-backed-requires-review"), [records]);
-  const highConfidence = useMemo(() => reviewedRecords.filter((record) => !isComposite(record)), [reviewedRecords]);
-  const ambiguous = useMemo(() => reviewedRecords.filter(isComposite), [reviewedRecords]);
-  const summary = useMemo(() => ({
-    total: reviewedRecords.length,
-    highConfidence: highConfidence.length,
-    ambiguous: ambiguous.length,
-    approved: reviewedRecords.filter((record) => effectiveStatus(record) === "APPROVED").length,
-    rejected: reviewedRecords.filter((record) => effectiveStatus(record) === "REJECTED").length,
-    requiresReview: reviewedRecords.filter((record) => effectiveStatus(record) === "REQUIRES_REVIEW").length,
-    unmapped: records.filter((record) => effectiveStatus(record) === "UNMAPPED").length,
-  }), [records, reviewedRecords, highConfidence, ambiguous, effectiveStatus]);
+  const highConfidence = useMemo(() => reviewedRecords.filter((record) => !isCompositeReviewRecord(record)), [reviewedRecords]);
+  const ambiguous = useMemo(() => reviewedRecords.filter(isCompositeReviewRecord), [reviewedRecords]);
+  const summary = useMemo(() => buildScientificReviewSummary(records, decisions), [records, decisions]);
 
   return { records, loading, decisions, effectiveStatus, setDecision, resetToReview, statusByStructureId, reviewedRecords, highConfidence, ambiguous, summary };
 }
