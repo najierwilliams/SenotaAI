@@ -2411,6 +2411,9 @@ export default function BrainViewer() {
                     nanobot.state !== "error",
                   )}
                   onSelectNanobot={selectNanobot}
+                  reviewStatus={selectedStructure
+                    ? scientificReview.statusByStructureId.get(selectedStructure.id) ?? "UNMAPPED"
+                    : "UNMAPPED"}
                   isIsolated={isolationMode}
                   interiorMode={interiorMode}
                   interiorOpacity={interiorOpacity}

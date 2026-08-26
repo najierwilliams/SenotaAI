@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -107,6 +108,12 @@ function TreeNode({
         depth < 2,
     );
 
+  useEffect(() => {
+    if (query) {
+      setExpanded(true);
+    }
+  }, [query]);
+
   const isStructure =
     node.type === "structure";
 
@@ -179,6 +186,13 @@ function TreeNode({
       <button
         type="button"
         onClick={handleClick}
+        data-scientific-review-status={structure ? reviewStatus : undefined}
+        data-scientific-review-structure-id={structure?.id}
+        aria-label={needsHumanReview && structure
+          ? reviewStatus === "REJECTED"
+            ? `Scientific identity review rejected for ${structure.displayName}`
+            : `Scientific review required for ${structure.displayName}`
+          : undefined}
         className={[
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition",
           isSelected
@@ -209,6 +223,9 @@ function TreeNode({
         {needsHumanReview && (
           <span
             className="rounded border border-red-300/45 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-red-200 shadow-[0_0_10px_rgba(248,113,113,0.55)]"
+            aria-label={reviewStatus === "REJECTED"
+              ? `Scientific identity review rejected for ${structure?.displayName ?? node.label}`
+              : `Scientific review required for ${structure?.displayName ?? node.label}`}
             title={reviewStatus === "REJECTED" ? "Human review rejected" : "Human review required"}
           >
             {reviewStatus === "REJECTED" ? "Rejected" : "Review"}

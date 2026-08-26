@@ -20,6 +20,10 @@ import type {
   Nanobot,
 } from "./anatomy/NanobotTypes";
 
+import type {
+  ScientificReviewStatus,
+} from "./scientificReview/useScientificReviewRegistry";
+
 import {
   getDatasetStatusLabel,
 } from "@shared/brainScience";
@@ -54,6 +58,7 @@ interface AnatomicalInspectorProps {
   onReturnToMacro: () => void;
   activeNanobots: Nanobot[];
   onSelectNanobot: (id: string) => void;
+  reviewStatus: ScientificReviewStatus;
 }
 
 export default function AnatomicalInspector({
@@ -78,6 +83,7 @@ export default function AnatomicalInspector({
   onReturnToMacro,
   activeNanobots,
   onSelectNanobot,
+  reviewStatus,
 }: AnatomicalInspectorProps) {
   const [structureEvidence, setStructureEvidence] = useState<{
     lunaStructure: { id: string; sourceName: string; meshBacked: boolean };
@@ -261,12 +267,20 @@ export default function AnatomicalInspector({
                   {structureEvidence.canonicalIdentity ? <p className="mt-1 text-cyan-100/75">Canonical: {structureEvidence.canonicalIdentity.ontology} {structureEvidence.canonicalIdentity.id} · {structureEvidence.canonicalIdentity.hraEntityLabel ?? "HRA evidence-backed structure"}</p> : <p className="mt-1 text-white/45">Canonical identity: Unmapped — no identifier inferred from the mesh name.</p>}
                   <p className="mt-1 text-white/40">Evidence tier: {structureEvidence.evidenceTier.replace(/-/g, " ")} · {structureEvidence.canonicalIdentity?.reviewStatus ?? "not applicable"}.</p>
                   {structureEvidence.canonicalIdentity?.reviewStatus === "evidence-backed-requires-review" && (
-                    <div className="mt-2 rounded border border-red-300/35 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-red-100 shadow-[0_0_12px_rgba(248,113,113,0.35)]">
-                      <div>Review required · Human anatomical identity review only</div>
+                    <div className={reviewStatus === "APPROVED"
+                      ? "mt-2 rounded border border-emerald-300/35 bg-emerald-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-100 shadow-[0_0_12px_rgba(110,231,183,0.25)]"
+                      : "mt-2 rounded border border-red-300/35 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-red-100 shadow-[0_0_12px_rgba(248,113,113,0.35)]"}>
+                      <div>{reviewStatus === "APPROVED"
+                        ? "Scientific identity approved · Local human review metadata only"
+                        : reviewStatus === "REJECTED"
+                          ? "Scientific identity rejected · Source evidence remains unchanged"
+                          : "Scientific review required · Human anatomical identity review only"}</div>
                       <button
                         type="button"
                         onClick={() => window.dispatchEvent(new CustomEvent("luna-open-scientific-review", { detail: { structureId: structureEvidence.lunaStructure.id } }))}
-                        className="mt-1 text-[9px] normal-case tracking-normal text-red-100 underline decoration-red-200/50 underline-offset-2 hover:text-white"
+                        className={reviewStatus === "APPROVED"
+                          ? "mt-1 text-[9px] normal-case tracking-normal text-emerald-100 underline decoration-emerald-200/50 underline-offset-2 hover:text-white"
+                          : "mt-1 text-[9px] normal-case tracking-normal text-red-100 underline decoration-red-200/50 underline-offset-2 hover:text-white"}
                       >
                         Review This Structure
                       </button>
