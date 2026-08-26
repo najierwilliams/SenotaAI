@@ -307,6 +307,7 @@ async function main() {
     report.checks.approval = approvalOverlay[approvedRecord.lunaStructureId];
     report.checks.countAfterApproval = await getMainBadge();
     report.checks.navigatorApproved = await verifyNavigatorReviewStatus(approvedRecord, "APPROVED");
+    await selectNavigatorRecord(approvedRecord);
     report.checks.inspectorApprovalSafeguards = await waitFor(`document.body.innerText.toUpperCase().includes("SCIENTIFIC IDENTITY APPROVED") && document.body.innerText.includes("Luna → MNI: Not established") && document.body.innerText.includes("No authoritative crosswalk established") && document.body.innerText.includes("coordinate unavailable")`, "approved Inspector safeguards");
     report.checks.inspector = report.checks.inspectorApprovalSafeguards;
 
