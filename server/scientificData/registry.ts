@@ -8,6 +8,7 @@ import type {
 import {
   HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
 } from "@shared/hraSpatial";
+import { SCIENTIFIC_REFERENCE_ASSETS } from "./scientificReferenceRegistry";
 
 export const BRAIN_REFERENCE_SPACES: BrainReferenceSpace[] = [
   {
@@ -489,6 +490,7 @@ export function getScientificDatasetManifest(): BrainScientificDatasetManifest {
     referenceSpaces: BRAIN_REFERENCE_SPACES,
     coordinateTransforms:
       BRAIN_COORDINATE_TRANSFORMS,
+    scientificReferences: SCIENTIFIC_REFERENCE_ASSETS,
     lunaReferenceRegistration:
       BRAIN_LUNA_REFERENCE_REGISTRATION,
     hraSpatialRegistration:

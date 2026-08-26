@@ -312,10 +312,54 @@ export interface BrainScientificObservation {
   fetchedAt: string | null;
 }
 
+export type BrainScientificReferenceStatus =
+  | "available"
+  | "validated"
+  | "deprecated"
+  | "unavailable";
+
+/**
+ * An independent scientific coordinate asset. Its status applies solely inside
+ * its declared provider reference space; it never establishes a registration
+ * from Luna's presentation model.
+ */
+export interface BrainScientificReferenceAsset {
+  id: string;
+  name: string;
+  provider: BrainDatasetProvider;
+  version: string;
+  status: BrainScientificReferenceStatus;
+  role: "scientific-coordinate-reference";
+  referenceSpaceId: string;
+  providerReferenceSpaceId: string;
+  coordinateSystem: string;
+  units: string;
+  axisOrientation: string;
+  handedness: string | null;
+  origin: string;
+  assetAvailability: "provider-hosted" | "local" | "unavailable";
+  assetFormats: string[];
+  assetUrl: string | null;
+  metadataUrl: string;
+  license: string;
+  provenance: string[];
+  structureSource: {
+    providerParcellationId: string;
+    kind: string;
+    identifiers: string;
+    mappingPolicy: string;
+  };
+  transformSources: string[];
+  availableScales: BrainScientificScale[];
+  visualModelRelationship: string;
+  limitations: string[];
+}
+
 export interface BrainScientificDatasetManifest {
   datasets: BrainDataset[];
   referenceSpaces: BrainReferenceSpace[];
   coordinateTransforms: BrainCoordinateTransform[];
+  scientificReferences: BrainScientificReferenceAsset[];
   lunaReferenceRegistration: LunaReferenceRegistration;
   hraSpatialRegistration: import("./hraSpatial").HraSpatialRegistration;
 }

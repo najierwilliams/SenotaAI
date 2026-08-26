@@ -35,7 +35,9 @@ import {
   getEbrainsDatasets,
   getEbrainsProviderRecord,
   getEbrainsReferenceSpaces,
+  getEbrainsSelectedScientificReference,
   getEbrainsUnavailableRegionsOrFeatures,
+  assignJulichAtMni2009cCoordinate,
 } from "./scientificData/ebrainsProvider";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./scientificData/registry";
 import type { BrainScientificScale } from "@shared/brainScience";
@@ -388,6 +390,28 @@ export function createApp() {
 
   app.get("/api/brain-science/atlas", async (_req, res) => {
     return res.json({ atlas: await getEbrainsAtlasSummary() });
+  });
+
+  app.get("/api/brain-science/scientific-reference", (_req, res) => {
+    return res.json({ scientificReference: getEbrainsSelectedScientificReference() });
+  });
+
+  app.get("/api/brain-science/julich-assignment", async (req, res) => {
+    const x = typeof req.query.x === "string" ? Number(req.query.x) : NaN;
+    const y = typeof req.query.y === "string" ? Number(req.query.y) : NaN;
+    const z = typeof req.query.z === "string" ? Number(req.query.z) : NaN;
+    const units = typeof req.query.units === "string" ? req.query.units : null;
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || units !== "millimetres") {
+      return res.status(400).json({
+        error: "x, y, z finite MNI ICBM 152 2009c coordinates and units=millimetres are required; Luna viewer and GLB coordinates are not accepted.",
+        referenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      });
+    }
+
+    return res.json({
+      assignment: await assignJulichAtMni2009cCoordinate({ x, y, z, units }),
+    });
   });
 
   app.get("/api/brain-science/regions", (_req, res) => {

@@ -1,4 +1,5 @@
 import type {
+  BrainCoordinate,
   BrainDataset,
   BrainReferenceSpace,
 } from "@shared/brainScience";
@@ -7,6 +8,11 @@ import {
   BRAIN_LUNA_REFERENCE_REGISTRATION,
   BRAIN_REFERENCE_SPACES,
 } from "./registry";
+import {
+  getSelectedScientificReference,
+  JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
+  JULICH_MNI_2009C_PROVIDER_SPACE_ID,
+} from "./scientificReferenceRegistry";
 
 const SIIBRA_BASE_URL = "https://siibra-api-stable.apps.hbp.eu/v3_0";
 const HUMAN_ATLAS_PATH = "/atlases/juelich/iav/atlas/v1.0.0/1";
@@ -152,6 +158,73 @@ export async function getEbrainsReferenceSpaces(): Promise<BrainReferenceSpace[]
 }
 
 export function getEbrainsDatasets(): BrainDataset[] { return ebrainsDatasets(); }
+
+export function getEbrainsSelectedScientificReference() {
+  return getSelectedScientificReference();
+}
+
+export interface EbrainsCoordinateAssignment {
+  availability: "available" | "unavailable";
+  referenceSpaceId: "ebrains-mni-icbm-152-2009c";
+  providerReferenceSpaceId: string;
+  providerParcellationId: string;
+  coordinate: BrainCoordinate | null;
+  assignment: unknown | null;
+  reason: string | null;
+  provenanceUrl: string;
+}
+
+/**
+ * Performs a provider query only for coordinates explicitly declared in the
+ * selected MNI ICBM 152 2009c reference. The returned assignment is provider
+ * data; it is never converted to a Luna point or inferred from a Luna mesh.
+ */
+export async function assignJulichAtMni2009cCoordinate(
+  coordinate: BrainCoordinate,
+): Promise<EbrainsCoordinateAssignment> {
+  const base = {
+    referenceSpaceId: "ebrains-mni-icbm-152-2009c" as const,
+    providerReferenceSpaceId: JULICH_MNI_2009C_PROVIDER_SPACE_ID,
+    providerParcellationId: JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
+    provenanceUrl: "https://siibra-api-stable.apps.hbp.eu/v3_0/redoc",
+  };
+
+  if (
+    coordinate.units !== "millimetres" ||
+    !Number.isFinite(coordinate.x) ||
+    !Number.isFinite(coordinate.y) ||
+    !Number.isFinite(coordinate.z)
+  ) {
+    return {
+      ...base,
+      availability: "unavailable",
+      coordinate: null,
+      assignment: null,
+      reason: "A Julich assignment requires finite coordinates explicitly expressed in MNI ICBM 152 2009c millimetres.",
+    };
+  }
+
+  const params = new URLSearchParams({
+    parcellation_id: JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
+    space_id: JULICH_MNI_2009C_PROVIDER_SPACE_ID,
+    point: `${coordinate.x},${coordinate.y},${coordinate.z}`,
+    assignment_type: "statistical",
+    sigma_mm: "0",
+  });
+
+  try {
+    const assignment = await fetchJson<unknown>(`/map/assign?${params.toString()}`);
+    return { ...base, availability: "available", coordinate: { ...coordinate }, assignment, reason: null };
+  } catch {
+    return {
+      ...base,
+      availability: "unavailable",
+      coordinate: { ...coordinate },
+      assignment: null,
+      reason: "The public siibra assignment service did not return a result. No region, probability, transform, or Luna target was inferred.",
+    };
+  }
+}
 
 export function getEbrainsUnavailableRegionsOrFeatures(): EbrainsUnavailableQuery {
   return {
