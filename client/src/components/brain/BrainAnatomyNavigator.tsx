@@ -1,4 +1,8 @@
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import type { BrainStructure } from "./anatomy/BrainStructureRegistry";
 
@@ -30,6 +34,7 @@ interface TreeNodeProps {
   ) => void;
   depth: number;
   query: string;
+  reviewStatuses: Map<string, string>;
 }
 
 function nodeMatchesQuery(
@@ -69,6 +74,7 @@ function TreeNode({
   onSelectStructure,
   depth,
   query,
+  reviewStatuses,
 }: TreeNodeProps) {
   const matches =
     nodeMatchesQuery(
@@ -121,6 +127,14 @@ function TreeNode({
   const hasChildren =
     node.children.length > 0;
 
+  const reviewStatus = structure
+    ? reviewStatuses.get(structure.id) ?? "unmapped"
+    : "unmapped";
+
+  const needsHumanReview =
+    reviewStatus === "evidence-backed-requires-review" ||
+    reviewStatus === "rejected";
+
   if (
     query &&
     !matches &&
@@ -169,7 +183,9 @@ function TreeNode({
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition",
           isSelected
             ? "bg-blue-500/20 text-white ring-1 ring-blue-400/30"
-            : "text-white/70 hover:bg-white/10 hover:text-white",
+            : needsHumanReview
+              ? "text-red-100 shadow-[0_0_14px_rgba(248,113,113,0.5)] ring-1 ring-red-400/35 animate-pulse hover:bg-red-500/10"
+              : "text-white/70 hover:bg-white/10 hover:text-white",
         ].join(" ")}
         style={{
           paddingLeft:
@@ -189,6 +205,15 @@ function TreeNode({
         <span className="min-w-0 flex-1 truncate">
           {node.label}
         </span>
+
+        {needsHumanReview && (
+          <span
+            className="rounded border border-red-300/45 bg-red-500/10 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] text-red-200 shadow-[0_0_10px_rgba(248,113,113,0.55)]"
+            title={reviewStatus === "rejected" ? "Human review rejected" : "Human review required"}
+          >
+            {reviewStatus === "rejected" ? "Rejected" : "Review"}
+          </span>
+        )}
 
         {node.structureCount > 0 && (
           <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-white/30">
@@ -216,6 +241,7 @@ function TreeNode({
                   }
                   depth={depth + 1}
                   query={query}
+                  reviewStatuses={reviewStatuses}
                 />
               ),
             )}
@@ -254,6 +280,30 @@ export default function BrainAnatomyNavigator({
 
   const [query, setQuery] =
     useState("");
+
+  const [reviewStatuses, setReviewStatuses] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/brain-science/canonical-review-statuses")
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload: { statuses?: Array<{ lunaStructureId?: string; reviewStatus?: string }> } | null) => {
+        if (!active || !payload?.statuses) return;
+        setReviewStatuses(new Map(payload.statuses.flatMap((entry) =>
+          entry.lunaStructureId && entry.reviewStatus
+            ? [[entry.lunaStructureId, entry.reviewStatus] as const]
+            : [],
+        )));
+      })
+      .catch(() => {
+        if (active) setReviewStatuses(new Map());
+      });
+
+    return () => { active = false; };
+  }, []);
 
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
@@ -337,6 +387,7 @@ export default function BrainAnatomyNavigator({
             }
             depth={0}
             query={query}
+            reviewStatuses={reviewStatuses}
           />
         ) : (
           <div className="flex min-h-full flex-col justify-between rounded-lg border border-white/10 bg-white/[0.03] p-4">

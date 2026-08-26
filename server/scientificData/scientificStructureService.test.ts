@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getScientificStructureEvidence } from "./scientificStructureService";
 import { SCIENTIFIC_LICENSE_REGISTRY, SCIENTIFIC_PROVENANCE_REGISTRY } from "./scientificProvenanceRegistry";
+import { getCanonicalAnatomyReviewStatuses } from "./canonicalAnatomyService";
 
 describe("hybrid scientific structure evidence", () => {
   it("returns an evidence-backed HRA identity as review-required structure context, not a coordinate", () => {
@@ -24,6 +25,15 @@ describe("hybrid scientific structure evidence", () => {
     expect(evidence?.canonicalIdentity).toBeNull();
     expect(evidence?.scientificTarget.structureUberonId).toBeNull();
     expect(evidence?.scientificTarget.coordinate).toBeNull();
+  });
+
+  it("exposes authoritative review status for Navigator indicators without promoting unmapped records", () => {
+    const statuses = getCanonicalAnatomyReviewStatuses();
+    expect(statuses).toHaveLength(283);
+    expect(statuses.filter((entry) => entry.reviewStatus === "evidence-backed-requires-review")).toHaveLength(102);
+    expect(statuses.filter((entry) => entry.reviewStatus === "unmapped")).toHaveLength(181);
+    expect(statuses.find((entry) => entry.lunaStructureId === "allen_hypothalamus_l")?.reviewStatus).toBe("evidence-backed-requires-review");
+    expect(statuses.find((entry) => entry.lunaStructureId === "allen_thalamus_l")?.reviewStatus).toBe("unmapped");
   });
 
   it("records Julich as non-redistributed and BigBrain/Allen as review-required", () => {

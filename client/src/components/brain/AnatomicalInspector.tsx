@@ -80,7 +80,8 @@ export default function AnatomicalInspector({
   onSelectNanobot,
 }: AnatomicalInspectorProps) {
   const [structureEvidence, setStructureEvidence] = useState<{
-    canonicalIdentity: { ontology: string; id: string; hraEntityLabel: string | null; status: string; reviewStatus?: string } | null;
+    lunaStructure: { id: string; sourceName: string; meshBacked: boolean };
+    canonicalIdentity: { ontology: string; id: string; hraEntityId: string | null; hraEntityLabel: string | null; status: string; evidence?: string; provenance?: string; version?: string; reviewStatus?: string } | null;
     scientificFeatures: { julich: string };
     julichObservation?: { status: string; evidenceTier: string };
     evidenceTier: string;
@@ -259,6 +260,17 @@ export default function AnatomicalInspector({
                   <div className="uppercase tracking-wider text-white/35">Anatomical identity</div>
                   {structureEvidence.canonicalIdentity ? <p className="mt-1 text-cyan-100/75">Canonical: {structureEvidence.canonicalIdentity.ontology} {structureEvidence.canonicalIdentity.id} · {structureEvidence.canonicalIdentity.hraEntityLabel ?? "HRA evidence-backed structure"}</p> : <p className="mt-1 text-white/45">Canonical identity: Unmapped — no identifier inferred from the mesh name.</p>}
                   <p className="mt-1 text-white/40">Evidence tier: {structureEvidence.evidenceTier.replace(/-/g, " ")} · {structureEvidence.canonicalIdentity?.reviewStatus ?? "not applicable"}.</p>
+                  {structureEvidence.canonicalIdentity?.reviewStatus === "evidence-backed-requires-review" && (
+                    <div className="mt-2 rounded border border-red-300/35 bg-red-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-red-100 shadow-[0_0_12px_rgba(248,113,113,0.35)]">Review required · Human anatomical identity review only</div>
+                  )}
+                  {structureEvidence.canonicalIdentity && (
+                    <div className="mt-2 space-y-1 border-t border-white/8 pt-2 text-white/40">
+                      <p>GLB node/path: {structureEvidence.lunaStructure.sourceName}</p>
+                      <p>HRA entity: {structureEvidence.canonicalIdentity.hraEntityId ?? "not supplied"}</p>
+                      <p>HRA version: {structureEvidence.canonicalIdentity.version ?? "not supplied"}</p>
+                      <p>Evidence: {structureEvidence.canonicalIdentity.evidence ?? "source-backed identity"}</p>
+                    </div>
+                  )}
                   <p className="mt-1 text-white/40">Julich-Brain: {structureEvidence.julichObservation?.status === "unmapped" ? "No authoritative crosswalk established" : structureEvidence.scientificFeatures.julich} · provider-space context only.</p>
                   <p className="mt-1 text-white/40">Scientific target: {structureEvidence.scientificTarget.status} · coordinate unavailable.</p>
                   <p className="mt-1 text-amber-100/60">Luna → MNI: Not established. Structure identity is not a coordinate or mission target.</p>

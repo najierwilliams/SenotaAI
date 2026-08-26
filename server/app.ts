@@ -41,6 +41,7 @@ import {
 } from "./scientificData/ebrainsProvider";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./scientificData/registry";
 import { getScientificStructureCrosswalkSummary, getScientificStructureEvidence } from "./scientificData/scientificStructureService";
+import { getCanonicalAnatomyReviewStatuses } from "./scientificData/canonicalAnatomyService";
 import { SCIENTIFIC_LICENSE_REGISTRY, SCIENTIFIC_PROVENANCE_REGISTRY } from "./scientificData/scientificProvenanceRegistry";
 import { MULTISCALE_SCIENTIFIC_CONTEXTS } from "./scientificData/multiscaleScientificContextRegistry";
 import type { BrainScientificScale } from "@shared/brainScience";
@@ -415,6 +416,10 @@ export function createApp() {
     return res.json({
       assignment: await assignJulichAtMni2009cCoordinate({ x, y, z, units }),
     });
+  });
+
+  app.get("/api/brain-science/canonical-review-statuses", (_req, res) => {
+    return res.json({ statuses: getCanonicalAnatomyReviewStatuses() });
   });
 
   app.get("/api/brain-science/multiscale-contexts", (_req, res) => {
