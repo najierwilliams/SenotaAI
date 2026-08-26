@@ -1,12 +1,14 @@
 import { getCanonicalAnatomyIdentity, getCanonicalAnatomySummary } from "./canonicalAnatomyService";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./registry";
 import { getScientificLicense, getScientificProvenance } from "./scientificProvenanceRegistry";
+import { getJulichStructureMappings, JULICH_STRUCTURE_MAPPING_POLICY } from "./julichStructureMappingRegistry";
 
 export function getScientificStructureEvidence(lunaStructureId: string) {
   const record = getCanonicalAnatomyIdentity(lunaStructureId);
   if (!record) return null;
   const provenance = getScientificProvenance("hra-brain-female-v1-1-graph");
   const license = getScientificLicense("hra-brain-female-v1-1");
+  const julichMappings = getJulichStructureMappings(lunaStructureId);
   const scientificTarget = {
     id: `structure-context:${record.lunaStructureId}`,
     structureUberonId: record.uberonId,
@@ -43,9 +45,12 @@ export function getScientificStructureEvidence(lunaStructureId: string) {
     evidenceTier: "structure-context",
     provenance,
     license,
-    providerMappings: [],
+    providerMappings: julichMappings,
+    julichObservation: julichMappings.length > 0
+      ? { status: "available", evidenceTier: "region-probabilistic", mappings: julichMappings }
+      : { status: "unmapped", evidenceTier: "structure-context", policy: JULICH_STRUCTURE_MAPPING_POLICY },
     referenceSpaces: [{ id: "ebrains-mni-icbm-152-2009c", status: "available", note: "Scientific provider reference only; no Luna coordinate is supplied." }],
-    scientificFeatures: { julich: "unmapped", bigbrain: "provider-context-only", cellular: "unavailable", molecular: "unavailable" },
+    scientificFeatures: { julich: julichMappings.length > 0 ? "region-probabilistic" : "unmapped", bigbrain: "provider-context-only", cellular: "unavailable", molecular: "unavailable" },
     registrationStatus: { lunaToMni: "not-established", id: BRAIN_LUNA_REFERENCE_REGISTRATION.id },
     spatialStatus: { coordinate: "unavailable", reason: "Structure identity is not a Luna-to-MNI coordinate transform or operational nanobot target." },
     limitations: ["No Luna visual, GLB, or viewer coordinate is included.", "No UBERON-to-Julich region mapping is inferred from names.", "Structure-context mapping does not enable lower-scale missions."],
