@@ -40,6 +40,7 @@ import {
   assignJulichAtMni2009cCoordinate,
 } from "./scientificData/ebrainsProvider";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./scientificData/registry";
+import { getScientificStructureCrosswalkSummary, getScientificStructureEvidence } from "./scientificData/scientificStructureService";
 import type { BrainScientificScale } from "@shared/brainScience";
 
 function readCookie(header: string | undefined, name: string) {
@@ -412,6 +413,16 @@ export function createApp() {
     return res.json({
       assignment: await assignJulichAtMni2009cCoordinate({ x, y, z, units }),
     });
+  });
+
+  app.get("/api/brain-science/structure-crosswalk", (_req, res) => {
+    return res.json({ summary: getScientificStructureCrosswalkSummary() });
+  });
+
+  app.get("/api/brain-science/structure/:lunaStructureId", (req, res) => {
+    const evidence = getScientificStructureEvidence(req.params.lunaStructureId);
+    if (!evidence) return res.status(404).json({ error: "Unknown or non-mesh-backed Luna structure ID; no mapping was inferred." });
+    return res.json(evidence);
   });
 
   app.get("/api/brain-science/regions", (_req, res) => {
