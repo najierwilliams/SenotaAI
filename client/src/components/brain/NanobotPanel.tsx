@@ -363,6 +363,12 @@ export default function NanobotPanel({
                   Original observation: {labelize(selectedNanobot.target.observationScale)} · {selectedNanobot.target.observationContextLabel}
                 </div>
                 <div>
+                  Target kind: {labelize(selectedNanobot.target.targetKind)}
+                  {selectedNanobot.target.targetKind === "structure-context-target"
+                    ? " · scientific structure context only; mission targeting disabled"
+                    : ""}
+                </div>
+                <div>
                   Spatial status: {labelize(selectedNanobot.target.spatialStatus)}{selectedNanobot.target.targetResolution ? ` · ${selectedNanobot.target.targetResolution}` : ""}
                 </div>
                 <div>{selectedNanobot.target.spatialMessage}</div>
