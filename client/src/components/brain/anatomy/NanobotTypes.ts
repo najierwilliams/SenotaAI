@@ -82,6 +82,12 @@ export type NanobotSpatialStatus =
   | "unavailable"
   | "transitioning";
 
+/** A visual or identity target never becomes a provider-space coordinate by implication. */
+export type NanobotTargetKind =
+  | "visual-mesh-target"
+  | "structure-context-target"
+  | "scientific-coordinate-target";
+
 export interface NanobotPosition {
   x: number;
   y: number;
@@ -161,6 +167,8 @@ export interface NanobotTarget {
   observationStatus: "ready" | "unavailable" | "loading" | "error";
   observationScientificStatus: BrainDatasetStatus | null;
   observationContextLabel: string;
+  /** Only scientific-coordinate-target may be considered for a lower-scale operation. */
+  targetKind: NanobotTargetKind;
   targetPosition: NanobotPosition | null;
   targetResolution: string | null;
   spatialStatus: NanobotSpatialStatus;
@@ -353,6 +361,12 @@ export function createNanobotTarget(
     observationContextLabel:
       observation.contextLabel ??
       `${structure.displayName} · ${observation.scale} observation`,
+    targetKind:
+      observation.scale === "macro" && observation.targetPosition
+        ? "visual-mesh-target"
+        : observation.spatialTarget?.coordinate && observation.spatialCapability?.coordinateResolved
+          ? "scientific-coordinate-target"
+          : "structure-context-target",
     targetPosition:
       observation.targetPosition ?? null,
     targetResolution:
