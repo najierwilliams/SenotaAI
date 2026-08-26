@@ -401,6 +401,9 @@ export function interpretLunaBrainCommand(
     };
   }
 
+  const isHraReferenceQuestion =
+    /\b(?:hra|human reference atlas|ccf body|brain female)\b/.test(normalized) &&
+    /\b(?:reference|coordinate|space|placement|transform|registered)\b/.test(normalized);
   const isReferenceSpaceQuestion =
     normalized.includes("coordinate system") ||
     normalized.includes("reference space") ||
@@ -416,12 +419,25 @@ export function interpretLunaBrainCommand(
     /\bcellular\b/.test(normalized) &&
     /\b(?:nanobot|bot|send|mission|why)\b/.test(normalized);
 
+  if (isHraReferenceQuestion) {
+    const hraRegistration = lunaBrainActions.getHraSpatialRegistration();
+    return {
+      message: hraRegistration.ok
+        ? "The raw checksum-pinned HRA v1.1 Allen_F_Brain.glb has an authoritative placement to HRA Brain-Female and then the HRA CCF body reference. This is an HRA reference-object placement, not a viewer-presentation coordinate, MNI coordinate, clinical stereotactic coordinate, or lower-scale biological target. MNI registration remains not established."
+        : hraRegistration.message,
+      plan: null,
+      needsConfirmation: false,
+      action: "none",
+    };
+  }
+
   if (isReferenceSpaceQuestion) {
     const referenceSpace = lunaBrainActions.getReferenceSpace();
     const registration = lunaBrainActions.getRegistrationStatus();
+    const hraRegistration = lunaBrainActions.getHraSpatialRegistration();
     return {
       message: referenceSpace.ok
-        ? `You are looking at **${referenceSpace.data.label}**. ${referenceSpace.message} Registration status: **${registration.data?.status ?? "unavailable"}**.`
+        ? `You are looking at **${referenceSpace.data.label}**. ${referenceSpace.message} HRA placement: **${hraRegistration.data?.status ?? "unavailable"}**. MNI registration: **${registration.data?.status ?? "unavailable"}**.`
         : referenceSpace.message,
       plan: null,
       needsConfirmation: false,

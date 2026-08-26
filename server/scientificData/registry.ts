@@ -5,6 +5,9 @@ import type {
   BrainScientificDatasetManifest,
   LunaReferenceRegistration,
 } from "@shared/brainScience";
+import {
+  HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
+} from "@shared/hraSpatial";
 
 export const BRAIN_REFERENCE_SPACES: BrainReferenceSpace[] = [
   {
@@ -16,12 +19,62 @@ export const BRAIN_REFERENCE_SPACES: BrainReferenceSpace[] = [
     units: null,
     axisOrientation: null,
     coordinateConvention:
-      "Undocumented native glTF mesh coordinates after BrainViewer presentation centering and display scaling.",
+      "Three.js presentation coordinates after BrainViewer centering and display scaling.",
     resolution: null,
     version: null,
     provenanceUrl: null,
     description:
-      "Repository-local Luna GLB coordinate frame. The asset contains no declared units, axis orientation, anatomical template, reference-space ID, or external registration metadata; BrainViewer centres and display-scales it. No validated transform to external scientific reference spaces is configured.",
+      "Viewer presentation frame only. BrainViewer centres and display-scales the loaded mesh for rendering; it is not the checksum-pinned raw GLB coordinate frame and has no validated transform to external scientific reference spaces.",
+  },
+  {
+    id: "luna-raw-hra-v11-allen-brain-glb",
+    label: "Raw Luna/HRA Allen_F_Brain GLB",
+    kind: "raw-asset",
+    provider: "luna",
+    template: null,
+    units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention:
+      "Exact raw HRA v1.1 Allen_F_Brain.glb object frame, valid only for the checksum-pinned asset.",
+    resolution: null,
+    version: "HRA v1.1",
+    provenanceUrl:
+      "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/graph.json",
+    description:
+      "Scientific source frame for the authoritative HRA local placement. It is distinct from the Three.js viewer presentation frame and is not MNI.",
+  },
+  {
+    id: "hra-brain-female-v1-1",
+    label: "HRA Brain-Female v1.1",
+    kind: "hra-reference-object",
+    provider: "luna",
+    template: "HRA Brain-female reference organ",
+    units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention:
+      "HRA CCF reference-object spatial entity reached from the exact raw GLB by the v1.1 published placement.",
+    resolution: null,
+    version: "HRA v1.1",
+    provenanceUrl:
+      "https://purl.humanatlas.io/ref-organ/brain-female/v1.1",
+    description:
+      "Authoritative HRA reference-object space. It is not MNI, a clinical stereotactic frame, or a provider coordinate system for lower-scale observations.",
+  },
+  {
+    id: "hra-ccf-body-v1-2",
+    label: "HRA CCF body reference",
+    kind: "hra-body-reference",
+    provider: "luna",
+    template: "HRA CCF body graph",
+    units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention:
+      "HRA CCF body graph target of the v1.1 Brain-female global placement.",
+    resolution: null,
+    version: "HRA CCF body graph v1.2",
+    provenanceUrl: "https://purl.humanatlas.io/graph/hra-ccf-body",
+    description:
+      "HRA body reference context used to assemble reference objects. It does not create an MNI, tissue, cellular, molecular, or subcellular target coordinate.",
   },
   {
     id: "ebrains-mni-icbm-152-2009c",
@@ -246,7 +299,12 @@ export const BRAIN_DATASETS: BrainDataset[] = [
     license: "CC BY 4.0 (HuBMAP Human Reference Atlas); local asset SHA-256 c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc.",
     citation:
       "Browne K, et al. HuBMAP CCF 3D Reference Object Library, Brain-female v1.1. DOI: 10.48539/HBM724.XTTN.487.",
-    referenceSpaceIds: ["luna-viewer-local"],
+    referenceSpaceIds: [
+      "luna-viewer-local",
+      "luna-raw-hra-v11-allen-brain-glb",
+      "hra-brain-female-v1-1",
+      "hra-ccf-body-v1-2",
+    ],
     description:
       "Repository-local copy of the byte-verified HuBMAP Human Reference Atlas Brain-female v1.1 Allen_F_Brain.glb anatomical reference object, derived using Allen Human Reference Atlas data, mirrored to form a whole brain, and resized to fit Visible Human bodies.",
     limitations:
@@ -433,5 +491,7 @@ export function getScientificDatasetManifest(): BrainScientificDatasetManifest {
       BRAIN_COORDINATE_TRANSFORMS,
     lunaReferenceRegistration:
       BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration:
+      HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
   };
 }

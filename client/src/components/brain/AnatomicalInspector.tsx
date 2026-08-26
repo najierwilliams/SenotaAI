@@ -196,6 +196,25 @@ export default function AnatomicalInspector({
                   {observationContext.referenceSpace.label}
                 </div>
               )}
+              {observationContext.hraSpatialRegistration && observationContext.scale === "macro" && (
+                <div className="mt-2 rounded-md border border-emerald-300/10 bg-emerald-300/5 p-2.5 text-[10px] leading-relaxed text-white/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="uppercase tracking-wider text-white/35">HRA spatial reference</span>
+                    <span className={observationContext.hraSpatialRegistration.status === "established" ? "text-emerald-300" : "text-amber-200"}>
+                      {observationContext.hraSpatialRegistration.status === "established" ? "Established" : "Revalidation required"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-white/55">
+                    {observationContext.hraSpatialRegistration.asset.label} · HRA Brain-Female / HRA CCF body placement.
+                  </p>
+                  <p className="mt-1 text-white/40">
+                    Source asset checksum is pinned; landmark validation is {observationContext.hraSpatialRegistration.validation.validationStatus}. Viewer presentation coordinates remain visual only.
+                  </p>
+                  <p className="mt-1 text-amber-100/60">
+                    MNI status: {observationContext.hraSpatialRegistration.mni.status}.
+                  </p>
+                </div>
+              )}
               {observationContext.registration && (
                 <div className="mt-2 rounded-md border border-amber-300/10 bg-amber-300/5 p-2.5 text-[10px] leading-relaxed text-white/50">
                   <div className="flex items-center justify-between gap-2">

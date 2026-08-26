@@ -13,6 +13,9 @@ import {
   BRAIN_REFERENCE_SPACES,
 } from "./registry";
 import {
+  HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
+} from "@shared/hraSpatial";
+import {
   createSpatialTargetState,
 } from "./spatialTargetService";
 import {
@@ -149,6 +152,8 @@ function createUnavailableObservation(
     status: dataset.status,
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration:
+      HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset,
@@ -221,6 +226,8 @@ async function queryTissue(
     status: "partial",
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration:
+      HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset,
@@ -338,6 +345,8 @@ async function queryCellular(
     status: "partial",
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration:
+      HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset,
@@ -427,6 +436,8 @@ async function queryMolecular(
     status: "partial",
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration:
+      HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: {
       canonicalStructureId:
         query.structureId ??
@@ -577,6 +588,8 @@ export async function queryBrainScientificObservation(
           status: "available",
           dataset,
           registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+          hraSpatialRegistration:
+            HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
           structureMapping: createStructureMapping(
             query,
             dataset,

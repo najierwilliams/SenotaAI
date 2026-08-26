@@ -48,6 +48,12 @@ describe("Luna Brain scientific dataset integration", () => {
     expect(manifest.lunaReferenceRegistration).toEqual(BRAIN_LUNA_REFERENCE_REGISTRATION);
     expect(manifest.lunaReferenceRegistration.status).toBe("unavailable");
     expect(manifest.lunaReferenceRegistration.transformArtifact).toBeNull();
+    expect(manifest.hraSpatialRegistration.status).toBe("established");
+    expect(manifest.hraSpatialRegistration.asset.sha256).toBe(
+      "c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc",
+    );
+    expect(manifest.hraSpatialRegistration.transforms).toHaveLength(2);
+    expect(manifest.hraSpatialRegistration.mni.status).toBe("not-established");
   });
 
   it("keeps reference-space transforms explicit and never treats Luna local coordinates as MNI", () => {
@@ -79,6 +85,11 @@ describe("Luna Brain scientific dataset integration", () => {
     expect(observation.dataset?.id).toBe("luna-macro-anatomy-model");
     expect(observation.registration).toEqual(BRAIN_LUNA_REFERENCE_REGISTRATION);
     expect(observation.registration.sourceAsset.sourceVersion).toBe("HRA Brain-female v1.1");
+    expect(observation.hraSpatialRegistration.status).toBe("established");
+    expect(observation.hraSpatialRegistration.transforms[0].targetSpaceId).toBe(
+      "hra-brain-female-v1-1",
+    );
+    expect(observation.hraSpatialRegistration.mni.status).toBe("not-established");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -110,6 +121,8 @@ describe("Luna Brain scientific dataset integration", () => {
     expect(first.coordinateTransform?.status).toBe("unavailable");
     expect(first.spatialCapability.operationEnabled).toBe(false);
     expect(first.spatialCapability.reason).toContain("no validated reference-space registration into Luna Local");
+    expect(first.hraSpatialRegistration.status).toBe("established");
+    expect(first.hraSpatialRegistration.mni.status).toBe("not-established");
     expect(second.cached).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

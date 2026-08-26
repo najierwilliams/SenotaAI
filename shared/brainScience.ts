@@ -37,7 +37,10 @@ export type BrainReferenceSpaceKind =
   | "template"
   | "histological"
   | "donor-native"
-  | "annotation";
+  | "annotation"
+  | "hra-reference-object"
+  | "hra-body-reference"
+  | "raw-asset";
 
 /**
  * A declared scientific or application coordinate frame. Null fields are
@@ -294,7 +297,10 @@ export interface BrainScientificObservation {
   scale: BrainScientificScale;
   status: BrainDatasetStatus;
   dataset: BrainDataset | null;
+  /** Luna Local-to-MNI record. This remains unavailable unless an independent MNI chain is validated. */
   registration: LunaReferenceRegistration;
+  /** Exact HRA v1.1 raw-asset placement record; it is not an MNI registration. */
+  hraSpatialRegistration: import("./hraSpatial").HraSpatialRegistration;
   structureMapping: BrainStructureMapping | null;
   referenceSpace: BrainReferenceSpace | null;
   coordinateTransform: BrainCoordinateTransform | null;
@@ -311,6 +317,7 @@ export interface BrainScientificDatasetManifest {
   referenceSpaces: BrainReferenceSpace[];
   coordinateTransforms: BrainCoordinateTransform[];
   lunaReferenceRegistration: LunaReferenceRegistration;
+  hraSpatialRegistration: import("./hraSpatial").HraSpatialRegistration;
 }
 
 export function isDatasetUsable(

@@ -3966,6 +3966,155 @@ function registerStorageProxy(app2) {
   });
 }
 
+// shared/hraSpatial/HraSpatialReference.ts
+var HRA_SPATIAL_UNITS = "millimetres";
+var HRA_V11_ALLEN_BRAIN_ASSET = {
+  path: "/models/luna/brain/source/3d-vh-f-allen-brain.glb",
+  label: "HRA v1.1 Allen_F_Brain.glb",
+  sha256: "c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc",
+  sourceUrl: "https://cdn.humanatlas.io/hra-releases/v1.1/models/Allen_F_Brain.glb",
+  version: "v1.1",
+  persistentIdentifier: "https://purl.humanatlas.io/ref-organ/brain-female/v1.1",
+  recordUrl: "https://lod.humanatlas.io/ref-organ/brain-female/v1.1/",
+  license: "CC BY 4.0"
+};
+var HRA_COORDINATE_SPACES = {
+  "luna-raw-hra-v11-allen-brain-glb": {
+    id: "luna-raw-hra-v11-allen-brain-glb",
+    label: "Raw Luna/HRA Allen_F_Brain GLB",
+    category: "raw-glb",
+    units: HRA_SPATIAL_UNITS,
+    coordinateConvention: "Exact HRA v1.1 Allen_F_Brain.glb object frame; source of the published HRA local SpatialPlacement.",
+    provenanceUrl: "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/graph.json",
+    scientificUse: "Scientific source frame only when the loaded asset checksum matches the HRA v1.1 pinned asset."
+  },
+  "hra-brain-female-v1-1": {
+    id: "hra-brain-female-v1-1",
+    label: "HRA Brain-Female v1.1",
+    category: "hra-reference-object",
+    units: HRA_SPATIAL_UNITS,
+    coordinateConvention: "HRA CCF Brain-female spatial entity declared by the versioned reference-object graph.",
+    provenanceUrl: "https://purl.humanatlas.io/ref-organ/brain-female/v1.1",
+    scientificUse: "Authoritative HRA reference-object coordinate target; it is not an MNI or clinical stereotactic frame."
+  },
+  "hra-ccf-body-v1-2": {
+    id: "hra-ccf-body-v1-2",
+    label: "HRA CCF body reference",
+    category: "hra-body-reference",
+    units: HRA_SPATIAL_UNITS,
+    coordinateConvention: "HRA CCF body graph coordinate context used by the Brain-female global placement.",
+    provenanceUrl: "https://purl.humanatlas.io/graph/hra-ccf-body",
+    scientificUse: "Reference-object assembly context only; it is not an MNI, clinical, tissue, cellular, or molecular coordinate space."
+  },
+  "luna-viewer-presentation": {
+    id: "luna-viewer-presentation",
+    label: "Luna viewer presentation space",
+    category: "viewer-presentation",
+    units: null,
+    coordinateConvention: "Three.js display frame after BrainViewer centering, uniform normalization, camera framing, and interaction transforms.",
+    provenanceUrl: null,
+    scientificUse: "Visual presentation only. It must not be supplied to HRA transform functions or reported as a scientific coordinate frame."
+  },
+  "mni-icbm-152-2009c-asym": {
+    id: "mni-icbm-152-2009c-asym",
+    label: "MNI ICBM 152 2009c Nonlinear Asymmetric",
+    category: "external-template",
+    units: HRA_SPATIAL_UNITS,
+    coordinateConvention: "External neuroimaging template coordinate frame; no HRA/Luna bridge is established.",
+    provenanceUrl: "https://nist.mni.mcgill.ca/icbm-152-nonlinear-atlases-2009/",
+    scientificUse: "Unavailable from Luna and HRA Brain-female until an authoritative, validated chain is supplied."
+  }
+};
+var coordinateSpaceBrand = Symbol("hra-coordinate-space");
+
+// shared/hraSpatial/HraSpatialTransform.ts
+var HRA_RAW_GLB_TO_BRAIN_FEMALE = {
+  id: "hra-v1-1-allen-f-brain-local-placement",
+  label: "Raw Allen_F_Brain.glb \u2192 HRA Brain-Female",
+  sourceSpaceId: "luna-raw-hra-v11-allen-brain-glb",
+  targetSpaceId: "hra-brain-female-v1-1",
+  sourceAsset: HRA_V11_ALLEN_BRAIN_ASSET,
+  hraVersion: "v1.1",
+  placementDate: "2021-12-01",
+  units: HRA_SPATIAL_UNITS,
+  scale: [1, 1, 1],
+  rotationDegrees: [-90, 0, 0],
+  translationMillimetres: [74.68038, -711.022258, 148.092479],
+  applicationOrder: "scale \u2192 rotate X/Y/Z \u2192 translate",
+  provenanceUrl: "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/graph.json",
+  validationStatus: "metadata-only",
+  validationNote: "The HRA graph placement and exact asset identity are verified. No independent landmark residual set has been published or executed here.",
+  mniStatus: "not-established"
+};
+var HRA_BRAIN_FEMALE_TO_CCF_BODY = {
+  id: "hra-v1-1-brain-female-global-placement",
+  label: "HRA Brain-Female \u2192 HRA CCF body reference",
+  sourceSpaceId: "hra-brain-female-v1-1",
+  targetSpaceId: "hra-ccf-body-v1-2",
+  sourceAsset: null,
+  hraVersion: "v1.1",
+  placementDate: "2021-12-01",
+  units: HRA_SPATIAL_UNITS,
+  scale: [1, 1, 1],
+  rotationDegrees: [0, 0, 0],
+  translationMillimetres: [-74.68038, 711.022258, -148.092479],
+  applicationOrder: "scale \u2192 rotate X/Y/Z \u2192 translate",
+  provenanceUrl: "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/graph.json",
+  validationStatus: "metadata-only",
+  validationNote: "The HRA graph placement is available. Its target is the HRA CCF body graph, not MNI or a clinical reference frame.",
+  mniStatus: "not-established"
+};
+function getHraMniRegistrationStatus() {
+  return {
+    status: "not-established",
+    reason: "HRA v1.1 establishes reference-object placements only. No authoritative HRA/Allen mesh-to-MNI ICBM 152 2009c Nonlinear Asymmetric chain or landmark validation is available."
+  };
+}
+
+// shared/hraSpatial/HraSpatialValidation.ts
+var HRA_LANDMARK_VALIDATION_FRAMEWORK = {
+  id: "hra-v1-1-allen-f-brain-landmark-validation-v1",
+  validationStatus: "metadata-only",
+  validationMethod: "Future checksum-bound raw-GLB to HRA Brain-female landmark/structure validation against an authoritative HRA source with recorded residuals.",
+  records: [],
+  absenceReason: "No authoritative landmark-pair coordinates, orientation residuals, or independently measured target points were retrieved for the exact HRA v1.1 Allen_F_Brain.glb asset.",
+  requiredBeforeScientificPromotion: [
+    "Named source and target landmarks with their coordinate-space identifiers.",
+    "A reproducible procedure binding every source coordinate to the checksum-pinned raw GLB.",
+    "Expected and observed relationships with millimetre residuals.",
+    "Independent review of axes, orientation, and transform-direction semantics.",
+    "An explicit decision on whether the result validates only HRA placement or a later external registration."
+  ]
+};
+
+// shared/hraSpatial/HraSpatialRegistry.ts
+var HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION = {
+  id: "hra-v1-1-allen-f-brain-spatial-registration",
+  status: "established",
+  label: "Authoritative HRA v1.1 Allen_F_Brain reference-object placement",
+  asset: HRA_V11_ALLEN_BRAIN_ASSET,
+  referenceSpaces: HRA_COORDINATE_SPACES,
+  transforms: [
+    HRA_RAW_GLB_TO_BRAIN_FEMALE,
+    HRA_BRAIN_FEMALE_TO_CCF_BODY
+  ],
+  validation: HRA_LANDMARK_VALIDATION_FRAMEWORK,
+  mni: getHraMniRegistrationStatus(),
+  provenanceUrls: [
+    "https://purl.humanatlas.io/ref-organ/brain-female/v1.1",
+    "https://lod.humanatlas.io/ref-organ/brain-female/v1.1/",
+    "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/graph.json",
+    "https://purl.humanatlas.io/graph/hra-ccf-body"
+  ],
+  limitations: [
+    "The established HRA layer applies only to the exact checksum-pinned raw GLB asset.",
+    "The current Three.js viewer presentation frame is deliberately excluded from scientific transform execution.",
+    "The HRA graph does not establish GLB vertex-to-Allen-volume correspondence.",
+    "MNI ICBM 152 2009c Nonlinear Asymmetric registration remains not established.",
+    "HRA coordinates do not resolve tissue, cellular, molecular, or subcellular biological targets."
+  ]
+};
+
 // server/scientificData/registry.ts
 var BRAIN_REFERENCE_SPACES = [
   {
@@ -3976,11 +4125,53 @@ var BRAIN_REFERENCE_SPACES = [
     template: null,
     units: null,
     axisOrientation: null,
-    coordinateConvention: "Undocumented native glTF mesh coordinates after BrainViewer presentation centering and display scaling.",
+    coordinateConvention: "Three.js presentation coordinates after BrainViewer centering and display scaling.",
     resolution: null,
     version: null,
     provenanceUrl: null,
-    description: "Repository-local Luna GLB coordinate frame. The asset contains no declared units, axis orientation, anatomical template, reference-space ID, or external registration metadata; BrainViewer centres and display-scales it. No validated transform to external scientific reference spaces is configured."
+    description: "Viewer presentation frame only. BrainViewer centres and display-scales the loaded mesh for rendering; it is not the checksum-pinned raw GLB coordinate frame and has no validated transform to external scientific reference spaces."
+  },
+  {
+    id: "luna-raw-hra-v11-allen-brain-glb",
+    label: "Raw Luna/HRA Allen_F_Brain GLB",
+    kind: "raw-asset",
+    provider: "luna",
+    template: null,
+    units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention: "Exact raw HRA v1.1 Allen_F_Brain.glb object frame, valid only for the checksum-pinned asset.",
+    resolution: null,
+    version: "HRA v1.1",
+    provenanceUrl: "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/graph.json",
+    description: "Scientific source frame for the authoritative HRA local placement. It is distinct from the Three.js viewer presentation frame and is not MNI."
+  },
+  {
+    id: "hra-brain-female-v1-1",
+    label: "HRA Brain-Female v1.1",
+    kind: "hra-reference-object",
+    provider: "luna",
+    template: "HRA Brain-female reference organ",
+    units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention: "HRA CCF reference-object spatial entity reached from the exact raw GLB by the v1.1 published placement.",
+    resolution: null,
+    version: "HRA v1.1",
+    provenanceUrl: "https://purl.humanatlas.io/ref-organ/brain-female/v1.1",
+    description: "Authoritative HRA reference-object space. It is not MNI, a clinical stereotactic frame, or a provider coordinate system for lower-scale observations."
+  },
+  {
+    id: "hra-ccf-body-v1-2",
+    label: "HRA CCF body reference",
+    kind: "hra-body-reference",
+    provider: "luna",
+    template: "HRA CCF body graph",
+    units: "millimetres",
+    axisOrientation: null,
+    coordinateConvention: "HRA CCF body graph target of the v1.1 Brain-female global placement.",
+    resolution: null,
+    version: "HRA CCF body graph v1.2",
+    provenanceUrl: "https://purl.humanatlas.io/graph/hra-ccf-body",
+    description: "HRA body reference context used to assemble reference objects. It does not create an MNI, tissue, cellular, molecular, or subcellular target coordinate."
   },
   {
     id: "ebrains-mni-icbm-152-2009c",
@@ -4189,7 +4380,12 @@ var BRAIN_DATASETS = [
     approximateSize: null,
     license: "CC BY 4.0 (HuBMAP Human Reference Atlas); local asset SHA-256 c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc.",
     citation: "Browne K, et al. HuBMAP CCF 3D Reference Object Library, Brain-female v1.1. DOI: 10.48539/HBM724.XTTN.487.",
-    referenceSpaceIds: ["luna-viewer-local"],
+    referenceSpaceIds: [
+      "luna-viewer-local",
+      "luna-raw-hra-v11-allen-brain-glb",
+      "hra-brain-female-v1-1",
+      "hra-ccf-body-v1-2"
+    ],
     description: "Repository-local copy of the byte-verified HuBMAP Human Reference Atlas Brain-female v1.1 Allen_F_Brain.glb anatomical reference object, derived using Allen Human Reference Atlas data, mirrored to form a whole brain, and resized to fit Visible Human bodies.",
     limitations: "The HRA presentation mesh has no published Luna/GLB-to-MNI mapping, source units, axis orientation, origin, or landmark validation. It is not a documented MNI, ICBM, donor-MR, or BigBrain transform; viewer centering and display normalization are never scientific transforms."
   },
@@ -4338,7 +4534,8 @@ function getScientificDatasetManifest() {
     datasets: BRAIN_DATASETS,
     referenceSpaces: BRAIN_REFERENCE_SPACES,
     coordinateTransforms: BRAIN_COORDINATE_TRANSFORMS,
-    lunaReferenceRegistration: BRAIN_LUNA_REFERENCE_REGISTRATION
+    lunaReferenceRegistration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration: HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION
   };
 }
 
@@ -4557,6 +4754,7 @@ function createUnavailableObservation(dataset, query) {
     status: dataset.status,
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration: HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset
@@ -4612,6 +4810,7 @@ async function queryTissue(dataset, query) {
     status: "partial",
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration: HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset
@@ -4683,6 +4882,7 @@ async function queryCellular(dataset, query) {
     status: "partial",
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration: HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset
@@ -4744,6 +4944,7 @@ async function queryMolecular(dataset, query) {
     status: "partial",
     dataset,
     registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+    hraSpatialRegistration: HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     structureMapping: {
       canonicalStructureId: query.structureId ?? "unselected",
       provider: dataset.provider,
@@ -4830,6 +5031,7 @@ async function queryBrainScientificObservation(query) {
           status: "available",
           dataset,
           registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
+          hraSpatialRegistration: HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
           structureMapping: createStructureMapping(
             query,
             dataset

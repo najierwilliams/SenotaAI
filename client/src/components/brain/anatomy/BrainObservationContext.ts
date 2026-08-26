@@ -3,6 +3,10 @@ import type {
   BrainStructure,
 } from "./BrainStructureRegistry";
 
+import type {
+  HraSpatialRegistration,
+} from "@shared/hraSpatial";
+
 import {
   isDatasetUsable,
   type BrainDatasetProvenance,
@@ -46,7 +50,10 @@ export interface BrainObservationContext {
   scientificStatus: BrainDatasetStatus | null;
   scientificAvailable: boolean;
   scientificObservation: BrainScientificObservation | null;
+  /** Existing Luna Local-to-MNI record; remains unavailable. */
   registration: LunaReferenceRegistration | null;
+  /** Checksum-pinned raw-GLB to HRA CCF placement record. */
+  hraSpatialRegistration: HraSpatialRegistration | null;
   provenance: BrainDatasetProvenance | null;
   referenceSpace: BrainReferenceSpace | null;
   coordinateTransform: BrainCoordinateTransform | null;
@@ -63,6 +70,8 @@ interface CreateBrainObservationContextOptions {
   loading: boolean;
   error: string | null;
   scientificObservation?: BrainScientificObservation | null;
+  /** Browser checksum resolution may safely downgrade the canonical HRA record. */
+  hraSpatialRegistrationOverride?: HraSpatialRegistration | null;
   scientificLoading?: boolean;
   scientificError?: string | null;
 }
@@ -74,6 +83,7 @@ export function createBrainObservationContext({
   loading,
   error,
   scientificObservation = null,
+  hraSpatialRegistrationOverride,
   scientificLoading = false,
   scientificError = null,
 }: CreateBrainObservationContextOptions): BrainObservationContext {
@@ -178,6 +188,10 @@ export function createBrainObservationContext({
     scientificObservation,
     registration:
       scientificObservation?.registration ?? null,
+    hraSpatialRegistration:
+      hraSpatialRegistrationOverride !== undefined
+        ? hraSpatialRegistrationOverride
+        : scientificObservation?.hraSpatialRegistration ?? null,
     provenance:
       scientificObservation?.dataset
         ? {

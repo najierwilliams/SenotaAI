@@ -105,6 +105,16 @@ import {
   useBrainScientificObservation,
 } from "./anatomy/useBrainScientificObservation";
 
+import {
+  getHraSpatialRegistrationForAsset,
+} from "@shared/hraSpatial";
+
+import {
+  toHraPinnedAssetCandidate,
+  verifyHraPinnedAsset,
+  type HraAssetVerification,
+} from "./spatial/HraSpatialAssetVerification";
+
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
 
@@ -170,6 +180,14 @@ export default function BrainViewer() {
 
   const [status, setStatus] =
     useState("Loading Luna's brain...");
+
+  const [hraAssetVerification, setHraAssetVerification] =
+    useState<HraAssetVerification>({
+      status: "pending",
+      path: BRAIN_MODEL_URL,
+      sha256: null,
+      message: "Verifying checksum-pinned HRA source asset identity...",
+    });
 
   const [selectedStructure, setSelectedStructure] =
     useState<BrainStructure | null>(null);
@@ -240,6 +258,16 @@ export default function BrainViewer() {
     structure: selectedStructure,
   });
 
+  const verifiedHraAsset =
+    toHraPinnedAssetCandidate(hraAssetVerification);
+
+  const hraSpatialRegistrationOverride =
+    scientificObservation?.hraSpatialRegistration
+      ? getHraSpatialRegistrationForAsset(
+          verifiedHraAsset,
+        ).registration
+      : undefined;
+
   const observationContext =
     createBrainObservationContext({
       scale: activeScale,
@@ -248,9 +276,33 @@ export default function BrainViewer() {
       loading: scaleAssetLoading,
       error: scaleAssetError,
       scientificObservation,
+      hraSpatialRegistrationOverride,
       scientificLoading,
       scientificError,
     });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setHraAssetVerification({
+      status: "pending",
+      path: BRAIN_MODEL_URL,
+      sha256: null,
+      message: "Verifying checksum-pinned HRA source asset identity...",
+    });
+
+    void verifyHraPinnedAsset(BRAIN_MODEL_URL).then(
+      (verification) => {
+        if (!cancelled) {
+          setHraAssetVerification(verification);
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     nanobotRegistry.updateViewerScale(

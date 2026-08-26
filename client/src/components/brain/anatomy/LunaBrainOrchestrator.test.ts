@@ -4,6 +4,9 @@ import {
   expect,
   it,
 } from "vitest";
+import {
+  HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
+} from "@shared/hraSpatial";
 
 import type {
   BrainObservationContext,
@@ -122,6 +125,8 @@ function observation(
     scientificAvailable: true,
     scientificObservation: null,
     registration: unavailableRegistration,
+    hraSpatialRegistration:
+      HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION,
     provenance: null,
     referenceSpace:
       scale === "macro"
@@ -363,7 +368,15 @@ describe("Luna Brain orchestration", () => {
       "What coordinate system am I looking at?",
     );
     expect(reference.message).toContain("Luna viewer local coordinates");
-    expect(reference.message).toContain("unavailable");
+    expect(reference.message).toContain("HRA placement: **established**");
+    expect(reference.message).toContain("MNI registration: **unavailable**");
+
+    const hra = interpretLunaBrainCommand(
+      "What HRA reference space is this placement registered to?",
+    );
+    expect(hra.message).toContain("HRA Brain-Female");
+    expect(hra.message).toContain("MNI registration remains not established");
+    expect(lunaBrainActions.getHraSpatialRegistration().ok).toBe(true);
 
     const mapping = interpretLunaBrainCommand(
       "Can you map this to MNI?",
@@ -376,6 +389,9 @@ describe("Luna Brain orchestration", () => {
     expect(registration.data.status).toBe("unavailable");
     expect(lunaBrainActions.getScientificProvenance().data.registration?.sourceAsset.sha256).toBe(
       unavailableRegistration.sourceAsset.sha256,
+    );
+    expect(lunaBrainActions.getScientificProvenance().data.hraSpatialRegistration?.mni.status).toBe(
+      "not-established",
     );
   });
 

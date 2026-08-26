@@ -9,6 +9,11 @@ import type {
 } from "./BrainObservationContext";
 
 import type {
+  HraSpatialRegistration,
+  HraSpatialPlacement,
+} from "@shared/hraSpatial";
+
+import type {
   BrainCoordinateTransform,
   BrainDatasetProvenance,
   BrainReferenceSpace,
@@ -64,7 +69,10 @@ export interface LunaBrainActionResult<T = null> {
 
 export interface LunaScientificProvenance {
   dataset: BrainDatasetProvenance | null;
+  /** Luna Local-to-MNI record. */
   registration: LunaReferenceRegistration | null;
+  /** Exact checksum-pinned raw-GLB-to-HRA CCF evidence record. */
+  hraSpatialRegistration: HraSpatialRegistration | null;
 }
 
 /**
@@ -151,8 +159,9 @@ export const lunaBrainActions = {
     const registration = context.registration;
     return {
       ok: true,
-      message:
-        registration?.status === "unavailable"
+      message: context.hraSpatialRegistration
+        ? `${context.referenceSpace.label}. The checksum-pinned raw HRA v1.1 asset has an authoritative HRA Brain-Female / HRA CCF placement; viewer presentation coordinates remain separate and MNI ICBM 152 2009c remains not established.`
+        : registration?.status === "unavailable"
           ? `${context.referenceSpace.label}. This is the current observation space; Luna Local has no validated mapping to MNI ICBM 152 2009c Nonlinear Asymmetric.`
           : context.referenceSpace.label,
       data: context.referenceSpace,
@@ -176,6 +185,44 @@ export const lunaBrainActions = {
           ? "The Luna reference registration is validated and available for its documented spaces."
           : `MNI registration is ${registration.status}: ${registration.validation.summary}`,
       data: registration,
+    };
+  },
+
+  getHraSpatialRegistration(): LunaBrainActionResult<HraSpatialRegistration> {
+    const hraRegistration = activeState()?.observationContext.hraSpatialRegistration;
+    if (!hraRegistration) {
+      return {
+        ok: false,
+        message: "No HRA spatial registration record is available while Luna Brain is closed or still loading.",
+        data: null as never,
+      };
+    }
+
+    return {
+      ok: hraRegistration.status === "established",
+      message:
+        hraRegistration.status === "established"
+          ? "Authoritative HRA raw-GLB to Brain-Female to HRA CCF placement is available for the checksum-pinned v1.1 asset. MNI remains not established."
+          : "The HRA spatial registration requires asset revalidation and is not applied automatically.",
+      data: hraRegistration,
+    };
+  },
+
+  getHraSpatialTransforms(): LunaBrainActionResult<readonly HraSpatialPlacement[]> {
+    const hraRegistration = activeState()?.observationContext.hraSpatialRegistration;
+    if (!hraRegistration) {
+      return {
+        ok: false,
+        message: "No HRA spatial registration record is available while Luna Brain is closed or still loading.",
+        data: [],
+      };
+    }
+
+    return {
+      ok: hraRegistration.status === "established",
+      message:
+        "Published HRA reference-object placements are available for raw GLB to HRA Brain-Female and HRA Brain-Female to HRA CCF body only; no MNI transform is provided.",
+      data: hraRegistration.transforms,
     };
   },
 
@@ -250,12 +297,15 @@ export const lunaBrainActions = {
 
     return {
       ok: Boolean(context.provenance || context.registration),
-      message: context.registration
-        ? `Scientific provenance includes ${context.registration.sourceAsset.label}; registration status is ${context.registration.status}.`
-        : "Dataset provenance is available without a formal registration record.",
+      message: context.hraSpatialRegistration
+        ? `Scientific provenance includes ${context.hraSpatialRegistration.asset.label}; HRA placement is ${context.hraSpatialRegistration.status}, while MNI registration remains ${context.hraSpatialRegistration.mni.status}.`
+        : context.registration
+          ? `Scientific provenance includes ${context.registration.sourceAsset.label}; registration status is ${context.registration.status}.`
+          : "Dataset provenance is available without a formal registration record.",
       data: {
         dataset: context.provenance,
         registration: context.registration,
+        hraSpatialRegistration: context.hraSpatialRegistration,
       },
     };
   },

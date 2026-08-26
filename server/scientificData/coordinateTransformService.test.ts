@@ -47,6 +47,11 @@ describe("Luna scientific reference-space registration", () => {
   it("registers explicit Luna, MNI, BigBrain, Allen donor-MR, and CELLxGENE annotation spaces", () => {
     expect(getSpace("luna-viewer-local").kind).toBe("viewer-local");
     expect(getSpace("luna-viewer-local").units).toBeNull();
+    expect(getSpace("luna-raw-hra-v11-allen-brain-glb").kind).toBe("raw-asset");
+    expect(getSpace("luna-raw-hra-v11-allen-brain-glb").units).toBe("millimetres");
+    expect(getSpace("hra-brain-female-v1-1").kind).toBe("hra-reference-object");
+    expect(getSpace("hra-ccf-body-v1-2").kind).toBe("hra-body-reference");
+    expect(getSpace("hra-brain-female-v1-1").description).toContain("not MNI");
     expect(getSpace("ebrains-mni-icbm-152-2009c").version).toContain("2009c");
     expect(getSpace("ebrains-bigbrain").resolution).toBe("20 μm");
     expect(getSpace("allen-human-donor-mr").coordinateConvention).toBe("Donor MR volume coordinates");
