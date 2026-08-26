@@ -87,6 +87,7 @@ import BrainWorkspace, {
 
 import BrainWorkspaceBar from "./workspace/BrainWorkspaceBar";
 import ScientificReviewCenter from "./scientificReview/ScientificReviewCenter";
+import ScientificSpatialExplorer from "./ScientificSpatialExplorer";
 import { useScientificReviewRegistry } from "./scientificReview/useScientificReviewRegistry";
 
 import type {
@@ -116,6 +117,16 @@ import {
   verifyHraPinnedAsset,
   type HraAssetVerification,
 } from "./spatial/HraSpatialAssetVerification";
+import {
+  createMniScientificTemplateState,
+  disposeMniScientificTemplate,
+  setMniScientificTemplateOpacity,
+  streamMniScientificTemplate,
+  type MniScientificTemplateState,
+} from "./scientificMniTemplate";
+import type {
+  MniScientificTemplateSurface,
+} from "@shared/brainScience";
 
 const BRAIN_MODEL_URL =
   "/models/luna/brain/source/3d-vh-f-allen-brain.glb";
@@ -134,6 +145,11 @@ export default function BrainViewer() {
     useRef<THREE.Group | null>(null);
 
   const observationAssetRootRef =
+    useRef<THREE.Group | null>(null);
+
+  // This provider-native root is deliberately separate from the display-scaled
+  // HRA root. It is never included in HRA picking, selection, or Macro targets.
+  const mniScientificTemplateRootRef =
     useRef<THREE.Group | null>(null);
 
   const cameraRef =
@@ -182,6 +198,19 @@ export default function BrainViewer() {
 
   const [status, setStatus] =
     useState("Loading Luna's brain...");
+
+  const [mniScientificTemplateSurface, setMniScientificTemplateSurface] =
+    useState<MniScientificTemplateSurface | null>(null);
+
+  const [mniScientificTemplateState, setMniScientificTemplateState] =
+    useState<MniScientificTemplateState>({
+      visible: false,
+      opacity: 0.48,
+      loadState: "idle",
+      error: null,
+    });
+
+  const mniScientificTemplateOpacityRef = useRef(0.48);
 
   const [hraAssetVerification, setHraAssetVerification] =
     useState<HraAssetVerification>({
@@ -262,8 +291,15 @@ export default function BrainViewer() {
       setReviewFocusStructureId(detail?.structureId ?? null);
       workspace.openPanel("review");
     };
+    const openScientificExplorer = () => {
+      workspace.openPanel("science");
+    };
     window.addEventListener("luna-open-scientific-review", openFocusedReview);
-    return () => window.removeEventListener("luna-open-scientific-review", openFocusedReview);
+    window.addEventListener("luna-open-scientific-explorer", openScientificExplorer);
+    return () => {
+      window.removeEventListener("luna-open-scientific-review", openFocusedReview);
+      window.removeEventListener("luna-open-scientific-explorer", openScientificExplorer);
+    };
   }, [workspace]);
 
   const {
@@ -321,6 +357,115 @@ export default function BrainViewer() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/brain-science/spatial-backbone", {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Scientific manifest returned HTTP ${response.status}.`);
+        return response.json() as Promise<{
+          scientificBrainArchitecture?: { mniTemplateSurface?: MniScientificTemplateSurface };
+        }>;
+      })
+      .then((payload) => {
+        const surface = payload.scientificBrainArchitecture?.mniTemplateSurface;
+        if (!surface) throw new Error("The MNI scientific template declaration is unavailable.");
+        setMniScientificTemplateSurface(surface);
+        setMniScientificTemplateState(createMniScientificTemplateState(surface));
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setMniScientificTemplateState((current) => ({
+          ...current,
+          loadState: "error",
+          error: error instanceof Error ? error.message : "Scientific template metadata is unavailable.",
+        }));
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    mniScientificTemplateOpacityRef.current = mniScientificTemplateState.opacity;
+    const root = mniScientificTemplateRootRef.current;
+    if (root?.children.length) {
+      setMniScientificTemplateOpacity(root, mniScientificTemplateState.opacity);
+    }
+  }, [mniScientificTemplateState.opacity]);
+
+  useEffect(() => {
+    const surface = mniScientificTemplateSurface;
+    const root = mniScientificTemplateRootRef.current;
+    if (!surface || !root) return;
+
+    const clearRoot = () => {
+      root.children.forEach((child) => {
+        if (child instanceof THREE.Group) disposeMniScientificTemplate(child);
+      });
+      root.clear();
+    };
+
+    if (!mniScientificTemplateState.visible) {
+      const hadTemplate = root.children.length > 0;
+      clearRoot();
+      const hraRoot = brainRootRef.current;
+      if (hraRoot) hraRoot.visible = true;
+      const controls = controlsRef.current;
+      if (hadTemplate && controls) {
+        controls.maxDistance = 2;
+        controls.reset();
+      }
+      setMniScientificTemplateState((current) => current.loadState === "error" ? current : {
+        ...current,
+        loadState: "idle",
+        error: null,
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    clearRoot();
+    setMniScientificTemplateState((current) => ({ ...current, loadState: "loading", error: null }));
+    void streamMniScientificTemplate(surface, mniScientificTemplateOpacityRef.current, controller.signal)
+      .then((template) => {
+        if (controller.signal.aborted) {
+          disposeMniScientificTemplate(template);
+          return;
+        }
+        root.add(template);
+        // Never juxtapose by a guessed transform. MNI view hides the display-
+        // scaled HRA root and frames only provider-native MNI geometry.
+        const hraRoot = brainRootRef.current;
+        if (hraRoot) hraRoot.visible = false;
+        const box = new THREE.Box3().setFromObject(root);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const distance = Math.max(size.x, size.y, size.z) * 1.7;
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        if (camera && controls && Number.isFinite(distance) && distance > 0) {
+          camera.position.set(center.x, center.y, center.z + distance);
+          controls.target.copy(center);
+          controls.maxDistance = Math.max(distance * 4, 2);
+          controls.update();
+        }
+        setMniScientificTemplateState((current) => ({ ...current, loadState: "loaded", error: null }));
+        setStatus("MNI 2009c scientific cortical template view · provider-native coordinates · HRA hidden and remains unregistered");
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        clearRoot();
+        setMniScientificTemplateState((current) => ({
+          ...current,
+          loadState: "error",
+          error: error instanceof Error ? error.message : "MNI provider template could not be streamed.",
+        }));
+      });
+
+    return () => controller.abort();
+  }, [mniScientificTemplateSurface, mniScientificTemplateState.visible]);
 
   useEffect(() => {
     nanobotRegistry.updateViewerScale(
@@ -1680,6 +1825,17 @@ export default function BrainViewer() {
     observationAssetRootRef.current =
       observationAssetRoot;
 
+    const mniScientificTemplateRoot =
+      new THREE.Group();
+
+    mniScientificTemplateRoot.name =
+      "mni-scientific-template-root";
+    mniScientificTemplateRoot.userData.visualModelRelationship =
+      "separate-provider-native-mni-root-not-hra-registered";
+    scene.add(mniScientificTemplateRoot);
+    mniScientificTemplateRootRef.current =
+      mniScientificTemplateRoot;
+
     const nanobotObservationEnvironment =
       createNanobotObservationEnvironment();
 
@@ -2216,6 +2372,12 @@ export default function BrainViewer() {
       brainRootRef.current = null;
       observationAssetRootRef.current =
         null;
+      if (mniScientificTemplateRootRef.current) {
+        disposeMniScientificTemplate(
+          mniScientificTemplateRootRef.current,
+        );
+      }
+      mniScientificTemplateRootRef.current = null;
       if (nanobotObservationEnvironmentRef.current) {
         disposeNanobotObservationEnvironment(
           nanobotObservationEnvironmentRef.current,
@@ -2564,6 +2726,35 @@ export default function BrainViewer() {
               <div className="pointer-events-auto absolute right-2 top-2 z-20 flex items-center gap-1">
                 <button type="button" onClick={() => workspace.minimizePanel("review")} className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white" title="Minimize" aria-label="Minimize Scientific Review">−</button>
                 <button type="button" onClick={() => workspace.closePanel("review")} className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white" title="Close" aria-label="Close Scientific Review">×</button>
+              </div>
+            </div>
+          )}
+
+        {workspace.isOpen("science") &&
+          !workspace.isMinimized("science") && (
+            <div className="pointer-events-none absolute bottom-4 right-4 top-16 z-50 w-[min(28rem,calc(100%-2rem))] md:right-[21rem]">
+              <div className="pointer-events-auto relative h-full">
+                <ScientificSpatialExplorer
+                  mniScientificTemplateSurface={mniScientificTemplateSurface}
+                  mniScientificTemplateState={mniScientificTemplateState}
+                  onMniScientificTemplateVisibilityChange={(visible) => {
+                    setMniScientificTemplateState((current) => ({
+                      ...current,
+                      visible,
+                      error: null,
+                    }));
+                  }}
+                  onMniScientificTemplateOpacityChange={(opacity) => {
+                    setMniScientificTemplateState((current) => ({
+                      ...current,
+                      opacity,
+                    }));
+                  }}
+                />
+                <div className="absolute right-2 top-2 z-20 flex items-center gap-1">
+                  <button type="button" onClick={() => workspace.minimizePanel("science")} className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-white/10 hover:text-white" title="Minimize" aria-label="Minimize Scientific Spatial Explorer">−</button>
+                  <button type="button" onClick={() => workspace.closePanel("science")} className="flex h-6 w-6 items-center justify-center rounded-md bg-black/70 text-xs text-white/50 backdrop-blur hover:bg-red-500/20 hover:text-white" title="Close" aria-label="Close Scientific Spatial Explorer">×</button>
+                </div>
               </div>
             </div>
           )}

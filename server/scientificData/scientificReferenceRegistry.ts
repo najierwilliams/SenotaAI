@@ -67,7 +67,7 @@ export const SCIENTIFIC_REFERENCE_ASSETS: ScientificReferenceAsset[] = [
     handedness: null,
     origin: "Provider metadata declares axes-origin values [0, 0, 0]. Its native image unit is micrometres; Luna only accepts explicit query values expressed in millimetres and does not infer a Luna conversion.",
     assetAvailability: "provider-hosted",
-    assetFormats: ["NIfTI volume", "provider-hosted mesh", "provider-hosted image"],
+    assetFormats: ["NIfTI volume", "GIFTI label in fsaverage space (ineligible for this MNI integration)"],
     assetUrl: null,
     metadataUrl: "https://search.kg.ebrains.eu/instances/f1fe19e8-99bd-44bc-9616-a52850680777",
     license: "CC BY-NC-SA 4.0 for Julich-Brain v3.1 maps; Luna does not redistribute maps or meshes.",
@@ -92,6 +92,7 @@ export const SCIENTIFIC_REFERENCE_ASSETS: ScientificReferenceAsset[] = [
     visualModelRelationship: "Luna/HRA Brain-Female GLB remains a separate presentation-only model. No visual vertex, mesh, viewer coordinate, or bounds mapping is implied.",
     limitations: [
       "This registry does not bundle a Julich or MNI volume, mesh, or probability map.",
+      "The inspected v3.1 provider bucket exposes fsaverage GIFTI labels and MNI NIfTI volumes, but no exact MNI ICBM 152 2009c Nonlinear Asymmetric cortical surface geometry or mesh URL.",
       "The selected provider reference supports direct provider-space queries, not Luna-local navigation.",
       "Cellular and molecular observations remain unavailable for spatial operations until a separately documented, dataset-specific reference-space relation and gate are present.",
       "BigBrain relationships are provider-specific; their terms must be reviewed before any derivative or redistributed use.",

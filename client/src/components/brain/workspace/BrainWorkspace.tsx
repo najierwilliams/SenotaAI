@@ -8,7 +8,8 @@ export type BrainWorkspacePanelId =
   | "inspector"
   | "nanobots"
   | "luna"
-  | "review";
+  | "review"
+  | "science";
 
 export interface BrainWorkspacePanelDefinition {
   id: BrainWorkspacePanelId;
@@ -41,6 +42,11 @@ export const DEFAULT_PANELS: BrainWorkspacePanelDefinition[] = [
     id: "review",
     label: "Scientific Review",
     description: "Review source-backed anatomical identity evidence.",
+  },
+  {
+    id: "science",
+    label: "Scientific Spatial Explorer",
+    description: "Query independently entered coordinates in the declared EBRAINS/siibra MNI reference space.",
   },
 ];
 
@@ -114,6 +120,7 @@ export function useBrainWorkspaceState(): BrainWorkspaceState {
       nanobots: true,
       luna: false,
       review: false,
+      science: false,
     });
 
   const [
@@ -131,6 +138,7 @@ export function useBrainWorkspaceState(): BrainWorkspaceState {
       nanobots: false,
       luna: false,
       review: false,
+      science: false,
     });
 
   const [openMenu, setOpenMenu] =

@@ -16,6 +16,7 @@ export function getScientificStructureEvidence(lunaStructureId: string) {
   const hasJulichStructureRelation = julichMapping?.mappingStatus === "AUTHORITATIVE" || julichMapping?.mappingStatus === "PROBABILISTIC";
   const scientificTarget = {
     id: `structure-context:${record.lunaStructureId}`,
+    targetKind: "structure-context-target" as const,
     structureUberonId: record.uberonId,
     structureFmaId: null,
     provider: null,

@@ -10,6 +10,7 @@ export type BrainDatasetProvider =
   | "ebrains"
   | "julich-brain"
   | "bigbrain"
+  | "hbp-spatial-backend"
   | "cellxgene"
   | "allen-institute"
   | "human-em";
@@ -53,8 +54,20 @@ export interface BrainReferenceSpace {
   kind: BrainReferenceSpaceKind;
   provider: BrainDatasetProvider;
   template: string | null;
+  /** Units accepted by the Luna scientific query interface for this space. */
   units: string | null;
+  /** Exact provider-native unit where the upstream metadata exposes one. */
+  providerNativeUnits?: string | null;
+  /** Provider-declared orientation only; Luna never fills in missing semantics. */
   axisOrientation: string | null;
+  /** Unknown unless the provider explicitly states handedness. */
+  handedness?: string | null;
+  /** Provider-declared origin, preserved verbatim where exposed. */
+  origin?: string | null;
+  /** Exact upstream provider reference-space identifier, when separate from Luna's stable ID. */
+  providerReferenceSpaceId?: string | null;
+  /** Timestamp for the metadata retrieval that supplied provider fields. */
+  retrievedAt?: string | null;
   coordinateConvention: string | null;
   resolution: string | null;
   version: string | null;
@@ -260,6 +273,67 @@ export interface BrainCoordinate {
   units: string | null;
 }
 
+/**
+ * A provider-declared scientific point entered independently of Luna's visual
+ * mesh. It intentionally cannot be created from a BrainViewer position.
+ */
+export interface ScientificCoordinate extends BrainCoordinate {
+  referenceSpaceId: string;
+  provider: BrainDatasetProvider;
+  providerReferenceSpaceId: string | null;
+  referenceVersion: string | null;
+  axisOrientation: string | null;
+  handedness: string | null;
+  origin: string | null;
+  source: "user-entered" | "provider-returned";
+}
+
+export interface ScientificSpatialProvider {
+  id: "ebrains-siibra" | "bigbrain" | "allen-human-brain-atlas" | "cellxgene" | "hcp";
+  label: string;
+  version: string | null;
+  sourceUrl: string;
+  access: "remote-api" | "metadata-only" | "provider-hosted";
+  redistribution: "not-redistributed" | "review-required" | "permitted-with-attribution";
+  limitations: string[];
+}
+
+export interface ScientificCoordinateQueryResult {
+  coordinate: ScientificCoordinate;
+  scientificTarget: ScientificTarget;
+  provider: ScientificSpatialProvider;
+  referenceSpace: BrainReferenceSpace;
+  julich: {
+    status: "available" | "unavailable";
+    assignment: unknown | null;
+    reason: string | null;
+    providerParcellationId: string;
+    datasetVersion: string;
+  };
+  bigBrain: {
+    status: "available" | "context-only" | "unavailable";
+    referenceSpaceId: string;
+    coordinate: ScientificCoordinate | null;
+    observation: NormalizedScientificObservation | null;
+    reason: string;
+  };
+  molecular: {
+    status: "sample-scoped" | "unavailable";
+    reason: string;
+  };
+  cellular: {
+    status: "sample-scoped" | "unavailable";
+    reason: string;
+  };
+  connectivity: {
+    status: "provider-context" | "unavailable";
+    reason: string;
+  };
+  provenanceIds: string[];
+  licenseIds: string[];
+  limitations: string[];
+}
+
 export type BrainSpatialCoordinateType =
   | "point"
   | "centroid"
@@ -376,8 +450,16 @@ export interface ScientificProvenanceRecord {
   licenseId: string;
 }
 
+export type ScientificTargetKind =
+  | "visual-mesh-target"
+  | "structure-context-target"
+  | "scientific-coordinate-target"
+  | "region-probabilistic-target"
+  | "point-validated-target";
+
 export interface ScientificTarget {
   id: string;
+  targetKind: ScientificTargetKind;
   structureUberonId: string | null;
   structureFmaId: string | null;
   provider: BrainDatasetProvider | null;
@@ -394,6 +476,258 @@ export interface ScientificTarget {
   licenseId: string;
   status: "available" | "unavailable";
   limitation: string | null;
+}
+
+/**
+ * A provider-defined Julich region selection. It is intentionally independent
+ * of Luna's BrainStructure/GLB selection and carries no inferred viewer point.
+ */
+export interface JulichScientificRegion {
+  id: string;
+  label: string;
+  providerRegionId: string;
+  providerParcellationId: string;
+  datasetVersion: "Julich-Brain v3.1";
+  referenceSpaceId: "ebrains-mni-icbm-152-2009c";
+  sourceMapId: string;
+  source: "provider-region" | "provider-coordinate-assignment";
+  scientificTarget: ScientificTarget;
+  limitation: string;
+}
+
+export type JulichOverlayDeliveryStatus =
+  | "READY_PROVIDER_STREAM"
+  | "ASSET_DELIVERY_UNRESOLVED"
+  | "LICENSE_REVIEW_REQUIRED";
+
+export type JulichOverlayAssetEligibility =
+  | "ELIGIBLE"
+  | "REJECTED_WRONG_REFERENCE_SPACE"
+  | "REJECTED_NOT_SURFACE_GEOMETRY";
+
+export interface JulichOverlayInspectedAsset {
+  path: string;
+  format: string;
+  bytes: number;
+  providerReference: string;
+  eligibility: JulichOverlayAssetEligibility;
+  reason: string;
+}
+
+/**
+ * A provider-backed visual-layer declaration. `surfaceDelivery` must be READY
+ * before a renderer may create a scene root; metadata alone never authorizes
+ * a visual substitute, reconstruction, or Luna-to-MNI registration.
+ */
+export interface JulichCorticalOverlay {
+  id: string;
+  label: string;
+  provider: string;
+  datasetVersion: string;
+  persistentId: string;
+  knowledgeGraphId: string;
+  providerParcellationId: string;
+  referenceSpaceId: "ebrains-mni-icbm-152-2009c";
+  providerReferenceSpaceId: string;
+  mapIds: {
+    labelled: string;
+    continuousDefaultGranularity: string;
+    continuousHighGranularity: string;
+  };
+  surfaceDelivery: {
+    status: JulichOverlayDeliveryStatus;
+    requiredReferenceSpace: string;
+    requiredGeometry: string;
+    assetUrl: string | null;
+    surfaceId: string | null;
+    format: string | null;
+    bytes: number | null;
+    deliveryMode: "provider-stream" | "remote" | "bundled" | "none";
+    inspectedProviderAssets: JulichOverlayInspectedAsset[];
+    reason: string;
+  };
+  rendering: {
+    defaultVisible: false;
+    defaultOpacity: number;
+    visibilityControl: "ENABLED" | "DISABLED_ASSET_UNRESOLVED";
+    opacityControl: "ENABLED" | "DISABLED_ASSET_UNRESOLVED";
+    hoverCapability: "AVAILABLE" | "UNAVAILABLE_NO_STABLE_PROVIDER_GEOMETRY";
+    selectionCapability: "AVAILABLE" | "UNAVAILABLE_NO_STABLE_PROVIDER_GEOMETRY";
+  };
+  licensing: {
+    license: string;
+    licenseStatus: "CLEARED" | "LICENSE_REVIEW_REQUIRED";
+    redistribution: "not-redistributed" | "review-required" | "permitted-with-attribution";
+    sourceUrl: string;
+    note: string;
+  };
+  provenanceIds: string[];
+  licenseId: string;
+  visualModelRelationship: string;
+  limitations: string[];
+}
+
+export interface JulichCorticalOverlayState {
+  visible: boolean;
+  opacity: number;
+  selectedRegion: JulichScientificRegion | null;
+}
+
+export type ScientificAvailabilityStatus =
+  | "COMPLETE"
+  | "PARTIAL"
+  | "NOT_ESTABLISHED"
+  | "UNMAPPED"
+  | "UNAVAILABLE"
+  | "REQUIRES_REVIEW";
+
+/**
+ * Evidence-backed relations across scientific concepts. A semantic identity or
+ * shared label is never a spatial relationship unless the record explicitly
+ * says so and identifies its source evidence.
+ */
+export interface ScientificCrosswalkRelationship {
+  id: string;
+  source: {
+    namespace: string;
+    id: string;
+    label: string | null;
+    referenceSpaceId: string | null;
+  };
+  target: {
+    namespace: string;
+    id: string;
+    label: string | null;
+    referenceSpaceId: string | null;
+  };
+  relationshipType:
+    | "anatomical-identity"
+    | "provider-region-context"
+    | "coordinate-transform"
+    | "probabilistic-assignment"
+    | "unmapped";
+  status: ScientificAvailabilityStatus;
+  provider: string | null;
+  dataset: string | null;
+  version: string | null;
+  confidence: string | null;
+  uncertainty: string | null;
+  provenanceId: string;
+  licenseId: string;
+  reviewStatus: ScientificReviewStatus;
+  limitation: string;
+}
+
+export type NormalizedScientificObservationKind =
+  | "mni-template"
+  | "tissue-atlas"
+  | "bigbrain-transform-context"
+  | "bigbrain-microscopy-context"
+  | "cellular-sample-context"
+  | "molecular-sample-context"
+  | "connectivity-context";
+
+/**
+ * A source-qualified scientific observation. It intentionally stores provider
+ * coordinates separately from Luna visual coordinates and never implies that a
+ * measurement covers an entire region, donor, or brain unless the provider
+ * states that scope explicitly.
+ */
+export interface NormalizedScientificObservation {
+  id: string;
+  kind: NormalizedScientificObservationKind;
+  status: ScientificAvailabilityStatus;
+  provider: string;
+  dataset: string;
+  version: string | null;
+  referenceSpaceId: string | null;
+  coordinate: ScientificCoordinate | null;
+  region: {
+    id: string;
+    label: string;
+    relation: "provider-defined" | "probabilistic" | "sample-associated";
+  } | null;
+  mapId: string | null;
+  measurement: {
+    label: string;
+    value: string | number | null;
+    unit: string | null;
+    method: string | null;
+  } | null;
+  uncertainty: string | null;
+  provenanceId: string;
+  licenseId: string;
+  retrievedAt: string | null;
+  scientificTarget: ScientificTarget | null;
+  limitation: string;
+}
+
+export interface MniScientificTemplateSurface {
+  id: "siibra-mni-2009c-cortical-template";
+  label: string;
+  status: ScientificAvailabilityStatus;
+  referenceSpaceId: "ebrains-mni-icbm-152-2009c";
+  providerReferenceSpaceId: string;
+  configurationRevision: string;
+  sourceUrl: string;
+  meshLabelIndex: number;
+  format: "neuroglancer-legacy-precomputed-mesh";
+  transformUrl: string;
+  transformMatrixNanometres: number[][];
+  fragments: Array<{
+    id: "left-hemisphere_cortex" | "right-hemisphere_cortex";
+    url: string;
+    /** Provider-declared compressed HTTP entity size in bytes. */
+    bytes: number;
+    /** Verified browser-decoded legacy-mesh payload size in bytes. */
+    decodedBytes: number;
+    etag: string;
+    lastModified: string;
+  }>;
+  licensing: {
+    license: string;
+    redistribution: "permitted-with-attribution";
+    attributionRequired: true;
+    sourceUrl: string;
+  };
+  rendering: {
+    defaultVisible: false;
+    defaultOpacity: number;
+    deliveryMode: "provider-stream";
+    cachePolicy: "no-persistent-cache";
+    selectionCapability: "UNAVAILABLE_NO_REGION_LABELS";
+  };
+  limitation: string;
+}
+
+export interface ScientificBrainLayer {
+  id: string;
+  label: string;
+  kind: NormalizedScientificObservationKind;
+  status: ScientificAvailabilityStatus;
+  referenceSpaceId: string | null;
+  defaultVisible: boolean;
+  supportsOpacity: boolean;
+  supportsRegionSelection: boolean;
+  scientificTargetKind: ScientificTargetKind | null;
+  provenanceId: string;
+  licenseId: string;
+  limitation: string;
+}
+
+export interface ScientificBrainArchitectureManifest {
+  visualBrain: {
+    model: string;
+    referenceSpaceId: string;
+    status: ScientificAvailabilityStatus;
+    lunaToMni: "NOT_ESTABLISHED";
+  };
+  scientificReferenceSpace: BrainReferenceSpace;
+  mniTemplateSurface: MniScientificTemplateSurface;
+  layers: ScientificBrainLayer[];
+  observations: NormalizedScientificObservation[];
+  crosswalks: ScientificCrosswalkRelationship[];
+  limitations: string[];
 }
 
 export type BrainScientificReferenceStatus =

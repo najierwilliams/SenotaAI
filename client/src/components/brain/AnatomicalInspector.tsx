@@ -275,6 +275,22 @@ export default function AnatomicalInspector({
                   )}
                 </div>
               )}
+              <div className="mt-2 rounded-md border border-sky-300/15 bg-sky-500/5 p-2.5 text-[10px] leading-relaxed text-white/50">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="uppercase tracking-wider text-sky-100/60">Scientific spatial backbone</span>
+                  <span className="rounded-full border border-sky-300/20 px-2 py-0.5 text-[9px] text-sky-100">EBRAINS / siibra</span>
+                </div>
+                <p className="mt-1 text-white/65">Visual model: HRA Brain-Female v1.1 · anatomical selection and Macro simulation only.</p>
+                <p className="mt-1 text-white/65">Canonical scientific reference: MNI ICBM 152 2009c Nonlinear Asymmetric.</p>
+                <p className="mt-1 text-white/40">A selected HRA structure has no MNI coordinate. Scientific lookup from this visual structure is unavailable because Luna → MNI is not established.</p>
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent("luna-open-scientific-explorer"))}
+                  className="mt-2 rounded border border-sky-300/25 bg-sky-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-sky-100 hover:bg-sky-500/20"
+                >
+                  Open Scientific Coordinate Explorer
+                </button>
+              </div>
               {structureEvidence && (
                 <div className="mt-2 rounded-md border border-cyan-300/10 bg-cyan-300/5 p-2.5 text-[10px] leading-relaxed text-white/50">
                   <div className="uppercase tracking-wider text-white/35">Anatomical identity</div>
@@ -321,6 +337,7 @@ export default function AnatomicalInspector({
                     {structureEvidence.julichObservation?.mapping?.sourceUrl && <a href={structureEvidence.julichObservation.mapping.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 block text-sky-100/70 underline decoration-sky-200/30 underline-offset-2 hover:text-white">Open EBRAINS source metadata</a>}
                     <p className="mt-1 text-white/40">Evidence: {structureEvidence.julichObservation?.mapping?.evidence ?? "No authoritative crosswalk established."}</p>
                     <p className="mt-1 text-amber-100/65">{structureEvidence.julichObservation?.message ?? structureEvidence.julichObservation?.mapping?.notes ?? "Provider context only; maps are not bundled or redistributed."}</p>
+                    <p className="mt-1 text-amber-100/65">Scientific Cortex overlay: ASSET_DELIVERY_UNRESOLVED · the inspected provider files contain fsaverage labels and MNI volumes, not an exact MNI 2009c cortical mesh. No Julich region is selected from this HRA structure.</p>
                   </div>
                   <p className="mt-1 text-white/40">Scientific target: {structureEvidence.scientificTarget.status} · coordinate unavailable.</p>
                   <p className="mt-1 text-amber-100/60">Luna → MNI: Not established. Structure identity is not a coordinate or mission target.</p>

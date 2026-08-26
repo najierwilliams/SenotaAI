@@ -442,6 +442,55 @@ export default function BrainWorkspaceBar({
         </div>
 
         {/* =========================================================
+            SCIENCE
+        ========================================================= */}
+
+        <div className="relative">
+          <MenuButton
+            label="Science"
+            active={workspace.openMenu === "science"}
+            onClick={() => workspace.toggleWorkspaceMenu("science")}
+          />
+
+          {workspace.openMenu === "science" && (
+            <MenuShell>
+              <div className="px-3 py-2">
+                <div className="text-[9px] uppercase tracking-[0.18em] text-sky-200/60">Scientific Spatial Backbone</div>
+                <div className="mt-1 text-xs text-white/75">Independently entered provider coordinates</div>
+                <div className="mt-1 max-w-56 text-[9px] leading-relaxed text-amber-100/60">HRA visual mesh selection remains presentation-only. Luna → MNI is not established.</div>
+              </div>
+              <MenuItem
+                label={workspace.isOpen("science") ? workspace.isMinimized("science") ? "Restore Scientific Spatial Explorer" : "Scientific Spatial Explorer Open" : "Open Scientific Spatial Explorer"}
+                detail={panelById.get("science")?.description}
+                onClick={() => {
+                  if (workspace.isOpen("science") && workspace.isMinimized("science")) {
+                    workspace.restorePanel("science");
+                  } else {
+                    workspace.openPanel("science");
+                  }
+                }}
+              />
+              <MenuItem
+                label="Scientific Cortex · asset delivery unresolved"
+                detail="Julich v3.1 · disabled"
+                disabled
+                onClick={() => undefined}
+              />
+              <MenuItem
+                label="Minimize Scientific Spatial Explorer"
+                disabled={!workspace.isOpen("science")}
+                onClick={() => workspace.minimizePanel("science")}
+              />
+              <MenuItem
+                label="Close Scientific Spatial Explorer"
+                disabled={!workspace.isOpen("science")}
+                onClick={() => workspace.closePanel("science")}
+              />
+            </MenuShell>
+          )}
+        </div>
+
+        {/* =========================================================
             NANOBOTS
         ========================================================= */}
 

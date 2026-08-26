@@ -75,9 +75,9 @@ describe("hybrid scientific structure evidence", () => {
     });
   });
 
-  it("records Julich as non-redistributed and BigBrain/Allen as review-required", () => {
+  it("records Julich and BigBrain as non-redistributed, with Allen remaining review-required", () => {
     expect(SCIENTIFIC_LICENSE_REGISTRY.find((record) => record.id === "julich-brain-v3-1")).toMatchObject({ redistribution: "not-redistributed" });
-    expect(SCIENTIFIC_LICENSE_REGISTRY.find((record) => record.id === "bigbrain-provider-context")).toMatchObject({ redistribution: "review-required" });
+    expect(SCIENTIFIC_LICENSE_REGISTRY.find((record) => record.id === "bigbrain-provider-context")).toMatchObject({ redistribution: "not-redistributed", license: "CC BY-NC-SA 4.0" });
     expect(SCIENTIFIC_LICENSE_REGISTRY.find((record) => record.id === "allen-human-brain-atlas")).toMatchObject({ redistribution: "review-required" });
     expect(SCIENTIFIC_PROVENANCE_REGISTRY.find((record) => record.id === "julich-brain-v3-1-mni-2009c")).toMatchObject({ evidenceTier: "region-probabilistic", referenceSpaceId: "ebrains-mni-icbm-152-2009c" });
   });

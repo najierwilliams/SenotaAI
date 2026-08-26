@@ -45,6 +45,16 @@ import { getScientificStructureCrosswalkSummary, getScientificStructureEvidence 
 import { getCanonicalAnatomyIdentities, getCanonicalAnatomyReviewStatuses } from "./scientificData/canonicalAnatomyService";
 import { SCIENTIFIC_LICENSE_REGISTRY, SCIENTIFIC_PROVENANCE_REGISTRY } from "./scientificData/scientificProvenanceRegistry";
 import { MULTISCALE_SCIENTIFIC_CONTEXTS } from "./scientificData/multiscaleScientificContextRegistry";
+import {
+  getScientificSpatialBackbone,
+  queryScientificCoordinate,
+} from "./scientificData/scientificSpatialService";
+import {
+  getJulichCorticalOverlay,
+} from "./scientificData/julichCorticalOverlayService";
+import {
+  getScientificBrainArchitectureManifest,
+} from "./scientificData/scientificBrainArchitectureService";
 import type { BrainScientificScale } from "@shared/brainScience";
 
 function readCookie(header: string | undefined, name: string) {
@@ -399,6 +409,44 @@ export function createApp() {
 
   app.get("/api/brain-science/scientific-reference", (_req, res) => {
     return res.json({ scientificReference: getEbrainsSelectedScientificReference() });
+  });
+
+  app.get("/api/brain-science/spatial-backbone", (_req, res) => {
+    return res.json(getScientificSpatialBackbone());
+  });
+
+  app.get("/api/brain-science/julich-cortical-overlay", (_req, res) => {
+    return res.json({ overlay: getJulichCorticalOverlay() });
+  });
+
+  app.get("/api/brain-science/scientific-brain-architecture", (_req, res) => {
+    return res.json(getScientificBrainArchitectureManifest());
+  });
+
+  app.get("/api/brain-science/scientific-coordinate-query", async (req, res) => {
+    const x = typeof req.query.x === "string" ? Number(req.query.x) : NaN;
+    const y = typeof req.query.y === "string" ? Number(req.query.y) : NaN;
+    const z = typeof req.query.z === "string" ? Number(req.query.z) : NaN;
+    const units = typeof req.query.units === "string" ? req.query.units : "";
+    const referenceSpaceId = typeof req.query.referenceSpaceId === "string"
+      ? req.query.referenceSpaceId
+      : "";
+
+    try {
+      const result = await queryScientificCoordinate({
+        x,
+        y,
+        z,
+        units,
+        referenceSpaceId,
+      });
+      return res.json(result);
+    } catch (error) {
+      return res.status(400).json({
+        error: error instanceof Error ? error.message : "Scientific coordinate query rejected.",
+        lunaToMni: "NOT_ESTABLISHED",
+      });
+    }
   });
 
   app.get("/api/brain-science/julich-provider-context", async (_req, res) => {

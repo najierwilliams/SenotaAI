@@ -110,7 +110,7 @@ describe("Luna scientific reference-space registration", () => {
       mniCoordinate,
       "ebrains-mni-icbm-152-2009c",
       "ebrains-mni-icbm-152-2009c",
-      { sourceVersion: "2009c nonlinear asymmetric" },
+      { sourceVersion: "MNI 152 ICBM 2009c Nonlinear Asymmetric" },
     );
 
     expect(result.status).toBe("resolved");
