@@ -112,8 +112,9 @@ describe("Luna Brain scientific dataset integration", () => {
     const second = await queryBrainScientificObservation(query);
 
     expect(first.status).toBe("partial");
-    expect(first.findings).toHaveLength(3);
+    expect(first.findings).toHaveLength(4);
     expect(first.findings.some((finding) => finding.id === "bigbrain-reference-context")).toBe(true);
+    expect(first.findings.some((finding) => finding.id === "julich-v3-1-mni-map-catalog")).toBe(true);
     expect(first.spatialTarget?.coordinate).toBeNull();
     expect(first.spatialTarget?.coordinateType).toBe("region");
     expect(first.registration.status).toBe("unavailable");
@@ -125,7 +126,7 @@ describe("Luna Brain scientific dataset integration", () => {
     expect(first.hraSpatialRegistration.status).toBe("established");
     expect(first.hraSpatialRegistration.mni.status).toBe("not-established");
     expect(second.cached).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("contains provider failure instead of crashing the scientific observation flow", async () => {

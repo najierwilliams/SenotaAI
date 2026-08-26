@@ -7,6 +7,7 @@ import {
   getEbrainsReferenceSpaces,
   getEbrainsSelectedScientificReference,
   getEbrainsUnavailableRegionsOrFeatures,
+  getJulichV31MapCatalog,
   assignJulichAtMni2009cCoordinate,
 } from "./ebrainsProvider";
 
@@ -50,6 +51,21 @@ describe("EBRAINS read-only provider adapter", () => {
     expect(reference.referenceSpaceId).toBe("ebrains-mni-icbm-152-2009c");
     expect(reference.visualModelRelationship).toContain("presentation-only");
     expect(reference.license).toContain("CC BY-NC-SA 4.0");
+    expect(reference.structureSource.providerParcellationId).toContain("-310");
+  });
+
+  it("exposes only lightweight v3.1 MNI map catalog metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      items: [
+        { "@id": "mni152-jba31-labelled", name: "mni152 jba31 labelled", maptype: "LABELLED" },
+        { "@id": "mni152-jba31-227", name: "mni152 jba31 227 continuous", maptype: "STATISTICAL" },
+      ],
+    }) }));
+    const catalog = await getJulichV31MapCatalog();
+    expect(catalog).toMatchObject({ availability: "available", datasetVersion: "Julich-Brain v3.1", referenceSpaceId: "ebrains-mni-icbm-152-2009c" });
+    expect(catalog.maps).toHaveLength(2);
+    expect(catalog.maps.map((map) => map.mapType)).toEqual(["LABELLED", "STATISTICAL"]);
+    expect(catalog.limitations.join(" ")).toContain("does not create a Luna structure-to-Julich mapping");
   });
 
   it("rejects invalid or non-millimetre assignment input before calling the provider", async () => {
@@ -67,6 +83,16 @@ describe("EBRAINS read-only provider adapter", () => {
     expect(result.availability).toBe("available");
     expect(result.coordinate).toEqual({ x: 1, y: 2, z: 3, units: "millimetres" });
     expect(result.assignment).toEqual({ data: [["region", 0.8]] });
+    expect(String((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0])).toContain("point=1.000%2C2.000%2C3.000");
+    expect(result.providerParcellationId).toContain("-310");
+  });
+
+  it("contains a siibra provider error without inventing a region or transform", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ error: true, message: "provider parser failure" }) }));
+    const result = await assignJulichAtMni2009cCoordinate({ x: 1, y: 2, z: 3, units: "millimetres" });
+    expect(result).toMatchObject({ availability: "unavailable", assignment: null, coordinate: { x: 1, y: 2, z: 3, units: "millimetres" } });
+    expect(result.reason).toContain("provider error");
+    expect(result.reason).toContain("No region, probability, transform, or Luna target was inferred");
   });
 
   it("returns curated reference spaces and refuses name-derived regions or features", async () => {

@@ -230,12 +230,22 @@ export default function BrainWorkspaceBar({
         <button
           type="button"
           onClick={() => workspace.openPanel("review")}
-          className="ml-1 flex h-8 items-center gap-1.5 rounded-md border border-red-300/25 bg-red-500/5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-100 transition hover:bg-red-500/15"
-          aria-label={reviewLoading ? "Scientific Review records loading" : `Scientific Review: ${reviewRemaining} structures require review`}
+          className={[
+            "ml-1 flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] transition",
+            reviewLoading || reviewRemaining > 0
+              ? "border-red-300/25 bg-red-500/5 text-red-100 hover:bg-red-500/15"
+              : "border-emerald-300/25 bg-emerald-500/5 text-emerald-100 hover:bg-emerald-500/15",
+          ].join(" ")}
+          aria-label={reviewLoading ? "Scientific Review records loading" : reviewRemaining === 0 ? `Scientific Review complete: ${reviewCompleted} approved identities` : `Scientific Review: ${reviewRemaining} structures require review`}
           title="Open Scientific Review Center"
         >
           <span>Scientific Review</span>
-          <span className="rounded border border-red-300/35 bg-red-500/15 px-1.5 py-0.5 text-[9px] text-red-100 shadow-[0_0_10px_rgba(248,113,113,0.4)]">
+          <span className={[
+            "rounded border px-1.5 py-0.5 text-[9px]",
+            reviewLoading || reviewRemaining > 0
+              ? "border-red-300/35 bg-red-500/15 text-red-100 shadow-[0_0_10px_rgba(248,113,113,0.4)]"
+              : "border-emerald-300/35 bg-emerald-500/15 text-emerald-100 shadow-[0_0_10px_rgba(110,231,183,0.3)]",
+          ].join(" ")}>
             {reviewLoading ? "…" : reviewRemaining === 0 ? "Complete" : reviewRemaining}
           </span>
           <span className="sr-only">{reviewLoading ? "Scientific review records loading" : `${reviewCompleted} of ${reviewTotal} reviewed`}</span>

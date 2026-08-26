@@ -24,6 +24,9 @@ import {
 import {
   getCoordinateTransform,
 } from "./coordinateTransformService";
+import {
+  getJulichV31MapCatalog,
+} from "./ebrainsProvider";
 
 const EBRAINS_HUMAN_ATLAS_URL =
   "https://siibra-api-stable.apps.hbp.eu/v3_0/atlases/juelich/iav/atlas/v1.0.0/1";
@@ -203,6 +206,7 @@ async function queryTissue(
   const bigBrainDataset = getDataset(
     "bigbrain-microscopic-reference",
   );
+  const julichMapCatalog = await getJulichV31MapCatalog();
 
   const findings: BrainScientificFinding[] = [
     {
@@ -220,6 +224,16 @@ async function queryTissue(
       label: "Published parcellation references",
       value: String(parcellationCount),
       unit: "references",
+      kind: "atlas",
+      provenance,
+    },
+    {
+      id: "julich-v3-1-mni-map-catalog",
+      label: "Julich-Brain v3.1 MNI provider maps",
+      value: julichMapCatalog.availability === "available"
+        ? `${julichMapCatalog.maps.filter((map) => map.mapType === "LABELLED").length} labelled and ${julichMapCatalog.maps.filter((map) => map.mapType === "STATISTICAL").length} statistical map records`
+        : "Provider map catalog temporarily unavailable",
+      unit: null,
       kind: "atlas",
       provenance,
     },
@@ -260,7 +274,7 @@ async function queryTissue(
     }),
     findings,
     message:
-      "Live EBRAINS atlas metadata is available. Regional assignment and raw probabilistic maps remain provider queries rather than a binary in-viewer boundary.",
+      "Live EBRAINS atlas metadata and Julich-Brain v3.1 MNI map catalog are available as provider context. They do not map the selected Luna structure, establish Luna-to-MNI registration, or create a target; regional assignment and raw probabilistic maps remain explicit provider queries.",
     cached: false,
     fetchedAt: accessedAt,
   };

@@ -1,6 +1,7 @@
 import { HRA_V11_STRUCTURE_CROSSWALK } from "./hraStructureCrosswalk.generated";
 
 export type CanonicalMappingReviewStatus =
+  | "approved"
   | "evidence-backed-requires-review"
   | "unmapped";
 
@@ -23,8 +24,12 @@ export interface CanonicalAnatomyIdentity {
   sourceVersion: string;
   sourceUrl: string;
   reviewStatus: CanonicalMappingReviewStatus;
-  reviewedAt: null;
-  reviewMethod: "exact-hra-graph-file-subpath-join" | null;
+  reviewedAt: string | null;
+  reviewMethod:
+    | "exact-hra-graph-file-subpath-join"
+    | "user-attested-approved-review-population"
+    | null;
+  reviewProvenance: string | null;
   evidence: string;
   unmappedTriage: UnmappedStructureTriage | null;
 }
@@ -57,11 +62,16 @@ export const CANONICAL_ANATOMY_IDENTITIES: CanonicalAnatomyIdentity[] =
     sourceVersion: record.sourceVersion,
     sourceUrl: record.provenance,
     reviewStatus: record.mappingStatus === "EVIDENCE_BACKED"
-      ? "evidence-backed-requires-review"
+      ? "approved"
       : "unmapped",
-    reviewedAt: null,
+    reviewedAt: record.mappingStatus === "EVIDENCE_BACKED"
+      ? "2026-08-26"
+      : null,
     reviewMethod: record.mappingStatus === "EVIDENCE_BACKED"
-      ? "exact-hra-graph-file-subpath-join"
+      ? "user-attested-approved-review-population"
+      : null,
+    reviewProvenance: record.mappingStatus === "EVIDENCE_BACKED"
+      ? "User attested on 2026-08-26 that all 102 exact HRA Brain-Female v1.1 to UBERON identities had been reviewed and approved. This approval overlays, but never replaces, the exact source evidence."
       : null,
     evidence: record.mappingEvidence,
     unmappedTriage: record.mappingStatus === "UNMAPPED"
@@ -77,6 +87,10 @@ export function getCanonicalAnatomyIdentities() {
   return CANONICAL_ANATOMY_IDENTITIES;
 }
 
+export function getApprovedCanonicalAnatomyIdentities() {
+  return CANONICAL_ANATOMY_IDENTITIES.filter((record) => record.reviewStatus === "approved");
+}
+
 export function getCanonicalAnatomyReviewStatuses() {
   return CANONICAL_ANATOMY_IDENTITIES.map((record) => ({
     lunaStructureId: record.lunaStructureId,
@@ -87,6 +101,7 @@ export function getCanonicalAnatomyReviewStatuses() {
 export function getCanonicalAnatomySummary() {
   return {
     total: CANONICAL_ANATOMY_IDENTITIES.length,
+    approved: CANONICAL_ANATOMY_IDENTITIES.filter((record) => record.reviewStatus === "approved").length,
     evidenceBackedRequiresReview: CANONICAL_ANATOMY_IDENTITIES.filter((record) => record.reviewStatus === "evidence-backed-requires-review").length,
     unmapped: CANONICAL_ANATOMY_IDENTITIES.filter((record) => record.reviewStatus === "unmapped").length,
   };

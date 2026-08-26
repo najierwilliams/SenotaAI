@@ -37,6 +37,7 @@ import {
   getEbrainsReferenceSpaces,
   getEbrainsSelectedScientificReference,
   getEbrainsUnavailableRegionsOrFeatures,
+  getJulichV31MapCatalog,
   assignJulichAtMni2009cCoordinate,
 } from "./scientificData/ebrainsProvider";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./scientificData/registry";
@@ -400,6 +401,10 @@ export function createApp() {
     return res.json({ scientificReference: getEbrainsSelectedScientificReference() });
   });
 
+  app.get("/api/brain-science/julich-provider-context", async (_req, res) => {
+    return res.json({ catalog: await getJulichV31MapCatalog() });
+  });
+
   app.get("/api/brain-science/julich-assignment", async (req, res) => {
     const x = typeof req.query.x === "string" ? Number(req.query.x) : NaN;
     const y = typeof req.query.y === "string" ? Number(req.query.y) : NaN;
@@ -440,6 +445,10 @@ export function createApp() {
 
   app.get("/api/brain-science/structure-crosswalk", (_req, res) => {
     return res.json({ summary: getScientificStructureCrosswalkSummary() });
+  });
+
+  app.get("/api/brain-science/julich-mapping-summary", (_req, res) => {
+    return res.json({ summary: getScientificStructureCrosswalkSummary().julich });
   });
 
   app.get("/api/brain-science/structure/:lunaStructureId", (req, res) => {

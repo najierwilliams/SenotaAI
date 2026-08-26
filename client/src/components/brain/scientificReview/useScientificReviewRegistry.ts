@@ -15,9 +15,10 @@ export interface CanonicalReviewRecord {
   source: string;
   sourceVersion: string;
   sourceUrl: string;
-  reviewStatus: "evidence-backed-requires-review" | "unmapped";
-  reviewedAt: null;
+  reviewStatus: "approved" | "evidence-backed-requires-review" | "unmapped";
+  reviewedAt: string | null;
   reviewMethod: string | null;
+  reviewProvenance: string | null;
   evidence: string;
   unmappedTriage: string | null;
 }
@@ -96,9 +97,16 @@ export function clearPersistedReviewDecisions(storage: ReviewDecisionStorage) {
 }
 
 export function resolveScientificReviewStatus(record: CanonicalReviewRecord, decisions: Record<string, PersistedReviewDecision>): ScientificReviewStatus {
+  // Server-attested approval is authoritative and source-preserving. Browser-local
+  // overlays remain available only for records that still require human review.
+  if (record.reviewStatus === "approved") return "APPROVED";
   const decision = decisions[record.lunaStructureId];
   if (decision) return decision.status;
   return record.reviewStatus === "evidence-backed-requires-review" ? "REQUIRES_REVIEW" : "UNMAPPED";
+}
+
+export function isReviewableCanonicalIdentity(record: CanonicalReviewRecord) {
+  return record.reviewStatus === "approved" || record.reviewStatus === "evidence-backed-requires-review";
 }
 
 export function createPersistedReviewDecision(status: "APPROVED" | "REJECTED", reviewer: string, reviewReason: string | null, reviewedAt = new Date().toISOString()): PersistedReviewDecision {
@@ -135,7 +143,7 @@ export function buildScientificReviewSummary(
   records: CanonicalReviewRecord[],
   decisions: Record<string, PersistedReviewDecision>,
 ): ScientificReviewSummary {
-  const reviewedRecords = records.filter((record) => record.reviewStatus === "evidence-backed-requires-review");
+  const reviewedRecords = records.filter(isReviewableCanonicalIdentity);
   const effectiveStatus = (record: CanonicalReviewRecord) => resolveScientificReviewStatus(record, decisions);
 
   return {
@@ -221,7 +229,7 @@ export function useScientificReviewRegistry() {
   }, [resetAllLocalReviewDecisionsForDevelopment]);
 
   const statusByStructureId = useMemo(() => new Map(records.map((record) => [record.lunaStructureId, effectiveStatus(record)])), [records, effectiveStatus]);
-  const reviewedRecords = useMemo(() => records.filter((record) => record.reviewStatus === "evidence-backed-requires-review"), [records]);
+  const reviewedRecords = useMemo(() => records.filter(isReviewableCanonicalIdentity), [records]);
   const highConfidence = useMemo(() => reviewedRecords.filter((record) => !isCompositeReviewRecord(record)), [reviewedRecords]);
   const ambiguous = useMemo(() => reviewedRecords.filter(isCompositeReviewRecord), [reviewedRecords]);
   const summary = useMemo(() => buildScientificReviewSummary(records, decisions), [records, decisions]);

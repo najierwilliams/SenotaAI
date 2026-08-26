@@ -56,6 +56,20 @@ export interface EbrainsAtlasSummary {
   retrievedAt: string | null;
 }
 
+export interface EbrainsJulichMapCatalog {
+  availability: "available" | "offline";
+  providerId: "ebrains";
+  providerParcellationId: string;
+  referenceSpaceId: "ebrains-mni-icbm-152-2009c";
+  providerReferenceSpaceId: string;
+  datasetVersion: "Julich-Brain v3.1";
+  sourceUrl: string;
+  license: "CC BY-NC-SA 4.0";
+  maps: Array<{ id: string; name: string; mapType: "LABELLED" | "STATISTICAL" }>;
+  limitations: string[];
+  retrievedAt: string | null;
+}
+
 export interface EbrainsUnavailableQuery {
   availability: "unavailable";
   reason: string;
@@ -159,6 +173,46 @@ export async function getEbrainsReferenceSpaces(): Promise<BrainReferenceSpace[]
 
 export function getEbrainsDatasets(): BrainDataset[] { return ebrainsDatasets(); }
 
+export async function getJulichV31MapCatalog(): Promise<EbrainsJulichMapCatalog> {
+  const params = new URLSearchParams({
+    parcellation_id: JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
+    space_id: JULICH_MNI_2009C_PROVIDER_SPACE_ID,
+    size: "100",
+  });
+  const sourceUrl = `${SIIBRA_BASE_URL}/maps?${params.toString()}`;
+  const base = {
+    providerId: "ebrains" as const,
+    providerParcellationId: JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
+    referenceSpaceId: "ebrains-mni-icbm-152-2009c" as const,
+    providerReferenceSpaceId: JULICH_MNI_2009C_PROVIDER_SPACE_ID,
+    datasetVersion: "Julich-Brain v3.1" as const,
+    sourceUrl,
+    license: "CC BY-NC-SA 4.0" as const,
+    limitations: [
+      "Catalog metadata is provider-scoped and does not create a Luna structure-to-Julich mapping.",
+      "Luna does not download, bundle, render, or redistribute provider maps.",
+      "Provider map availability does not establish Luna-to-MNI coordinate registration or a nanobot target.",
+    ],
+  };
+  try {
+    const response = await cached("ebrains:julich-v31-mni-map-catalog", () => fetchJson<{
+      items?: Array<{ "@id"?: string; name?: string; maptype?: "LABELLED" | "STATISTICAL" }>;
+    }>(`/maps?${params.toString()}`));
+    return {
+      ...base,
+      availability: "available",
+      maps: (response.items ?? []).flatMap((map) =>
+        map["@id"] && map.name && (map.maptype === "LABELLED" || map.maptype === "STATISTICAL")
+          ? [{ id: map["@id"], name: map.name, mapType: map.maptype }]
+          : [],
+      ),
+      retrievedAt: new Date().toISOString(),
+    };
+  } catch {
+    return { ...base, availability: "offline", maps: [], retrievedAt: null };
+  }
+}
+
 export function getEbrainsSelectedScientificReference() {
   return getSelectedScientificReference();
 }
@@ -207,13 +261,22 @@ export async function assignJulichAtMni2009cCoordinate(
   const params = new URLSearchParams({
     parcellation_id: JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
     space_id: JULICH_MNI_2009C_PROVIDER_SPACE_ID,
-    point: `${coordinate.x},${coordinate.y},${coordinate.z}`,
+    point: `${coordinate.x.toFixed(3)},${coordinate.y.toFixed(3)},${coordinate.z.toFixed(3)}`,
     assignment_type: "statistical",
     sigma_mm: "0",
   });
 
   try {
-    const assignment = await fetchJson<unknown>(`/map/assign?${params.toString()}`);
+    const assignment = await fetchJson<{ error?: boolean; message?: string }>(`/map/assign?${params.toString()}`);
+    if (assignment && typeof assignment === "object" && assignment.error === true) {
+      return {
+        ...base,
+        availability: "unavailable",
+        coordinate: { ...coordinate },
+        assignment: null,
+        reason: `The public siibra assignment service returned a provider error: ${assignment.message ?? "unknown error"}. No region, probability, transform, or Luna target was inferred.`,
+      };
+    }
     return { ...base, availability: "available", coordinate: { ...coordinate }, assignment, reason: null };
   } catch {
     return {

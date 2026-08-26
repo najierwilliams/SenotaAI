@@ -49,7 +49,7 @@ export const JULICH_MNI_2009C_PROVIDER_SPACE_ID =
   "minds/core/referencespace/v1.0.0/dafcffc5-4826-4bf1-8ff6-46b8a31ff8e2";
 /** Current Multilevel Human Atlas parcellation identity returned by siibra. */
 export const JULICH_BRAIN_PROVIDER_PARCELLATION_ID =
-  "minds/core/parcellationatlas/v1.0.0/94c1125b-b87e-45e4-901c-00daee7f2579-300";
+  "minds/core/parcellationatlas/v1.0.0/94c1125b-b87e-45e4-901c-00daee7f2579-310";
 
 export const SCIENTIFIC_REFERENCE_ASSETS: ScientificReferenceAsset[] = [
   {
@@ -63,9 +63,9 @@ export const SCIENTIFIC_REFERENCE_ASSETS: ScientificReferenceAsset[] = [
     providerReferenceSpaceId: JULICH_MNI_2009C_PROVIDER_SPACE_ID,
     coordinateSystem: "MNI stereotaxic XYZ coordinates in the named MNI ICBM 152 2009c nonlinear asymmetric template.",
     units: "millimetres",
-    axisOrientation: "XYZ as declared by the siibra/openMINDS provider metadata; no further axis semantic is inferred by Luna.",
+    axisOrientation: "XYZ as declared by the live siibra/openMINDS provider metadata; no further axis semantic is inferred by Luna.",
     handedness: null,
-    origin: "Provider metadata declares axes-origin values [0, 0, 0]; the provider metadata does not separately declare a handedness value for Luna to infer.",
+    origin: "Provider metadata declares axes-origin values [0, 0, 0]. Its native image unit is micrometres; Luna only accepts explicit query values expressed in millimetres and does not infer a Luna conversion.",
     assetAvailability: "provider-hosted",
     assetFormats: ["NIfTI volume", "provider-hosted mesh", "provider-hosted image"],
     assetUrl: null,
@@ -81,7 +81,7 @@ export const SCIENTIFIC_REFERENCE_ASSETS: ScientificReferenceAsset[] = [
       providerParcellationId: JULICH_BRAIN_PROVIDER_PARCELLATION_ID,
       kind: "probabilistic-cytoarchitectonic-map",
       identifiers: "siibra region identifiers and provider ontology identifiers",
-      mappingPolicy: "Provider-returned region identifiers may be used only for an explicit Julich coordinate assignment. They are not inferred from Luna mesh names or display labels.",
+      mappingPolicy:       "Provider-returned region identifiers may be used only for an explicit Julich coordinate assignment. They are not inferred from Luna mesh names, display labels, HRA placement, or approved UBERON identity.",
     },
     transformSources: [
       "Provider-declared identity inside MNI ICBM 152 2009c nonlinear asymmetric only.",

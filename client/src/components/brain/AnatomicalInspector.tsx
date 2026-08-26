@@ -87,12 +87,21 @@ export default function AnatomicalInspector({
 }: AnatomicalInspectorProps) {
   const [structureEvidence, setStructureEvidence] = useState<{
     lunaStructure: { id: string; sourceName: string; meshBacked: boolean };
-    canonicalIdentity: { ontology: string; id: string; hraEntityId: string | null; hraEntityLabel: string | null; status: string; evidence?: string; provenance?: string; version?: string; reviewStatus?: string } | null;
+    canonicalIdentity: { ontology: string; id: string; hraEntityId: string | null; hraEntityLabel: string | null; status: string; evidence?: string; provenance?: string; version?: string; reviewStatus?: string; reviewedAt?: string | null; reviewMethod?: string | null; reviewProvenance?: string | null } | null;
     scientificFeatures: { julich: string };
-    julichObservation?: { status: string; evidenceTier: string };
+    julichObservation?: {
+      status: string;
+      evidenceTier: string;
+      message?: string;
+      mapping?: { mappingStatus: string; mappingType: string; julichRegionId: string | null; julichRegionName: string | null; sourceVersion: string; sourceUrl: string; referenceSpace: string; evidence: string; notes: string } | null;
+    };
     evidenceTier: string;
     scientificTarget: { status: string; coordinate: null; limitation: string | null };
   } | null>(null);
+  const [mniPoint, setMniPoint] = useState({ x: "", y: "", z: "" });
+  const [mniAssignment, setMniAssignment] = useState<{ availability: string; reason: string | null; assignment: unknown | null; providerParcellationId: string } | null>(null);
+  const [mniAssignmentLoading, setMniAssignmentLoading] = useState(false);
+  const [mniAssignmentError, setMniAssignmentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!structure?.id) { setStructureEvidence(null); return; }
@@ -266,6 +275,11 @@ export default function AnatomicalInspector({
                   <div className="uppercase tracking-wider text-white/35">Anatomical identity</div>
                   {structureEvidence.canonicalIdentity ? <p className="mt-1 text-cyan-100/75">Canonical: {structureEvidence.canonicalIdentity.ontology} {structureEvidence.canonicalIdentity.id} · {structureEvidence.canonicalIdentity.hraEntityLabel ?? "HRA evidence-backed structure"}</p> : <p className="mt-1 text-white/45">Canonical identity: Unmapped — no identifier inferred from the mesh name.</p>}
                   <p className="mt-1 text-white/40">Evidence tier: {structureEvidence.evidenceTier.replace(/-/g, " ")} · {structureEvidence.canonicalIdentity?.reviewStatus ?? "not applicable"}.</p>
+                  {structureEvidence.canonicalIdentity?.reviewStatus === "approved" && (
+                    <div className="mt-2 rounded border border-emerald-300/35 bg-emerald-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-100 shadow-[0_0_12px_rgba(110,231,183,0.25)]">
+                      Scientific identity approved · User-attested review population · Source evidence immutable
+                    </div>
+                  )}
                   {structureEvidence.canonicalIdentity?.reviewStatus === "evidence-backed-requires-review" && (
                     <div className={reviewStatus === "APPROVED"
                       ? "mt-2 rounded border border-emerald-300/35 bg-emerald-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-emerald-100 shadow-[0_0_12px_rgba(110,231,183,0.25)]"
@@ -294,9 +308,66 @@ export default function AnatomicalInspector({
                       <p>Evidence: {structureEvidence.canonicalIdentity.evidence ?? "source-backed identity"}</p>
                     </div>
                   )}
-                  <p className="mt-1 text-white/40">Julich-Brain: {structureEvidence.julichObservation?.status === "unmapped" ? "No authoritative crosswalk established" : structureEvidence.scientificFeatures.julich} · provider-space context only.</p>
+                  <div className="mt-2 rounded border border-violet-300/15 bg-violet-500/5 p-2 text-[10px] leading-relaxed text-white/45">
+                    <div className="uppercase tracking-wider text-violet-100/55">Julich-Brain v3.1 context</div>
+                    <p className="mt-1 text-white/65">Mapping status: {structureEvidence.julichObservation?.mapping?.mappingStatus ?? structureEvidence.julichObservation?.status ?? "UNMAPPED"} · {structureEvidence.julichObservation?.mapping?.mappingType ?? "UNMAPPED"}</p>
+                    <p className="mt-1">{structureEvidence.julichObservation?.mapping?.julichRegionName ?? "No defensible provider region is attached to this Luna structure."}</p>
+                    <p className="mt-1">Provider dataset: {structureEvidence.julichObservation?.mapping?.sourceVersion ?? "Julich-Brain v3.1"} · {structureEvidence.julichObservation?.mapping?.referenceSpace ?? "MNI ICBM 152 2009c Nonlinear Asymmetric"}.</p>
+                    {structureEvidence.julichObservation?.mapping?.sourceUrl && <a href={structureEvidence.julichObservation.mapping.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 block text-sky-100/70 underline decoration-sky-200/30 underline-offset-2 hover:text-white">Open EBRAINS source metadata</a>}
+                    <p className="mt-1 text-white/40">Evidence: {structureEvidence.julichObservation?.mapping?.evidence ?? "No authoritative crosswalk established."}</p>
+                    <p className="mt-1 text-amber-100/65">{structureEvidence.julichObservation?.message ?? structureEvidence.julichObservation?.mapping?.notes ?? "Provider context only; maps are not bundled or redistributed."}</p>
+                  </div>
                   <p className="mt-1 text-white/40">Scientific target: {structureEvidence.scientificTarget.status} · coordinate unavailable.</p>
                   <p className="mt-1 text-amber-100/60">Luna → MNI: Not established. Structure identity is not a coordinate or mission target.</p>
+                  <form
+                    className="mt-3 rounded border border-sky-300/15 bg-sky-500/5 p-2 text-[10px] text-white/50"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      const x = Number(mniPoint.x);
+                      const y = Number(mniPoint.y);
+                      const z = Number(mniPoint.z);
+                      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+                        setMniAssignment(null);
+                        setMniAssignmentError("Enter finite X, Y, and Z coordinates in MNI ICBM 152 2009c millimetres.");
+                        return;
+                      }
+                      setMniAssignmentLoading(true);
+                      setMniAssignmentError(null);
+                      try {
+                        const response = await fetch(`/api/brain-science/julich-assignment?${new URLSearchParams({ x: String(x), y: String(y), z: String(z), units: "millimetres" }).toString()}`);
+                        const payload = await response.json() as { assignment?: { availability: string; reason: string | null; assignment: unknown | null; providerParcellationId: string }; error?: string };
+                        if (!response.ok || !payload.assignment) throw new Error(payload.error ?? `Provider query returned HTTP ${response.status}`);
+                        setMniAssignment(payload.assignment);
+                      } catch (caught) {
+                        setMniAssignment(null);
+                        setMniAssignmentError(caught instanceof Error ? caught.message : "Unable to query the Julich provider.");
+                      } finally {
+                        setMniAssignmentLoading(false);
+                      }
+                    }}
+                  >
+                    <div className="uppercase tracking-wider text-sky-100/55">Direct MNI → Julich provider query</div>
+                    <p className="mt-1 leading-relaxed">Enter an independently known coordinate in MNI ICBM 152 2009c millimetres. Luna GLB, viewer, and selected-structure coordinates are never accepted or converted.</p>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5">
+                      {(["x", "y", "z"] as const).map((axis) => (
+                        <label key={axis} className="text-[9px] uppercase text-white/35">
+                          {axis} mm
+                          <input
+                            aria-label={`MNI ${axis.toUpperCase()} coordinate in millimetres`}
+                            inputMode="decimal"
+                            value={mniPoint[axis]}
+                            onChange={(event) => setMniPoint((current) => ({ ...current, [axis]: event.target.value }))}
+                            className="mt-1 w-full rounded border border-white/10 bg-black/35 px-1.5 py-1 text-[10px] normal-case text-white outline-none focus:border-sky-300/50"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <button type="submit" disabled={mniAssignmentLoading} className="mt-2 rounded border border-sky-300/25 bg-sky-500/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.1em] text-sky-100 disabled:opacity-40">
+                      {mniAssignmentLoading ? "Querying provider…" : "Query Julich v3.1"}
+                    </button>
+                    {mniAssignmentError && <p className="mt-2 text-amber-100/70">{mniAssignmentError}</p>}
+                    {mniAssignment && <p className="mt-2 text-white/60">Provider result: {mniAssignment.availability}{mniAssignment.reason ? ` · ${mniAssignment.reason}` : " · returned in the declared MNI provider space only."}</p>}
+                  </form>
                 </div>
               )}
               {observationContext.structureMapping && (
