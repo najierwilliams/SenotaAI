@@ -18,6 +18,7 @@ export type HraCoordinateSpaceId =
   | "hra-brain-female-v1-1"
   | "hra-ccf-body-v1-2"
   | "luna-viewer-presentation"
+  | "allen-human-reference-atlas-3d-2020-icbm-2009b-sym"
   | "mni-icbm-152-2009c-asym";
 
 export interface HraCoordinateSpace {
@@ -116,6 +117,18 @@ export const HRA_COORDINATE_SPACES: Record<
     provenanceUrl: null,
     scientificUse:
       "Visual presentation only. It must not be supplied to HRA transform functions or reported as a scientific coordinate frame.",
+  },
+  "allen-human-reference-atlas-3d-2020-icbm-2009b-sym": {
+    id: "allen-human-reference-atlas-3d-2020-icbm-2009b-sym",
+    label: "Allen Human Reference Atlas 3D 2020 annotation / ICBM 2009b Nonlinear Symmetric",
+    category: "external-template",
+    units: HRA_SPATIAL_UNITS,
+    coordinateConvention:
+      "Official Allen v1.0.0 annotation NIfTI qform: 0.5 mm isotropic RAS voxel axes with world origin (-98, -134, -72) mm.",
+    provenanceUrl:
+      "https://download.alleninstitute.org/informatics-archive/allen_human_reference_atlas_3d_2020/version_1/",
+    scientificUse:
+      "Verified annotation/reference frame only. No raw GLB-to-annotation correspondence or executable Luna/HRA-to-ICBM 2009b transform is established.",
   },
   "mni-icbm-152-2009c-asym": {
     id: "mni-icbm-152-2009c-asym",

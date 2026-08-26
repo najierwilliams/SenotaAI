@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALLEN_ICBM_2009B_CORRESPONDENCE_EVIDENCE,
   HRA_BRAIN_FEMALE_TO_CCF_BODY,
   HRA_LANDMARK_VALIDATION_FRAMEWORK,
   HRA_RAW_GLB_TO_BRAIN_FEMALE,
@@ -142,6 +143,57 @@ describe("HRA v1.1 Allen_F_Brain spatial registration", () => {
     );
     expect(HRA_LANDMARK_VALIDATION_FRAMEWORK.records).toEqual([]);
     expect(hasCompletedHraLandmarkValidation()).toBe(false);
+  });
+
+  it("records the inspected official Allen annotation volume metadata without claiming a raw GLB bridge", () => {
+    const evidence = ALLEN_ICBM_2009B_CORRESPONDENCE_EVIDENCE;
+    const full = evidence.annotationVolumes.find(
+      (volume) => volume.filename === "annotation_full.nii.gz",
+    );
+
+    expect(evidence.status).toBe("unavailable");
+    expect(evidence.notExecutable).toBe(true);
+    expect(evidence.sourceAsset.sha256).toBe(HRA_V11_ALLEN_BRAIN_ASSET.sha256);
+    expect(evidence.sourceSpaceId).toBe("luna-raw-hra-v11-allen-brain-glb");
+    expect(evidence.targetSpaceId).toBe(
+      "allen-human-reference-atlas-3d-2020-icbm-2009b-sym",
+    );
+    expect(full).toMatchObject({
+      dimensions: [394, 466, 378],
+      voxelSpacingMillimetres: [0.5, 0.5, 0.5],
+      units: "millimetres",
+      affineSource: "qform",
+      orientationOfIncreasingVoxelIndices: ["R", "A", "S"],
+      originWorldMillimetres: [-98, -134, -72],
+      nonBackgroundLabelCount: 141,
+    });
+    expect(evidence.transformArtifact).toBeNull();
+    expect(evidence.validation.landmarkResidualsMillimetres).toBeNull();
+  });
+
+  it("records exact semantic candidates while preserving the absence of coordinate correspondence", () => {
+    const hippocampusHead =
+      ALLEN_ICBM_2009B_CORRESPONDENCE_EVIDENCE.semanticStructureCandidates.find(
+        (candidate) => candidate.allenAcronym === "HiH",
+      );
+
+    expect(hippocampusHead).toMatchObject({
+      allenAnnotationId: 12171,
+      allenName: "head of hippocampus",
+      laterality: "paired",
+      evidence: "exact-name-semantic-candidate",
+    });
+    expect(hippocampusHead?.glbNodeNames).toEqual([
+      "Allen_head_of_hippocampus_L",
+      "Allen_head_of_hippocampus_R",
+    ]);
+    expect(hippocampusHead?.limitation).toContain("node-to-voxel-label");
+    expect(
+      isHraCoordinateSpacePair(
+        "luna-raw-hra-v11-allen-brain-glb",
+        "allen-human-reference-atlas-3d-2020-icbm-2009b-sym",
+      ),
+    ).toBe(false);
   });
 
   it("exposes no MNI coordinates or transform through the HRA registration", () => {

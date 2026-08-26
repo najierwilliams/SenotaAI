@@ -15,6 +15,10 @@ import {
   HRA_LANDMARK_VALIDATION_FRAMEWORK,
   type HraLandmarkValidationFramework,
 } from "./HraSpatialValidation";
+import {
+  ALLEN_ICBM_2009B_CORRESPONDENCE_EVIDENCE,
+  type AllenIcbm2009bRegistrationEvidence,
+} from "./AllenIcbm2009bEvidence";
 
 export interface HraSpatialRegistration {
   id: string;
@@ -28,6 +32,7 @@ export interface HraSpatialRegistration {
   ];
   validation: HraLandmarkValidationFramework;
   mni: ReturnType<typeof getHraMniRegistrationStatus>;
+  allenIcbm2009b: AllenIcbm2009bRegistrationEvidence;
   provenanceUrls: string[];
   limitations: string[];
 }
@@ -44,6 +49,7 @@ export const HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION: HraSpatialRegistration = 
   ],
   validation: HRA_LANDMARK_VALIDATION_FRAMEWORK,
   mni: getHraMniRegistrationStatus(),
+  allenIcbm2009b: ALLEN_ICBM_2009B_CORRESPONDENCE_EVIDENCE,
   provenanceUrls: [
     "https://purl.humanatlas.io/ref-organ/brain-female/v1.1",
     "https://lod.humanatlas.io/ref-organ/brain-female/v1.1/",
@@ -54,6 +60,7 @@ export const HRA_V11_ALLEN_BRAIN_SPATIAL_REGISTRATION: HraSpatialRegistration = 
     "The established HRA layer applies only to the exact checksum-pinned raw GLB asset.",
     "The current Three.js viewer presentation frame is deliberately excluded from scientific transform execution.",
     "The HRA graph does not establish GLB vertex-to-Allen-volume correspondence.",
+    "The separately recorded Allen Human Reference Atlas 3D / ICBM 2009b correspondence remains unavailable because no GLB-to-annotation artifact or landmark validation is published.",
     "MNI ICBM 152 2009c Nonlinear Asymmetric registration remains not established.",
     "HRA coordinates do not resolve tissue, cellular, molecular, or subcellular biological targets.",
   ],
