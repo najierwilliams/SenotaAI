@@ -5,6 +5,7 @@ import {
 } from "@shared/brainScience";
 import {
   BRAIN_COORDINATE_TRANSFORMS,
+  BRAIN_LUNA_REFERENCE_REGISTRATION,
   getDataset,
   getDatasetsForScale,
   getScientificDatasetManifest,
@@ -44,6 +45,9 @@ describe("Luna Brain scientific dataset integration", () => {
     expect(getDatasetsForScale("molecular").map(dataset => dataset.id)).toContain("allen-human-brain-atlas-microarray");
     expect(getDatasetsForScale("subcellular")[0]?.status).toBe("unavailable");
     expect(manifest.datasets.every(dataset => dataset.assetUrl === null || dataset.accessType === "local-asset")).toBe(true);
+    expect(manifest.lunaReferenceRegistration).toEqual(BRAIN_LUNA_REFERENCE_REGISTRATION);
+    expect(manifest.lunaReferenceRegistration.status).toBe("unavailable");
+    expect(manifest.lunaReferenceRegistration.transformArtifact).toBeNull();
   });
 
   it("keeps reference-space transforms explicit and never treats Luna local coordinates as MNI", () => {
@@ -73,6 +77,8 @@ describe("Luna Brain scientific dataset integration", () => {
 
     expect(observation.status).toBe("available");
     expect(observation.dataset?.id).toBe("luna-macro-anatomy-model");
+    expect(observation.registration).toEqual(BRAIN_LUNA_REFERENCE_REGISTRATION);
+    expect(observation.registration.sourceAsset.sourceVersion).toBe("HRA Brain-female v1.1");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -98,6 +104,8 @@ describe("Luna Brain scientific dataset integration", () => {
     expect(first.findings).toHaveLength(2);
     expect(first.spatialTarget?.coordinate).toBeNull();
     expect(first.spatialTarget?.coordinateType).toBe("region");
+    expect(first.registration.status).toBe("unavailable");
+    expect(first.registration.validation.status).toBe("unavailable");
     expect(first.coordinateTransform?.id).toBe("ebrains-mni-to-luna");
     expect(first.coordinateTransform?.status).toBe("unavailable");
     expect(first.spatialCapability.operationEnabled).toBe(false);
@@ -117,6 +125,7 @@ describe("Luna Brain scientific dataset integration", () => {
 
     expect(observation.status).toBe("offline");
     expect(observation.message).toContain("Macro and local workspace features remain available");
+    expect(observation.registration.status).toBe("unavailable");
     expect(observation.findings).toEqual([]);
   });
 

@@ -8,6 +8,14 @@ import type {
   BrainObservationContext,
 } from "./BrainObservationContext";
 
+import type {
+  BrainCoordinateTransform,
+  BrainDatasetProvenance,
+  BrainReferenceSpace,
+  BrainSpatialTarget,
+  LunaReferenceRegistration,
+} from "@shared/brainScience";
+
 import {
   nanobotActions,
   type NanobotFleetInspection,
@@ -52,6 +60,11 @@ export interface LunaBrainActionResult<T = null> {
   ok: boolean;
   message: string;
   data: T;
+}
+
+export interface LunaScientificProvenance {
+  dataset: BrainDatasetProvenance | null;
+  registration: LunaReferenceRegistration | null;
 }
 
 /**
@@ -123,6 +136,128 @@ export const lunaBrainActions = {
 
   getObservationContext(): BrainObservationContext | null {
     return activeState()?.observationContext ?? null;
+  },
+
+  getReferenceSpace(): LunaBrainActionResult<BrainReferenceSpace> {
+    const context = activeState()?.observationContext;
+    if (!context?.referenceSpace) {
+      return {
+        ok: false,
+        message: "No live reference-space record is available while Luna Brain is closed or still loading.",
+        data: null as never,
+      };
+    }
+
+    const registration = context.registration;
+    return {
+      ok: true,
+      message:
+        registration?.status === "unavailable"
+          ? `${context.referenceSpace.label}. This is the current observation space; Luna Local has no validated mapping to MNI ICBM 152 2009c Nonlinear Asymmetric.`
+          : context.referenceSpace.label,
+      data: context.referenceSpace,
+    };
+  },
+
+  getRegistrationStatus(): LunaBrainActionResult<LunaReferenceRegistration> {
+    const registration = activeState()?.observationContext.registration;
+    if (!registration) {
+      return {
+        ok: false,
+        message: "No formal Luna reference-registration record is available while Luna Brain is closed or still loading.",
+        data: null as never,
+      };
+    }
+
+    return {
+      ok: registration.status === "validated",
+      message:
+        registration.status === "validated"
+          ? "The Luna reference registration is validated and available for its documented spaces."
+          : `MNI registration is ${registration.status}: ${registration.validation.summary}`,
+      data: registration,
+    };
+  },
+
+  getTransformStatus(): LunaBrainActionResult<BrainCoordinateTransform | null> {
+    const context = activeState()?.observationContext;
+    if (!context) {
+      return {
+        ok: false,
+        message: "No live observation context is available while Luna Brain is closed.",
+        data: null,
+      };
+    }
+
+    const registration = context.registration;
+    if (registration?.status !== "validated") {
+      return {
+        ok: false,
+        message:
+          registration?.validation.summary ??
+          "No validated Luna coordinate transform is available.",
+        data: null,
+      };
+    }
+
+    return context.coordinateTransform
+      ? {
+          ok: context.coordinateTransform.status === "available",
+          message: context.coordinateTransform.note,
+          data: context.coordinateTransform,
+        }
+      : {
+          ok: false,
+          message: "The registration is validated, but the current observation does not declare a compatible executable transform.",
+          data: null,
+        };
+  },
+
+  getSpatialTarget(): LunaBrainActionResult<BrainSpatialTarget | null> {
+    const context = activeState()?.observationContext;
+    if (!context) {
+      return {
+        ok: false,
+        message: "No live observation context is available while Luna Brain is closed.",
+        data: null,
+      };
+    }
+
+    return context.spatialTarget
+      ? {
+          ok: context.spatialTarget.spatialStatus === "resolved",
+          message:
+            context.spatialTarget.reason ??
+            "The current scientific observation does not provide a coordinate-resolved spatial target.",
+          data: context.spatialTarget,
+        }
+      : {
+          ok: false,
+          message: "No provider spatial target is available for the current observation.",
+          data: null,
+        };
+  },
+
+  getScientificProvenance(): LunaBrainActionResult<LunaScientificProvenance> {
+    const context = activeState()?.observationContext;
+    if (!context) {
+      return {
+        ok: false,
+        message: "No live scientific provenance is available while Luna Brain is closed.",
+        data: null as never,
+      };
+    }
+
+    return {
+      ok: Boolean(context.provenance || context.registration),
+      message: context.registration
+        ? `Scientific provenance includes ${context.registration.sourceAsset.label}; registration status is ${context.registration.status}.`
+        : "Dataset provenance is available without a formal registration record.",
+      data: {
+        dataset: context.provenance,
+        registration: context.registration,
+      },
+    };
   },
 
   getAvailableScales() {

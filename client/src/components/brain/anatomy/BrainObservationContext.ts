@@ -9,6 +9,7 @@ import {
   type BrainDatasetStatus,
   type BrainCoordinateTransform,
   type BrainReferenceSpace,
+  type LunaReferenceRegistration,
   type BrainScientificFinding,
   type BrainSpatialCapability,
   type BrainSpatialTarget,
@@ -45,6 +46,7 @@ export interface BrainObservationContext {
   scientificStatus: BrainDatasetStatus | null;
   scientificAvailable: boolean;
   scientificObservation: BrainScientificObservation | null;
+  registration: LunaReferenceRegistration | null;
   provenance: BrainDatasetProvenance | null;
   referenceSpace: BrainReferenceSpace | null;
   coordinateTransform: BrainCoordinateTransform | null;
@@ -174,6 +176,8 @@ export function createBrainObservationContext({
     scientificStatus,
     scientificAvailable,
     scientificObservation,
+    registration:
+      scientificObservation?.registration ?? null,
     provenance:
       scientificObservation?.dataset
         ? {

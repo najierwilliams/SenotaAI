@@ -46,12 +46,52 @@ const rightHippocampus: BrainStructure = {
   searchText: "right hippocampus limbic macro",
 };
 
+const unavailableRegistration = {
+  id: "luna-local-to-ebrains-mni-registration-v1",
+  status: "unavailable",
+  sourceAsset: {
+    label: "HuBMAP CCF Brain-female v1.1 / Allen_F_Brain.glb",
+    sha256: "c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc",
+  },
+  validation: {
+    summary:
+      "No Luna Local-to-MNI transform was validated because the verified GLB has no published coordinate convention, transform artifact, or landmark correspondence to MNI ICBM 152 2009c Nonlinear Asymmetric.",
+  },
+  blockers: [
+    "The verified HRA GLB has no declared source units, axis orientation, origin, or MNI coordinate convention.",
+  ],
+};
+
+const referenceSpaces = {
+  "luna-viewer-local": {
+    id: "luna-viewer-local",
+    label: "Luna viewer local coordinates",
+  },
+  "ebrains-mni-icbm-152-2009c": {
+    id: "ebrains-mni-icbm-152-2009c",
+    label: "MNI ICBM 152 2009c",
+  },
+  "cellxgene-human-brain-anatomical-annotation": {
+    id: "cellxgene-human-brain-anatomical-annotation",
+    label: "CELLxGENE human-brain anatomical annotation",
+  },
+};
+
+function referenceSpace(id: keyof typeof referenceSpaces) {
+  return referenceSpaces[id];
+}
+
 function observation(
-  scale: "macro" | "tissue" = "macro",
+  scale: "macro" | "tissue" | "cellular" = "macro",
 ): BrainObservationContext {
   return {
     scale,
-    scaleLabel: scale === "macro" ? "Macro" : "Tissue",
+    scaleLabel:
+      scale === "macro"
+        ? "Macro"
+        : scale === "tissue"
+          ? "Tissue"
+          : "Cellular",
     scaleDescription: "Test observation",
     structureId: leftHippocampus.id,
     structureName: leftHippocampus.displayName,
@@ -60,23 +100,35 @@ function observation(
     datasetId:
       scale === "macro"
         ? "luna_brain_macro"
-        : "julich-brain-cytoarchitecture",
+        : scale === "tissue"
+          ? "julich-brain-cytoarchitecture"
+          : "cellxgene-human-brain-cell-atlas-v1",
     datasetLabel:
       scale === "macro"
         ? "Macro anatomy model"
-        : "Julich Brain",
+        : scale === "tissue"
+          ? "Julich Brain"
+          : "Human Brain Cell Atlas",
     datasetUrl: null,
     status: "ready",
     available: true,
     message:
       scale === "macro"
         ? "Macro observation ready"
-        : "Provider region metadata is available, but no validated MNI-to-Luna Local transform is registered.",
+        : scale === "tissue"
+          ? "Provider region metadata is available, but no validated MNI-to-Luna Local transform is registered."
+          : "Cell metadata is available, but no coordinate-resolved human cell positions or validated Luna registration exists.",
     scientificStatus: "available",
     scientificAvailable: true,
     scientificObservation: null,
+    registration: unavailableRegistration,
     provenance: null,
-    referenceSpace: null,
+    referenceSpace:
+      scale === "macro"
+        ? referenceSpace("luna-viewer-local")
+        : scale === "tissue"
+          ? referenceSpace("ebrains-mni-icbm-152-2009c")
+          : referenceSpace("cellxgene-human-brain-anatomical-annotation"),
     coordinateTransform: null,
     structureMapping: null,
     spatialTarget: null,
@@ -86,9 +138,14 @@ function observation(
         : {
             status: "unavailable",
             reason:
-              "Provider region metadata is available, but no validated MNI-to-Luna Local transform is registered.",
-            scale: "tissue",
-            datasetId: "julich-brain-cytoarchitecture",
+              scale === "tissue"
+                ? "Provider region metadata is available, but no validated MNI-to-Luna Local transform is registered."
+                : "No coordinate-resolved human cell positions, compatible reference-space chain, or validated Luna registration is available.",
+            scale,
+            datasetId:
+              scale === "tissue"
+                ? "julich-brain-cytoarchitecture"
+                : "cellxgene-human-brain-cell-atlas-v1",
             referenceSpace: null,
             coordinateTransform: null,
           },
@@ -99,7 +156,7 @@ function observation(
 let cleanupBridge: (() => void) | null = null;
 
 function configureLiveBrain(
-  scale: "macro" | "tissue" = "macro",
+  scale: "macro" | "tissue" | "cellular" = "macro",
 ) {
   const calls = {
     selected: [] as string[],
@@ -297,6 +354,46 @@ describe("Luna Brain orchestration", () => {
     expect(calls.paused).toBe(1);
     expect(calls.resumed).toBe(1);
     expect(calls.returned).toBe(1);
+  });
+
+  it("answers reference-space and MNI mapping questions from the live unavailable registration record", () => {
+    configureLiveBrain();
+
+    const reference = interpretLunaBrainCommand(
+      "What coordinate system am I looking at?",
+    );
+    expect(reference.message).toContain("Luna viewer local coordinates");
+    expect(reference.message).toContain("unavailable");
+
+    const mapping = interpretLunaBrainCommand(
+      "Can you map this to MNI?",
+    );
+    expect(mapping.message).toContain("cannot map this Luna Local point to MNI");
+    expect(mapping.message).toContain("No Luna Local-to-MNI transform was validated");
+
+    const registration = lunaBrainActions.getRegistrationStatus();
+    expect(registration.ok).toBe(false);
+    expect(registration.data.status).toBe("unavailable");
+    expect(lunaBrainActions.getScientificProvenance().data.registration?.sourceAsset.sha256).toBe(
+      unavailableRegistration.sourceAsset.sha256,
+    );
+  });
+
+  it("answers Tissue targetability and Cellular nanobot refusal from their live capability gates", () => {
+    configureLiveBrain("tissue");
+    const tissue = interpretLunaBrainCommand(
+      "Can this tissue dataset be spatially targeted?",
+    );
+    expect(tissue.message).toContain("cannot be spatially targeted");
+    expect(tissue.message).toContain("validated MNI-to-Luna Local transform");
+
+    configureLiveBrain("cellular");
+    const cellular = interpretLunaBrainCommand(
+      "Why can't I send a nanobot to the cellular layer?",
+    );
+    expect(cellular.message).toContain("cannot send a nanobot to the Cellular layer");
+    expect(cellular.message).toContain("No coordinate-resolved human cell positions");
+    expect(cellular.message).toContain("Luna registration is unavailable");
   });
 
   it("reports the active scientific dataset from the live observation context", () => {

@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  BRAIN_LUNA_REFERENCE_REGISTRATION,
   BRAIN_REFERENCE_SPACES,
   getDataset,
 } from "./registry";
 import {
   getCoordinateTransform,
+  getLunaReferenceRegistration,
   transformCoordinate,
+  transformCoordinateStrict,
 } from "./coordinateTransformService";
 import {
   createSpatialTargetState,
@@ -48,6 +51,24 @@ describe("Luna scientific reference-space registration", () => {
     expect(getSpace("ebrains-bigbrain").resolution).toBe("20 μm");
     expect(getSpace("allen-human-donor-mr").coordinateConvention).toBe("Donor MR volume coordinates");
     expect(getSpace("cellxgene-human-brain-anatomical-annotation").kind).toBe("annotation");
+  });
+
+  it("records the byte-verified HRA GLB provenance and an unavailable MNI registration without an executable artifact", () => {
+    const registration = getLunaReferenceRegistration();
+    expect(registration).toEqual(BRAIN_LUNA_REFERENCE_REGISTRATION);
+    expect(registration.status).toBe("unavailable");
+    expect(registration.sourceSpaceId).toBe("luna-viewer-local");
+    expect(registration.targetSpaceId).toBe("ebrains-mni-icbm-152-2009c");
+    expect(registration.sourceAsset.sourceVersion).toBe("HRA Brain-female v1.1");
+    expect(registration.sourceAsset.sha256).toBe(
+      "c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc",
+    );
+    expect(registration.transformArtifact).toBeNull();
+    expect(registration.sourceUnits).toBeNull();
+    expect(registration.sourceOrientation).toBeNull();
+    expect(registration.validation.status).toBe("unavailable");
+    expect(registration.validation.landmarks).toHaveLength(4);
+    expect(registration.validation.landmarks.every((landmark) => landmark.status === "not-evaluated")).toBe(true);
   });
 
   it("rejects unknown reference spaces and declared version mismatches", () => {
@@ -100,6 +121,16 @@ describe("Luna scientific reference-space registration", () => {
       expect(invalidCoordinate.failure).toBe("invalid-coordinate");
     }
 
+    const infiniteCoordinate = transformCoordinate(
+      { x: Number.POSITIVE_INFINITY, y: 0, z: 0, units: "millimetres" },
+      "ebrains-mni-icbm-152-2009c",
+      "ebrains-mni-icbm-152-2009c",
+    );
+    expect(infiniteCoordinate.status).toBe("unavailable");
+    if (infiniteCoordinate.status === "unavailable") {
+      expect(infiniteCoordinate.failure).toBe("invalid-coordinate");
+    }
+
     const invalidUnits = transformCoordinate(
       { x: 1, y: 2, z: 3, units: "voxels" },
       "ebrains-mni-icbm-152-2009c",
@@ -117,8 +148,58 @@ describe("Luna scientific reference-space registration", () => {
     );
     expect(lunaRegistration.status).toBe("unavailable");
     if (lunaRegistration.status === "unavailable") {
-      expect(lunaRegistration.failure).toBe("transform-unavailable");
-      expect(lunaRegistration.reason).toContain("Reference-space registration unavailable");
+      expect(lunaRegistration.failure).toBe("registration-unavailable");
+      expect(lunaRegistration.reason).toContain("Luna reference registration is unavailable");
+    }
+  });
+
+  it("requires a registered transform ID and provenance before strict conversion", () => {
+    const missingId = transformCoordinateStrict({
+      coordinate: mniCoordinate,
+      sourceReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      transformId: null,
+      provenance: "test fixture",
+    });
+    expect(missingId.status).toBe("unavailable");
+    if (missingId.status === "unavailable") {
+      expect(missingId.failure).toBe("missing-transform-id");
+    }
+
+    const missingProvenance = transformCoordinateStrict({
+      coordinate: mniCoordinate,
+      sourceReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      transformId: "ebrains-mni-icbm-152-2009c-identity",
+      provenance: null,
+    });
+    expect(missingProvenance.status).toBe("unavailable");
+    if (missingProvenance.status === "unavailable") {
+      expect(missingProvenance.failure).toBe("missing-provenance");
+    }
+
+    const unsupported = transformCoordinateStrict({
+      coordinate: mniCoordinate,
+      sourceReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      transformId: "invented-transform",
+      provenance: "test fixture",
+    });
+    expect(unsupported.status).toBe("unavailable");
+    if (unsupported.status === "unavailable") {
+      expect(unsupported.failure).toBe("unsupported-transform");
+    }
+
+    const strictLuna = transformCoordinateStrict({
+      coordinate: { x: 0, y: 0, z: 0, units: null },
+      sourceReferenceSpaceId: "luna-viewer-local",
+      targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      transformId: "luna-to-mni-invented",
+      provenance: "Luna viewer",
+    });
+    expect(strictLuna.status).toBe("unavailable");
+    if (strictLuna.status === "unavailable") {
+      expect(strictLuna.failure).toBe("unsupported-transform");
     }
   });
 

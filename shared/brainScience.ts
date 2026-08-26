@@ -140,6 +140,86 @@ export interface BrainCoordinateTransform {
   note: string;
 }
 
+export interface LunaReferenceRegistrationAsset {
+  path: string;
+  sha256: string;
+  label: string;
+  provider: string;
+  sourceUrl: string | null;
+  sourceVersion: string | null;
+  license: string | null;
+}
+
+export type LunaRegistrationMethod =
+  | "direct-documented-transform"
+  | "affine-registration"
+  | "nonlinear-registration"
+  | "template-registration"
+  | "surface-registration"
+  | "atlas-registration"
+  | "unavailable";
+
+export type LunaRegistrationStatus =
+  | "validated"
+  | "unavailable"
+  | "invalid";
+
+export type LunaRegistrationValidationStatus =
+  | "passed"
+  | "not-run"
+  | "failed"
+  | "unavailable";
+
+/**
+ * A versioned record of the scientific relationship between Luna's source
+ * asset and an external reference space. It is deliberately present even when
+ * unavailable so consumers can expose the precise missing evidence rather than
+ * guessing from viewer normalization, mesh bounds, or anatomy labels.
+ */
+export interface LunaReferenceRegistration {
+  id: string;
+  status: LunaRegistrationStatus;
+  sourceSpaceId: string;
+  targetSpaceId: string;
+  sourceAsset: LunaReferenceRegistrationAsset;
+  registrationMethod: LunaRegistrationMethod;
+  transformType: BrainCoordinateTransformType;
+  transformArtifact: {
+    id: string;
+    format: string;
+    path: string | null;
+    sha256: string | null;
+    executable: boolean;
+  } | null;
+  sourceUnits: string | null;
+  targetUnits: string | null;
+  sourceOrientation: string | null;
+  targetOrientation: string | null;
+  provenance: {
+    sourceUrls: string[];
+    citations: string[];
+    notes: string[];
+  };
+  validation: {
+    status: LunaRegistrationValidationStatus;
+    method: string | null;
+    landmarks: Array<{
+      id: string;
+      label: string;
+      sourceCoordinate: BrainCoordinate | null;
+      targetCoordinate: BrainCoordinate | null;
+      residualMillimetres: number | null;
+      status: "passed" | "failed" | "not-evaluated";
+      note: string;
+    }>;
+    summary: string;
+  };
+  confidence: string | null;
+  createdAt: string;
+  version: string;
+  blockers: string[];
+}
+
 export interface BrainCoordinate {
   x: number;
   y: number;
@@ -214,6 +294,7 @@ export interface BrainScientificObservation {
   scale: BrainScientificScale;
   status: BrainDatasetStatus;
   dataset: BrainDataset | null;
+  registration: LunaReferenceRegistration;
   structureMapping: BrainStructureMapping | null;
   referenceSpace: BrainReferenceSpace | null;
   coordinateTransform: BrainCoordinateTransform | null;
@@ -229,6 +310,7 @@ export interface BrainScientificDatasetManifest {
   datasets: BrainDataset[];
   referenceSpaces: BrainReferenceSpace[];
   coordinateTransforms: BrainCoordinateTransform[];
+  lunaReferenceRegistration: LunaReferenceRegistration;
 }
 
 export function isDatasetUsable(

@@ -9,6 +9,7 @@ import type {
 } from "@shared/brainScience";
 import {
   getDataset,
+  BRAIN_LUNA_REFERENCE_REGISTRATION,
   BRAIN_REFERENCE_SPACES,
 } from "./registry";
 import {
@@ -147,6 +148,7 @@ function createUnavailableObservation(
     scale: query.scale,
     status: dataset.status,
     dataset,
+    registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset,
@@ -218,6 +220,7 @@ async function queryTissue(
     scale: query.scale,
     status: "partial",
     dataset,
+    registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset,
@@ -334,6 +337,7 @@ async function queryCellular(
     scale: query.scale,
     status: "partial",
     dataset,
+    registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
     structureMapping: createStructureMapping(
       query,
       dataset,
@@ -422,6 +426,7 @@ async function queryMolecular(
     scale: query.scale,
     status: "partial",
     dataset,
+    registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
     structureMapping: {
       canonicalStructureId:
         query.structureId ??
@@ -571,6 +576,7 @@ export async function queryBrainScientificObservation(
           scale: query.scale,
           status: "available",
           dataset,
+          registration: BRAIN_LUNA_REFERENCE_REGISTRATION,
           structureMapping: createStructureMapping(
             query,
             dataset,

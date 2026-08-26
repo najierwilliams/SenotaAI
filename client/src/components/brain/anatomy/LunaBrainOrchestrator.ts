@@ -401,6 +401,99 @@ export function interpretLunaBrainCommand(
     };
   }
 
+  const isReferenceSpaceQuestion =
+    normalized.includes("coordinate system") ||
+    normalized.includes("reference space") ||
+    normalized.includes("what coordinates");
+  const isMniMappingQuestion =
+    /\bmni\b/.test(normalized) ||
+    normalized.includes("map this") ||
+    normalized.includes("map to reference");
+  const isTissueTargetQuestion =
+    /\btissue\b/.test(normalized) &&
+    /\b(?:spatial\w*|target\w*|map\w*|coordinate\w*)\b/.test(normalized);
+  const isCellularNanobotQuestion =
+    /\bcellular\b/.test(normalized) &&
+    /\b(?:nanobot|bot|send|mission|why)\b/.test(normalized);
+
+  if (isReferenceSpaceQuestion) {
+    const referenceSpace = lunaBrainActions.getReferenceSpace();
+    const registration = lunaBrainActions.getRegistrationStatus();
+    return {
+      message: referenceSpace.ok
+        ? `You are looking at **${referenceSpace.data.label}**. ${referenceSpace.message} Registration status: **${registration.data?.status ?? "unavailable"}**.`
+        : referenceSpace.message,
+      plan: null,
+      needsConfirmation: false,
+      action: "none",
+    };
+  }
+
+  if (isMniMappingQuestion) {
+    const transform = lunaBrainActions.getTransformStatus();
+    const registration = lunaBrainActions.getRegistrationStatus();
+    const blockers = registration.data?.blockers ?? [];
+    return {
+      message: transform.ok
+        ? `A documented transform is available: ${transform.message}`
+        : [
+            "I cannot map this Luna Local point to MNI.",
+            transform.message,
+            blockers.length ? `Missing evidence: ${blockers.join(" ")}` : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
+      plan: null,
+      needsConfirmation: false,
+      action: "none",
+    };
+  }
+
+  if (isTissueTargetQuestion) {
+    const context = state.observationContext;
+    if (context.scale !== "tissue") {
+      return {
+        message: `The active observation is ${displayScale(context.scale)}, not Tissue. Switch to Tissue to inspect its live provider target state. Its Luna mapping remains unavailable unless the verified registration becomes validated.`,
+        plan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+
+    const target = lunaBrainActions.getSpatialTarget();
+    const capability = context.spatialCapability;
+    return {
+      message:
+        target.ok && capability?.operationEnabled
+          ? `The live Tissue target is resolved and spatially actionable: ${target.message}`
+          : `The Tissue dataset cannot be spatially targeted: ${capability?.reason ?? target.message}`,
+      plan: null,
+      needsConfirmation: false,
+      action: "none",
+    };
+  }
+
+  if (isCellularNanobotQuestion) {
+    const context = state.observationContext;
+    if (context.scale !== "cellular") {
+      return {
+        message: `The active observation is ${displayScale(context.scale)}, not Cellular. Cellular nanobot missions remain unavailable until a genuine human spatial cell coordinate, compatible reference-space chain, validated Luna registration, and resolved target all exist.`,
+        plan: null,
+        needsConfirmation: false,
+        action: "none",
+      };
+    }
+
+    const capability = context.spatialCapability;
+    const registration = lunaBrainActions.getRegistrationStatus();
+    return {
+      message: `I cannot send a nanobot to the Cellular layer: ${capability?.reason ?? "No provider spatial cell coordinate is available."} Luna registration is ${registration.data?.status ?? "unavailable"}.`,
+      plan: null,
+      needsConfirmation: false,
+      action: "none",
+    };
+  }
+
   const sequenceMissions = requestedMissionSequence(message);
   const isSequenceRequest =
     /\b(?:sequence|workflow|then)\b/.test(normalized) &&

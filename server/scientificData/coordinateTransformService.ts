@@ -2,9 +2,11 @@ import type {
   BrainCoordinate,
   BrainCoordinateTransform,
   BrainReferenceSpace,
+  LunaReferenceRegistration,
 } from "@shared/brainScience";
 import {
   BRAIN_COORDINATE_TRANSFORMS,
+  BRAIN_LUNA_REFERENCE_REGISTRATION,
   BRAIN_REFERENCE_SPACES,
 } from "./registry";
 
@@ -15,7 +17,12 @@ export type CoordinateTransformFailure =
   | "invalid-coordinate"
   | "invalid-units"
   | "transform-unavailable"
-  | "provider-transform-not-executable";
+  | "provider-transform-not-executable"
+  | "missing-transform-id"
+  | "missing-provenance"
+  | "unsupported-transform"
+  | "registration-unavailable"
+  | "registration-invalid";
 
 export interface CoordinateTransformSuccess {
   status: "resolved";
@@ -41,6 +48,20 @@ export type CoordinateTransformResult =
 export interface CoordinateTransformVersionExpectation {
   sourceVersion?: string | null;
   targetVersion?: string | null;
+}
+
+/**
+ * Strict request contract for every request that purports to transform an
+ * external coordinate. A registration ID and provenance are required so that
+ * callers cannot silently convert a point using a visual or undocumented path.
+ */
+export interface StrictCoordinateTransformRequest {
+  coordinate: BrainCoordinate;
+  sourceReferenceSpaceId: string;
+  targetReferenceSpaceId: string;
+  transformId: string | null;
+  provenance: string | null;
+  expectedVersions?: CoordinateTransformVersionExpectation;
 }
 
 function getReferenceSpace(
@@ -185,6 +206,32 @@ export function transformCoordinate(
     };
   }
 
+  if (
+    (sourceReferenceSpaceId === BRAIN_LUNA_REFERENCE_REGISTRATION.sourceSpaceId ||
+      targetReferenceSpaceId === BRAIN_LUNA_REFERENCE_REGISTRATION.sourceSpaceId) &&
+    sourceReferenceSpaceId !== targetReferenceSpaceId &&
+    BRAIN_LUNA_REFERENCE_REGISTRATION.status !== "validated"
+  ) {
+    const registration = BRAIN_LUNA_REFERENCE_REGISTRATION;
+    const failure =
+      registration.status === "invalid"
+        ? "registration-invalid"
+        : "registration-unavailable";
+
+    return {
+      status: "unavailable",
+      reason:
+        `Luna reference registration is ${registration.status}: ${registration.validation.summary}`,
+      failure,
+      sourceSpace,
+      targetSpace,
+      transform: getTransform(
+        sourceReferenceSpaceId,
+        targetReferenceSpaceId,
+      ),
+    };
+  }
+
   if (sourceReferenceSpaceId === targetReferenceSpaceId) {
     return {
       status: "resolved",
@@ -221,6 +268,61 @@ export function transformCoordinate(
     targetSpace,
     transform,
   };
+}
+
+export function transformCoordinateStrict(
+  request: StrictCoordinateTransformRequest,
+): CoordinateTransformResult {
+  const sourceSpace = getReferenceSpace(request.sourceReferenceSpaceId);
+  const targetSpace = getReferenceSpace(request.targetReferenceSpaceId);
+
+  if (!request.transformId?.trim()) {
+    return {
+      status: "unavailable",
+      reason: "A transform ID is required for every coordinate transformation request.",
+      failure: "missing-transform-id",
+      sourceSpace,
+      targetSpace,
+      transform: null,
+    };
+  }
+
+  if (!request.provenance?.trim()) {
+    return {
+      status: "unavailable",
+      reason: "Coordinate provenance is required for every coordinate transformation request.",
+      failure: "missing-provenance",
+      sourceSpace,
+      targetSpace,
+      transform: null,
+    };
+  }
+
+  const declaredTransform = getCoordinateTransform(
+    request.sourceReferenceSpaceId,
+    request.targetReferenceSpaceId,
+  );
+  if (!declaredTransform || declaredTransform.id !== request.transformId) {
+    return {
+      status: "unavailable",
+      reason: "The supplied transform ID is not registered for the declared source and target spaces.",
+      failure: "unsupported-transform",
+      sourceSpace,
+      targetSpace,
+      transform: declaredTransform,
+    };
+  }
+
+  return transformCoordinate(
+    request.coordinate,
+    request.sourceReferenceSpaceId,
+    request.targetReferenceSpaceId,
+    request.expectedVersions,
+  );
+}
+
+export function getLunaReferenceRegistration(): LunaReferenceRegistration {
+  return BRAIN_LUNA_REFERENCE_REGISTRATION;
 }
 
 export function getCoordinateTransform(

@@ -3,6 +3,7 @@ import type {
   BrainDataset,
   BrainReferenceSpace,
   BrainScientificDatasetManifest,
+  LunaReferenceRegistration,
 } from "@shared/brainScience";
 
 export const BRAIN_REFERENCE_SPACES: BrainReferenceSpace[] = [
@@ -31,7 +32,7 @@ export const BRAIN_REFERENCE_SPACES: BrainReferenceSpace[] = [
     units: "millimetres",
     axisOrientation: null,
     coordinateConvention: "Provider MNI/ICBM template coordinates",
-    resolution: null,
+    resolution: "1 × 1 × 1 mm",
     version: "2009c nonlinear asymmetric",
     provenanceUrl: "https://search.kg.ebrains.eu/instances/Dataset/4ac9f0bc-560d-47e0-8916-7b24da9bb0ce",
     description:
@@ -130,6 +131,101 @@ export const BRAIN_COORDINATE_TRANSFORMS: BrainCoordinateTransform[] = [
   },
 ];
 
+export const BRAIN_LUNA_REFERENCE_REGISTRATION: LunaReferenceRegistration = {
+  id: "luna-local-to-ebrains-mni-registration-v1",
+  status: "unavailable",
+  sourceSpaceId: "luna-viewer-local",
+  targetSpaceId: "ebrains-mni-icbm-152-2009c",
+  sourceAsset: {
+    path: "/models/luna/brain/source/3d-vh-f-allen-brain.glb",
+    sha256:
+      "c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc",
+    label: "HuBMAP CCF Brain-female v1.1 / Allen_F_Brain.glb",
+    provider: "HuBMAP Human Reference Atlas",
+    sourceUrl:
+      "https://cdn.humanatlas.io/hra-releases/v1.1/models/Allen_F_Brain.glb",
+    sourceVersion: "HRA Brain-female v1.1",
+    license: "CC BY 4.0",
+  },
+  registrationMethod: "unavailable",
+  transformType: "unavailable",
+  transformArtifact: null,
+  sourceUnits: null,
+  targetUnits: "millimetres",
+  sourceOrientation: null,
+  targetOrientation: null,
+  provenance: {
+    sourceUrls: [
+      "https://hubmapconsortium.github.io/ccf-releases/v1.1/docs/ref-organs/brain-female.html",
+      "https://apps.humanatlas.io/kg-explorer/ref-organ/brain-female/v1.1",
+      "https://community.brain-map.org/t/allen-human-reference-atlas-3d-2020-new/405",
+      "https://nist.mni.mcgill.ca/icbm-152-nonlinear-atlases-2009/",
+    ],
+    citations: [
+      "Browne K, et al. HuBMAP CCF 3D Reference Object Library, Brain-female v1.1, DOI: 10.48539/HBM724.XTTN.487.",
+      "Ding SL, et al. Allen Human Reference Atlas – 3D, 2020, RRID:SCR_017764, version 1.0.0.",
+      "Fonov VS, et al. ICBM 152 Nonlinear Atlases (2009).",
+    ],
+    notes: [
+      "The repository GLB is byte-identical to the documented HuBMAP v1.1 Allen_F_Brain.glb asset.",
+      "HuBMAP documents a mirrored and resized presentation model derived from the Allen Human Reference Atlas, but does not publish a mesh-to-MNI transform, mesh coordinate convention, or landmark validation artifact.",
+      "The Allen Human Reference Atlas 3D volume was drawn on ICBM 2009b Nonlinear Symmetric, while this target is MNI ICBM 152 2009c Nonlinear Asymmetric; no authoritative 2009b-to-HRA-GLB-to-2009c transform chain was found.",
+    ],
+  },
+  validation: {
+    status: "unavailable",
+    method: null,
+    landmarks: [
+      {
+        id: "left-right-orientation",
+        label: "Left/right orientation",
+        sourceCoordinate: null,
+        targetCoordinate: null,
+        residualMillimetres: null,
+        status: "not-evaluated",
+        note: "No source mesh orientation or validated landmark correspondence is published for this GLB.",
+      },
+      {
+        id: "anterior-posterior-orientation",
+        label: "Anterior/posterior orientation",
+        sourceCoordinate: null,
+        targetCoordinate: null,
+        residualMillimetres: null,
+        status: "not-evaluated",
+        note: "No source mesh coordinate convention or registration artifact is available.",
+      },
+      {
+        id: "hippocampal-region",
+        label: "Hippocampal region correspondence",
+        sourceCoordinate: null,
+        targetCoordinate: null,
+        residualMillimetres: null,
+        status: "not-evaluated",
+        note: "Anatomical labels alone are not landmark coordinates and cannot validate a transform.",
+      },
+      {
+        id: "ventricular-region",
+        label: "Ventricular region correspondence",
+        sourceCoordinate: null,
+        targetCoordinate: null,
+        residualMillimetres: null,
+        status: "not-evaluated",
+        note: "No mapped source-to-target landmark pair is retained with the GLB.",
+      },
+    ],
+    summary:
+      "No Luna Local-to-MNI transform was validated because the verified GLB has no published coordinate convention, transform artifact, or landmark correspondence to MNI ICBM 152 2009c Nonlinear Asymmetric.",
+  },
+  confidence: null,
+  createdAt: "2026-08-25",
+  version: "1.0.0",
+  blockers: [
+    "The verified HRA GLB has no declared source units, axis orientation, origin, or MNI coordinate convention.",
+    "No authoritative transform artifact maps the mirrored/resized HRA presentation mesh to MNI ICBM 152 2009c Nonlinear Asymmetric.",
+    "No source-to-target anatomical landmark correspondence set with validation residuals is published for this asset.",
+  ],
+};
+
 export const BRAIN_DATASETS: BrainDataset[] = [
   {
     id: "luna-macro-anatomy-model",
@@ -138,7 +234,7 @@ export const BRAIN_DATASETS: BrainDataset[] = [
     scale: "macro",
     modality: "3D anatomical mesh",
     species: "Homo sapiens",
-    version: null,
+    version: "HRA Brain-female v1.1",
     status: "available",
     accessType: "local-asset",
     endpoint: null,
@@ -147,13 +243,14 @@ export const BRAIN_DATASETS: BrainDataset[] = [
     requiresAuthentication: false,
     downloadable: false,
     approximateSize: null,
-    license: "Repository asset; source licensing must be retained with the asset.",
-    citation: null,
+    license: "CC BY 4.0 (HuBMAP Human Reference Atlas); local asset SHA-256 c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc.",
+    citation:
+      "Browne K, et al. HuBMAP CCF 3D Reference Object Library, Brain-female v1.1. DOI: 10.48539/HBM724.XTTN.487.",
     referenceSpaceIds: ["luna-viewer-local"],
     description:
-      "The repository-local GLB used by the Luna Brain Macro viewer. Its filename includes an Allen label, but no source package, asset-specific citation, coordinate declaration, or registration record is retained in this repository.",
+      "Repository-local copy of the byte-verified HuBMAP Human Reference Atlas Brain-female v1.1 Allen_F_Brain.glb anatomical reference object, derived using Allen Human Reference Atlas data, mirrored to form a whole brain, and resized to fit Visible Human bodies.",
     limitations:
-      "Its native glTF mesh frame has undocumented units, orientation, origin, and anatomical template. It is not a registered MNI, ICBM, donor-MR, or BigBrain transform; display normalization is never a scientific transform.",
+      "The HRA presentation mesh has no published Luna/GLB-to-MNI mapping, source units, axis orientation, origin, or landmark validation. It is not a documented MNI, ICBM, donor-MR, or BigBrain transform; viewer centering and display normalization are never scientific transforms.",
   },
   {
     id: "ebrains-multilevel-human-atlas",
@@ -334,5 +431,7 @@ export function getScientificDatasetManifest(): BrainScientificDatasetManifest {
     referenceSpaces: BRAIN_REFERENCE_SPACES,
     coordinateTransforms:
       BRAIN_COORDINATE_TRANSFORMS,
+    lunaReferenceRegistration:
+      BRAIN_LUNA_REFERENCE_REGISTRATION,
   };
 }
