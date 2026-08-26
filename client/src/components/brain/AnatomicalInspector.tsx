@@ -1,3 +1,8 @@
+import {
+  useEffect,
+  useState,
+} from "react";
+
 import type {
   BrainScale,
   BrainStructure,
@@ -74,6 +79,21 @@ export default function AnatomicalInspector({
   activeNanobots,
   onSelectNanobot,
 }: AnatomicalInspectorProps) {
+  const [structureEvidence, setStructureEvidence] = useState<{
+    canonicalIdentity: { ontology: string; id: string; hraEntityLabel: string | null; status: string } | null;
+    scientificFeatures: { julich: string };
+  } | null>(null);
+
+  useEffect(() => {
+    if (!structure?.id) { setStructureEvidence(null); return; }
+    const controller = new AbortController();
+    void fetch(`/api/brain-science/structure/${encodeURIComponent(structure.id)}`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => { if (!controller.signal.aborted) setStructureEvidence(payload); })
+      .catch(() => { if (!controller.signal.aborted) setStructureEvidence(null); });
+    return () => controller.abort();
+  }, [structure?.id]);
+
   if (!structure) {
     return (
       <aside className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-white/10 bg-black/75 text-white shadow-2xl backdrop-blur-xl">
@@ -229,6 +249,14 @@ export default function AnatomicalInspector({
                   <p className="mt-1 text-white/40">
                     {observationContext.registration.validation.summary}
                   </p>
+                </div>
+              )}
+              {structureEvidence && (
+                <div className="mt-2 rounded-md border border-cyan-300/10 bg-cyan-300/5 p-2.5 text-[10px] leading-relaxed text-white/50">
+                  <div className="uppercase tracking-wider text-white/35">Anatomical identity</div>
+                  {structureEvidence.canonicalIdentity ? <p className="mt-1 text-cyan-100/75">Canonical: {structureEvidence.canonicalIdentity.ontology} {structureEvidence.canonicalIdentity.id} · {structureEvidence.canonicalIdentity.hraEntityLabel ?? "HRA evidence-backed structure"}</p> : <p className="mt-1 text-white/45">Canonical identity: Unmapped — no identifier inferred from the mesh name.</p>}
+                  <p className="mt-1 text-white/40">Julich-Brain: {structureEvidence.scientificFeatures.julich} · provider-space context only.</p>
+                  <p className="mt-1 text-amber-100/60">Luna → MNI: Not established. Structure identity is not a coordinate or mission target.</p>
                 </div>
               )}
               {observationContext.structureMapping && (
