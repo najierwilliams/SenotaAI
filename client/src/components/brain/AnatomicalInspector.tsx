@@ -80,8 +80,10 @@ export default function AnatomicalInspector({
   onSelectNanobot,
 }: AnatomicalInspectorProps) {
   const [structureEvidence, setStructureEvidence] = useState<{
-    canonicalIdentity: { ontology: string; id: string; hraEntityLabel: string | null; status: string } | null;
+    canonicalIdentity: { ontology: string; id: string; hraEntityLabel: string | null; status: string; reviewStatus?: string } | null;
     scientificFeatures: { julich: string };
+    evidenceTier: string;
+    scientificTarget: { status: string; coordinate: null; limitation: string | null };
   } | null>(null);
 
   useEffect(() => {
@@ -255,7 +257,9 @@ export default function AnatomicalInspector({
                 <div className="mt-2 rounded-md border border-cyan-300/10 bg-cyan-300/5 p-2.5 text-[10px] leading-relaxed text-white/50">
                   <div className="uppercase tracking-wider text-white/35">Anatomical identity</div>
                   {structureEvidence.canonicalIdentity ? <p className="mt-1 text-cyan-100/75">Canonical: {structureEvidence.canonicalIdentity.ontology} {structureEvidence.canonicalIdentity.id} · {structureEvidence.canonicalIdentity.hraEntityLabel ?? "HRA evidence-backed structure"}</p> : <p className="mt-1 text-white/45">Canonical identity: Unmapped — no identifier inferred from the mesh name.</p>}
+                  <p className="mt-1 text-white/40">Evidence tier: {structureEvidence.evidenceTier.replace(/-/g, " ")} · {structureEvidence.canonicalIdentity?.reviewStatus ?? "not applicable"}.</p>
                   <p className="mt-1 text-white/40">Julich-Brain: {structureEvidence.scientificFeatures.julich} · provider-space context only.</p>
+                  <p className="mt-1 text-white/40">Scientific target: {structureEvidence.scientificTarget.status} · coordinate unavailable.</p>
                   <p className="mt-1 text-amber-100/60">Luna → MNI: Not established. Structure identity is not a coordinate or mission target.</p>
                 </div>
               )}
