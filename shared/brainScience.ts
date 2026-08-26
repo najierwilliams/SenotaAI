@@ -312,6 +312,60 @@ export interface BrainScientificObservation {
   fetchedAt: string | null;
 }
 
+export type ScientificEvidenceTier =
+  | "structure-context"
+  | "region-probabilistic"
+  | "point-validated";
+
+export type ScientificReviewStatus =
+  | "requires-user-review"
+  | "reviewed"
+  | "not-applicable";
+
+export interface ScientificLicenseRecord {
+  id: string;
+  provider: string;
+  dataset: string;
+  license: string | null;
+  redistribution: "not-redistributed" | "review-required" | "permitted-with-attribution";
+  sourceUrl: string;
+  note: string;
+}
+
+export interface ScientificProvenanceRecord {
+  id: string;
+  provider: string;
+  dataset: string;
+  version: string | null;
+  sourceUrl: string;
+  citation: string | null;
+  referenceSpaceId: string | null;
+  registrationMethod: string | null;
+  retrievedAt: string | null;
+  evidenceTier: ScientificEvidenceTier;
+  licenseId: string;
+}
+
+export interface ScientificTarget {
+  id: string;
+  structureUberonId: string | null;
+  structureFmaId: string | null;
+  provider: BrainDatasetProvider | null;
+  datasetId: string | null;
+  datasetVersion: string | null;
+  referenceSpaceId: string | null;
+  coordinate: BrainCoordinate | null;
+  coordinateUnits: string | null;
+  registrationMethod: string | null;
+  registrationErrorMillimetres: number | null;
+  uncertaintySigmaMillimetres: number | null;
+  evidenceTier: ScientificEvidenceTier;
+  provenanceId: string;
+  licenseId: string;
+  status: "available" | "unavailable";
+  limitation: string | null;
+}
+
 export type BrainScientificReferenceStatus =
   | "available"
   | "validated"
