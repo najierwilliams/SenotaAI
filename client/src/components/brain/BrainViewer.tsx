@@ -1527,6 +1527,16 @@ export default function BrainViewer() {
       return;
     }
 
+    const capabilityCanvas = document.createElement("canvas");
+    const webglContext =
+      capabilityCanvas.getContext("webgl2") ??
+      capabilityCanvas.getContext("webgl");
+
+    if (!webglContext) {
+      setStatus("WebGL is unavailable in this browser. The Luna workspace remains available, but the 3D visual model cannot render here.");
+      return;
+    }
+
     const scene =
       new THREE.Scene();
 
@@ -1546,11 +1556,18 @@ export default function BrainViewer() {
 
     cameraRef.current = camera;
 
-    const renderer =
-      new THREE.WebGLRenderer({
+    let renderer: THREE.WebGLRenderer;
+
+    try {
+      renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
       });
+    } catch (error) {
+      console.error("Luna WebGL renderer initialization failed", error);
+      setStatus("Luna could not initialize WebGL in this browser. The 3D visual model is unavailable, while scientific context remains non-spatial.");
+      return;
+    }
 
     renderer.setPixelRatio(
       Math.min(window.devicePixelRatio, 2),
