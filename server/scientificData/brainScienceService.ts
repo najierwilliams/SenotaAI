@@ -200,6 +200,10 @@ async function queryTissue(
   const parcellationCount =
     payload.parcellations?.length ?? 0;
 
+  const bigBrainDataset = getDataset(
+    "bigbrain-microscopic-reference",
+  );
+
   const findings: BrainScientificFinding[] = [
     {
       id: "ebrains-human-atlas",
@@ -219,6 +223,18 @@ async function queryTissue(
       kind: "atlas",
       provenance,
     },
+    ...(bigBrainDataset
+      ? [
+          {
+            id: "bigbrain-reference-context",
+            label: "BigBrain scientific context",
+            value: "20 μm histological reference · browser-native full-brain asset unavailable",
+            unit: null,
+            kind: "atlas" as const,
+            provenance: createProvenance(bigBrainDataset, accessedAt),
+          },
+        ]
+      : []),
   ];
 
   return {

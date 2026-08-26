@@ -112,7 +112,8 @@ describe("Luna Brain scientific dataset integration", () => {
     const second = await queryBrainScientificObservation(query);
 
     expect(first.status).toBe("partial");
-    expect(first.findings).toHaveLength(2);
+    expect(first.findings).toHaveLength(3);
+    expect(first.findings.some((finding) => finding.id === "bigbrain-reference-context")).toBe(true);
     expect(first.spatialTarget?.coordinate).toBeNull();
     expect(first.spatialTarget?.coordinateType).toBe("region");
     expect(first.registration.status).toBe("unavailable");

@@ -4981,6 +4981,9 @@ async function queryTissue(dataset, query) {
     "luna-viewer-local"
   );
   const parcellationCount = payload.parcellations?.length ?? 0;
+  const bigBrainDataset = getDataset(
+    "bigbrain-microscopic-reference"
+  );
   const findings = [
     {
       id: "ebrains-human-atlas",
@@ -4997,7 +5000,17 @@ async function queryTissue(dataset, query) {
       unit: "references",
       kind: "atlas",
       provenance
-    }
+    },
+    ...bigBrainDataset ? [
+      {
+        id: "bigbrain-reference-context",
+        label: "BigBrain scientific context",
+        value: "20 \u03BCm histological reference \xB7 browser-native full-brain asset unavailable",
+        unit: null,
+        kind: "atlas",
+        provenance: createProvenance(bigBrainDataset, accessedAt)
+      }
+    ] : []
   ];
   return {
     scale: query.scale,
@@ -5203,10 +5216,10 @@ async function queryBrainScientificObservation(query) {
     query.structureId ?? "",
     query.structureName ?? ""
   ].join(":");
-  const cached = queryCache.get(key);
-  if (cached && cached.expiresAt > Date.now() && !query.refresh) {
+  const cached2 = queryCache.get(key);
+  if (cached2 && cached2.expiresAt > Date.now() && !query.refresh) {
     return {
-      ...cached.value,
+      ...cached2.value,
       cached: true
     };
   }
@@ -5286,6 +5299,114 @@ async function queryBrainScientificObservation(query) {
       error
     );
   }
+}
+
+// server/scientificData/ebrainsProvider.ts
+var SIIBRA_BASE_URL = "https://siibra-api-stable.apps.hbp.eu/v3_0";
+var HUMAN_ATLAS_PATH = "/atlases/juelich/iav/atlas/v1.0.0/1";
+var TTL_MS = 5 * 60 * 1e3;
+var TIMEOUT_MS = 8e3;
+var cache = /* @__PURE__ */ new Map();
+async function fetchJson2(path2) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(`${SIIBRA_BASE_URL}${path2}`, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`siibra returned HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function cached(key, loader) {
+  const entry = cache.get(key);
+  if (entry && entry.expiresAt > Date.now()) return entry.value;
+  const value = await loader();
+  cache.set(key, { value, expiresAt: Date.now() + TTL_MS });
+  return value;
+}
+function ebrainsDatasets() {
+  return BRAIN_DATASETS.filter(
+    (dataset) => dataset.provider === "ebrains" || dataset.provider === "julich-brain" || dataset.provider === "bigbrain"
+  );
+}
+function getEbrainsProviderRecord() {
+  return {
+    providerId: "ebrains",
+    name: "EBRAINS / siibra",
+    providerVersion: "siibra API v3.0",
+    sourceUrl: SIIBRA_BASE_URL,
+    format: "JSON over HTTPS",
+    availability: "available",
+    capabilities: ["atlas metadata", "reference-space metadata", "Julich-Brain catalog context", "BigBrain catalog context"],
+    limitations: [
+      "Luna does not redistribute EBRAINS datasets or visual assets.",
+      "Provider coordinates are never projected into Luna because Luna-to-provider registration is not established.",
+      "Region and feature results require an explicitly supported provider query; this adapter does not infer them from Luna names."
+    ],
+    retrievedAt: null
+  };
+}
+async function getEbrainsAtlasSummary() {
+  const dataset = BRAIN_DATASETS.find((item) => item.id === "ebrains-multilevel-human-atlas");
+  try {
+    const atlas = await cached("ebrains:human-atlas", () => fetchJson2(HUMAN_ATLAS_PATH));
+    return {
+      datasetId: dataset.id,
+      datasetName: dataset.name,
+      datasetVersion: dataset.version,
+      providerId: "ebrains",
+      sourceUrl: `${SIIBRA_BASE_URL}${HUMAN_ATLAS_PATH}`,
+      format: "JSON",
+      license: dataset.license,
+      requiredAttribution: dataset.citation,
+      referenceSpaceIds: atlas.spaces?.map((space) => space["@id"]).filter((id) => Boolean(id)) ?? [],
+      providerAtlasId: atlas["@id"] ?? "juelich/iav/atlas/v1.0.0/1",
+      providerAtlasName: atlas.name ?? null,
+      parcellationReferenceCount: atlas.parcellations?.length ?? 0,
+      availability: "available",
+      limitations: ["Provider atlas metadata is scientific context, not a Luna mesh mapping or target geometry."],
+      retrievedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  } catch {
+    return {
+      datasetId: dataset.id,
+      datasetName: dataset.name,
+      datasetVersion: dataset.version,
+      providerId: "ebrains",
+      sourceUrl: `${SIIBRA_BASE_URL}${HUMAN_ATLAS_PATH}`,
+      format: "JSON",
+      license: dataset.license,
+      requiredAttribution: dataset.citation,
+      referenceSpaceIds: [],
+      providerAtlasId: "juelich/iav/atlas/v1.0.0/1",
+      providerAtlasName: null,
+      parcellationReferenceCount: 0,
+      availability: "offline",
+      limitations: ["Scientific provider temporarily unavailable. Luna visual and Macro simulation remain available."],
+      retrievedAt: null
+    };
+  }
+}
+async function getEbrainsReferenceSpaces() {
+  await cached("ebrains:spaces", () => fetchJson2("/spaces")).catch(() => null);
+  return BRAIN_REFERENCE_SPACES.filter(
+    (space) => space.provider === "ebrains" || space.provider === "bigbrain"
+  );
+}
+function getEbrainsDatasets() {
+  return ebrainsDatasets();
+}
+function getEbrainsUnavailableRegionsOrFeatures() {
+  return {
+    availability: "unavailable",
+    reason: "No provider-region or feature relation is inferred from a Luna mesh name. A supported explicit siibra query and an evidence-backed canonical mapping are required.",
+    registrationStatus: "not-established",
+    lunaRegistrationId: BRAIN_LUNA_REFERENCE_REGISTRATION.id
+  };
 }
 
 // server/app.ts
@@ -5666,6 +5787,38 @@ data: ${JSON.stringify({ message, timestamp: Date.now() })}
   });
   app2.get("/api/brain-science/manifest", (_req, res) => {
     return res.json(getScientificDatasetManifest());
+  });
+  app2.get("/api/brain-science/providers", (_req, res) => {
+    return res.json({ providers: [getEbrainsProviderRecord()] });
+  });
+  app2.get("/api/brain-science/datasets", (_req, res) => {
+    return res.json({ datasets: getEbrainsDatasets() });
+  });
+  app2.get("/api/brain-science/reference-spaces", async (_req, res) => {
+    return res.json({ referenceSpaces: await getEbrainsReferenceSpaces() });
+  });
+  app2.get("/api/brain-science/atlas", async (_req, res) => {
+    return res.json({ atlas: await getEbrainsAtlasSummary() });
+  });
+  app2.get("/api/brain-science/regions", (_req, res) => {
+    return res.json(getEbrainsUnavailableRegionsOrFeatures());
+  });
+  app2.get("/api/brain-science/features", (_req, res) => {
+    return res.json(getEbrainsUnavailableRegionsOrFeatures());
+  });
+  app2.get("/api/brain-science/provenance", (_req, res) => {
+    return res.json({ datasets: getEbrainsDatasets().map((dataset) => ({
+      provider: dataset.provider,
+      dataset: dataset.name,
+      version: dataset.version,
+      sourceUrl: dataset.endpoint ?? dataset.assetUrl,
+      license: dataset.license,
+      attribution: dataset.citation,
+      referenceSpaceIds: dataset.referenceSpaceIds
+    })) });
+  });
+  app2.get("/api/brain-science/registration", (_req, res) => {
+    return res.json({ registration: BRAIN_LUNA_REFERENCE_REGISTRATION, status: "not-established" });
   });
   app2.get("/api/brain-science/observation", async (req, res) => {
     const scale = typeof req.query.scale === "string" ? req.query.scale : null;

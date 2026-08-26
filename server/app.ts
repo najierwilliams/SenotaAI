@@ -30,6 +30,14 @@ import { registerStorageProxy } from "./_core/storageProxy";
 import { buildTemporalContext, resolveTimeZone } from "./temporalContext";
 import { getScientificDatasetManifest } from "./scientificData/registry";
 import { queryBrainScientificObservation } from "./scientificData/brainScienceService";
+import {
+  getEbrainsAtlasSummary,
+  getEbrainsDatasets,
+  getEbrainsProviderRecord,
+  getEbrainsReferenceSpaces,
+  getEbrainsUnavailableRegionsOrFeatures,
+} from "./scientificData/ebrainsProvider";
+import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./scientificData/registry";
 import type { BrainScientificScale } from "@shared/brainScience";
 
 function readCookie(header: string | undefined, name: string) {
@@ -364,6 +372,42 @@ export function createApp() {
 
   app.get("/api/brain-science/manifest", (_req, res) => {
     return res.json(getScientificDatasetManifest());
+  });
+
+  app.get("/api/brain-science/providers", (_req, res) => {
+    return res.json({ providers: [getEbrainsProviderRecord()] });
+  });
+
+  app.get("/api/brain-science/datasets", (_req, res) => {
+    return res.json({ datasets: getEbrainsDatasets() });
+  });
+
+  app.get("/api/brain-science/reference-spaces", async (_req, res) => {
+    return res.json({ referenceSpaces: await getEbrainsReferenceSpaces() });
+  });
+
+  app.get("/api/brain-science/atlas", async (_req, res) => {
+    return res.json({ atlas: await getEbrainsAtlasSummary() });
+  });
+
+  app.get("/api/brain-science/regions", (_req, res) => {
+    return res.json(getEbrainsUnavailableRegionsOrFeatures());
+  });
+
+  app.get("/api/brain-science/features", (_req, res) => {
+    return res.json(getEbrainsUnavailableRegionsOrFeatures());
+  });
+
+  app.get("/api/brain-science/provenance", (_req, res) => {
+    return res.json({ datasets: getEbrainsDatasets().map((dataset) => ({
+      provider: dataset.provider, dataset: dataset.name, version: dataset.version,
+      sourceUrl: dataset.endpoint ?? dataset.assetUrl, license: dataset.license,
+      attribution: dataset.citation, referenceSpaceIds: dataset.referenceSpaceIds,
+    })) });
+  });
+
+  app.get("/api/brain-science/registration", (_req, res) => {
+    return res.json({ registration: BRAIN_LUNA_REFERENCE_REGISTRATION, status: "not-established" });
   });
 
   app.get("/api/brain-science/observation", async (req, res) => {
