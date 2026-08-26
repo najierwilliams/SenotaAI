@@ -2288,6 +2288,7 @@ export default function BrainViewer() {
           reviewRemaining={scientificReview.summary.requiresReview}
           reviewCompleted={scientificReview.summary.approved + scientificReview.summary.rejected}
           reviewTotal={scientificReview.summary.total}
+          reviewLoading={scientificReview.loading}
         />
 
         <BrainScaleAssetLoader

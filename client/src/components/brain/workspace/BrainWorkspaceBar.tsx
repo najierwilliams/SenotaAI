@@ -41,6 +41,7 @@ interface BrainWorkspaceBarProps {
   reviewRemaining: number;
   reviewCompleted: number;
   reviewTotal: number;
+  reviewLoading: boolean;
 }
 
 const SCALE_OPTIONS: Array<{
@@ -177,6 +178,7 @@ export default function BrainWorkspaceBar({
   reviewRemaining,
   reviewCompleted,
   reviewTotal,
+  reviewLoading,
 }: BrainWorkspaceBarProps) {
   const barRef =
     useRef<HTMLDivElement | null>(null);
@@ -229,14 +231,14 @@ export default function BrainWorkspaceBar({
           type="button"
           onClick={() => workspace.openPanel("review")}
           className="ml-1 flex h-8 items-center gap-1.5 rounded-md border border-red-300/25 bg-red-500/5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-red-100 transition hover:bg-red-500/15"
-          aria-label={`Scientific Review: ${reviewRemaining} structures require review`}
+          aria-label={reviewLoading ? "Scientific Review records loading" : `Scientific Review: ${reviewRemaining} structures require review`}
           title="Open Scientific Review Center"
         >
           <span>Scientific Review</span>
           <span className="rounded border border-red-300/35 bg-red-500/15 px-1.5 py-0.5 text-[9px] text-red-100 shadow-[0_0_10px_rgba(248,113,113,0.4)]">
-            {reviewRemaining === 0 ? "Complete" : reviewRemaining}
+            {reviewLoading ? "…" : reviewRemaining === 0 ? "Complete" : reviewRemaining}
           </span>
-          <span className="sr-only">{reviewCompleted} of {reviewTotal} reviewed</span>
+          <span className="sr-only">{reviewLoading ? "Scientific review records loading" : `${reviewCompleted} of ${reviewTotal} reviewed`}</span>
         </button>
 
         {/* =========================================================
