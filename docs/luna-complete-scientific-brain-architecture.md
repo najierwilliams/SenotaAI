@@ -152,8 +152,12 @@ The initial HRA presentation load remains unchanged because the scientific MNI t
 | Macro nanobots | COMPLETE |
 | Scientific provenance | COMPLETE |
 | Licensing / restricted asset handling | COMPLETE |
-| Production deployment | REQUIRES_REVIEW |
+| Production deployment | COMPLETE |
 
 ## Production status
 
-No production deployment is claimed in this report. Source-control and production steps must occur only after the working-tree review, commit, push, deployment, deployed-commit verification, and production acceptance are complete. The intentional Julich rendering gap is not a reason to manufacture a surface; it remains visible and disabled in production candidates.
+The scientific implementation commit **`0ac23509009cbc8ae3e54b4b548a21591330750a`** was pushed to `main` and deployed as Vercel production deployment **`dpl_CM47tQ2vWpvaraKvrTgZ9rrrWEQ7`**, state `READY`, at [https://senota-kstw5qhgc-senota-s-projects.vercel.app](https://senota-kstw5qhgc-senota-s-projects.vercel.app). Vercel deployment metadata verifies this exact Git commit and commit message.
+
+Production acceptance confirmed that the HRA Macro model loads with 283 Navigator structures; Scientific Review remains 102/102 complete; Inspector and Macro nanobot panels remain present; the Science workspace preserves the `Luna → MNI: NOT ESTABLISHED` boundary; the MNI template is default off; and Julich remains visibly disabled as `ASSET_DELIVERY_UNRESOLVED`. The deployed scientific architecture endpoint returned HTTP 200 with the exact MNI reference, source-qualified observations, `hra-to-mni-2009c: NOT_ESTABLISHED`, `hra-to-julich-v3-1: UNMAPPED`, and the documented MNI-to-BigBrain transform. An explicit production MNI coordinate query produced BigBrain provider context and handled a transient Julich provider no-result transparently, without fabrication.
+
+The intentional Julich rendering gap is not a reason to manufacture a surface; it remains visible and disabled in production.
