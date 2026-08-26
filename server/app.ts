@@ -41,6 +41,7 @@ import {
 } from "./scientificData/ebrainsProvider";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./scientificData/registry";
 import { getScientificStructureCrosswalkSummary, getScientificStructureEvidence } from "./scientificData/scientificStructureService";
+import { SCIENTIFIC_LICENSE_REGISTRY, SCIENTIFIC_PROVENANCE_REGISTRY } from "./scientificData/scientificProvenanceRegistry";
 import type { BrainScientificScale } from "@shared/brainScience";
 
 function readCookie(header: string | undefined, name: string) {
@@ -413,6 +414,14 @@ export function createApp() {
     return res.json({
       assignment: await assignJulichAtMni2009cCoordinate({ x, y, z, units }),
     });
+  });
+
+  app.get("/api/brain-science/licenses", (_req, res) => {
+    return res.json({ licenses: SCIENTIFIC_LICENSE_REGISTRY });
+  });
+
+  app.get("/api/brain-science/provenance", (_req, res) => {
+    return res.json({ provenance: SCIENTIFIC_PROVENANCE_REGISTRY });
   });
 
   app.get("/api/brain-science/structure-crosswalk", (_req, res) => {
