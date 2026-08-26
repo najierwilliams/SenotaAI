@@ -8,7 +8,7 @@ describe("hybrid scientific structure evidence", () => {
     expect(evidence?.canonicalIdentity).toMatchObject({
       ontology: "UBERON",
       id: "UBERON:0001898",
-      reviewStatus: "requires-user-review",
+      reviewStatus: "evidence-backed-requires-review",
     });
     expect(evidence?.evidenceTier).toBe("structure-context");
     expect(evidence?.scientificTarget).toMatchObject({

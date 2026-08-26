@@ -1,15 +1,15 @@
-import { HRA_V11_STRUCTURE_CROSSWALK, HRA_V11_STRUCTURE_CROSSWALK_SUMMARY } from "./hraStructureCrosswalk.generated";
+import { getCanonicalAnatomyIdentity, getCanonicalAnatomySummary } from "./canonicalAnatomyService";
 import { BRAIN_LUNA_REFERENCE_REGISTRATION } from "./registry";
 import { getScientificLicense, getScientificProvenance } from "./scientificProvenanceRegistry";
 
 export function getScientificStructureEvidence(lunaStructureId: string) {
-  const record = HRA_V11_STRUCTURE_CROSSWALK.find((item) => item.lunaStructureId === lunaStructureId) ?? null;
+  const record = getCanonicalAnatomyIdentity(lunaStructureId);
   if (!record) return null;
   const provenance = getScientificProvenance("hra-brain-female-v1-1-graph");
   const license = getScientificLicense("hra-brain-female-v1-1");
   const scientificTarget = {
     id: `structure-context:${record.lunaStructureId}`,
-    structureUberonId: record.canonicalStructureId,
+    structureUberonId: record.uberonId,
     structureFmaId: null,
     provider: null,
     datasetId: null,
@@ -27,17 +27,17 @@ export function getScientificStructureEvidence(lunaStructureId: string) {
     limitation: "Structure-context evidence is non-operational and has no Luna-to-reference-space coordinate.",
   };
   return {
-    lunaStructure: { id: record.lunaStructureId, sourceName: record.lunaSourceName, meshBacked: record.meshBacked },
-    canonicalIdentity: record.canonicalStructureId ? {
-      ontology: record.canonicalOntology,
-      id: record.canonicalStructureId,
+    lunaStructure: { id: record.lunaStructureId, sourceName: record.lunaStructureName, meshBacked: record.meshBacked },
+    canonicalIdentity: record.uberonId ? {
+      ontology: "UBERON",
+      id: record.uberonId,
       hraEntityId: record.hraEntityId,
-      hraEntityLabel: record.hraEntityLabel,
-      status: record.mappingStatus,
-      evidence: record.mappingEvidence,
-      provenance: record.provenance,
+      hraEntityLabel: record.canonicalName,
+      status: "EVIDENCE_BACKED",
+      evidence: record.evidence,
+      provenance: record.sourceUrl,
       version: record.sourceVersion,
-      reviewStatus: "requires-user-review",
+      reviewStatus: record.reviewStatus,
     } : null,
     scientificTarget,
     evidenceTier: "structure-context",
@@ -53,5 +53,5 @@ export function getScientificStructureEvidence(lunaStructureId: string) {
 }
 
 export function getScientificStructureCrosswalkSummary() {
-  return HRA_V11_STRUCTURE_CROSSWALK_SUMMARY;
+  return getCanonicalAnatomySummary();
 }
