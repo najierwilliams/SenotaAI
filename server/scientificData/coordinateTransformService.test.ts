@@ -7,6 +7,7 @@ import {
 import {
   getCoordinateTransform,
   getLunaReferenceRegistration,
+  isLunaMniTransformEnabled,
   transformCoordinate,
   transformCoordinateStrict,
 } from "./coordinateTransformService";
@@ -58,10 +59,15 @@ describe("Luna scientific reference-space registration", () => {
     expect(getSpace("cellxgene-human-brain-anatomical-annotation").kind).toBe("annotation");
   });
 
-  it("records the byte-verified HRA GLB provenance and an unavailable MNI registration without an executable artifact", () => {
+  it("records the byte-verified HRA GLB provenance and a P33 NOT_ESTABLISHED MNI quality gate without an executable artifact", () => {
     const registration = getLunaReferenceRegistration();
     expect(registration).toEqual(BRAIN_LUNA_REFERENCE_REGISTRATION);
     expect(registration.status).toBe("unavailable");
+    expect(registration.qualityGate.status).toBe("NOT_ESTABLISHED");
+    expect(registration.qualityGate.transformEnabled).toBe(false);
+    expect(registration.qualityGate.assessmentVersion).toBe("P33");
+    expect(registration.qualityGate.missingEvidence).toHaveLength(4);
+    expect(isLunaMniTransformEnabled()).toBe(false);
     expect(registration.sourceSpaceId).toBe("luna-viewer-local");
     expect(registration.targetSpaceId).toBe("ebrains-mni-icbm-152-2009c");
     expect(registration.sourceAsset.sourceVersion).toBe("HRA Brain-female v1.1");
@@ -115,7 +121,7 @@ describe("Luna scientific reference-space registration", () => {
     }
   });
 
-  it("rejects invalid coordinates, incompatible units, and unavailable Luna registration", () => {
+  it("rejects invalid coordinates, incompatible units, and a NOT_ESTABLISHED Luna/MNI registration without emitting a coordinate", () => {
     const invalidCoordinate = transformCoordinate(
       { x: Number.NaN, y: 0, z: 0, units: "millimetres" },
       "ebrains-mni-icbm-152-2009c",
@@ -153,8 +159,48 @@ describe("Luna scientific reference-space registration", () => {
     );
     expect(lunaRegistration.status).toBe("unavailable");
     if (lunaRegistration.status === "unavailable") {
-      expect(lunaRegistration.failure).toBe("registration-unavailable");
-      expect(lunaRegistration.reason).toContain("Luna reference registration is unavailable");
+      expect(lunaRegistration.failure).toBe("registration-not-established");
+      expect(lunaRegistration.reason).toContain("Luna/MNI registration quality gate is NOT_ESTABLISHED");
+      expect("coordinate" in lunaRegistration).toBe(false);
+    }
+  });
+
+  it("rejects raw-GLB ↔ MNI directions at NOT_ESTABLISHED and preserves raw-space unit enforcement", () => {
+    const rawToMni = transformCoordinate(
+      { x: 0, y: 0, z: 0, units: "millimetres" },
+      "luna-raw-hra-v11-allen-brain-glb",
+      "ebrains-mni-icbm-152-2009c",
+    );
+    expect(rawToMni.status).toBe("unavailable");
+    if (rawToMni.status === "unavailable") {
+      expect(rawToMni.failure).toBe("registration-not-established");
+      expect(rawToMni.transform?.id).toBe(
+        "luna-raw-hra-v11-allen-brain-glb-to-ebrains-mni-icbm-152-2009c",
+      );
+      expect("coordinate" in rawToMni).toBe(false);
+    }
+
+    const mniToRaw = transformCoordinate(
+      mniCoordinate,
+      "ebrains-mni-icbm-152-2009c",
+      "luna-raw-hra-v11-allen-brain-glb",
+    );
+    expect(mniToRaw.status).toBe("unavailable");
+    if (mniToRaw.status === "unavailable") {
+      expect(mniToRaw.failure).toBe("registration-not-established");
+      expect(mniToRaw.transform?.id).toBe(
+        "ebrains-mni-icbm-152-2009c-to-luna-raw-hra-v11-allen-brain-glb",
+      );
+    }
+
+    const invalidRawUnits = transformCoordinate(
+      { x: 0, y: 0, z: 0, units: "voxels" },
+      "luna-raw-hra-v11-allen-brain-glb",
+      "ebrains-mni-icbm-152-2009c",
+    );
+    expect(invalidRawUnits.status).toBe("unavailable");
+    if (invalidRawUnits.status === "unavailable") {
+      expect(invalidRawUnits.failure).toBe("invalid-units");
     }
   });
 
@@ -206,6 +252,40 @@ describe("Luna scientific reference-space registration", () => {
     if (strictLuna.status === "unavailable") {
       expect(strictLuna.failure).toBe("unsupported-transform");
     }
+
+    const registeredRawGlbTransform = transformCoordinateStrict({
+      coordinate: { x: 0, y: 0, z: 0, units: "millimetres" },
+      sourceReferenceSpaceId: "luna-raw-hra-v11-allen-brain-glb",
+      targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+      transformId: "luna-raw-hra-v11-allen-brain-glb-to-ebrains-mni-icbm-152-2009c",
+      provenance: "checksum-pinned raw GLB fixture",
+    });
+    expect(registeredRawGlbTransform.status).toBe("unavailable");
+    if (registeredRawGlbTransform.status === "unavailable") {
+      expect(registeredRawGlbTransform.failure).toBe("registration-not-established");
+      expect("coordinate" in registeredRawGlbTransform).toBe(false);
+    }
+  });
+
+  it("does not turn a rejected raw-GLB/MNI path into a Macro coordinate target or enabled operation", () => {
+    const rawToMniTransform = getCoordinateTransform(
+      "luna-raw-hra-v11-allen-brain-glb",
+      "ebrains-mni-icbm-152-2009c",
+    );
+    const macro = createSpatialTargetState({
+      scale: "macro",
+      dataset: getRequiredDataset("luna-macro-anatomy-model"),
+      provenance: null,
+      referenceSpace: getSpace("luna-raw-hra-v11-allen-brain-glb"),
+      structureMapping: null,
+      coordinateTransform: rawToMniTransform,
+    });
+
+    expect(rawToMniTransform?.status).toBe("unavailable");
+    expect(macro.spatialTarget.coordinate).toBeNull();
+    expect(macro.spatialTarget.spatialStatus).toBe("unavailable");
+    expect(macro.spatialCapability.transformToLunaAvailable).toBe(false);
+    expect(macro.spatialCapability.operationEnabled).toBe(false);
   });
 
   it("keeps Tissue, Cellular, Molecular, and Subcellular targets unavailable for distinct recorded reasons", () => {

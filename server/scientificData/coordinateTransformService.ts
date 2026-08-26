@@ -21,6 +21,10 @@ export type CoordinateTransformFailure =
   | "missing-transform-id"
   | "missing-provenance"
   | "unsupported-transform"
+  | "registration-not-established"
+  | "registration-experimental"
+  | "registration-provider-validated"
+  | "registration-rejected"
   | "registration-unavailable"
   | "registration-invalid";
 
@@ -86,6 +90,26 @@ function getTransform(
         transform.targetReferenceSpaceId ===
           targetReferenceSpaceId,
     ) ?? null
+  );
+}
+
+const LUNA_NATIVE_REFERENCE_SPACE_IDS = new Set([
+  "luna-viewer-local",
+  "luna-raw-hra-v11-allen-brain-glb",
+]);
+
+const MNI_ICBM_2009C_REFERENCE_SPACE_ID =
+  "ebrains-mni-icbm-152-2009c";
+
+function isLunaMniRegistrationRequest(
+  sourceReferenceSpaceId: string,
+  targetReferenceSpaceId: string,
+): boolean {
+  return (
+    (LUNA_NATIVE_REFERENCE_SPACE_IDS.has(sourceReferenceSpaceId) &&
+      targetReferenceSpaceId === MNI_ICBM_2009C_REFERENCE_SPACE_ID) ||
+    (sourceReferenceSpaceId === MNI_ICBM_2009C_REFERENCE_SPACE_ID &&
+      LUNA_NATIVE_REFERENCE_SPACE_IDS.has(targetReferenceSpaceId))
   );
 }
 
@@ -207,29 +231,57 @@ export function transformCoordinate(
   }
 
   if (
-    (sourceReferenceSpaceId === BRAIN_LUNA_REFERENCE_REGISTRATION.sourceSpaceId ||
-      targetReferenceSpaceId === BRAIN_LUNA_REFERENCE_REGISTRATION.sourceSpaceId) &&
     sourceReferenceSpaceId !== targetReferenceSpaceId &&
-    BRAIN_LUNA_REFERENCE_REGISTRATION.status !== "validated"
+    isLunaMniRegistrationRequest(
+      sourceReferenceSpaceId,
+      targetReferenceSpaceId,
+    )
   ) {
     const registration = BRAIN_LUNA_REFERENCE_REGISTRATION;
-    const failure =
-      registration.status === "invalid"
-        ? "registration-invalid"
-        : "registration-unavailable";
-
-    return {
-      status: "unavailable",
-      reason:
-        `Luna reference registration is ${registration.status}: ${registration.validation.summary}`,
-      failure,
-      sourceSpace,
-      targetSpace,
-      transform: getTransform(
-        sourceReferenceSpaceId,
-        targetReferenceSpaceId,
-      ),
+    const gate = registration.qualityGate;
+    const qualityFailures: Record<
+      Exclude<typeof gate.status, "VALIDATED">,
+      CoordinateTransformFailure
+    > = {
+      NOT_ESTABLISHED: "registration-not-established",
+      EXPERIMENTAL: "registration-experimental",
+      PROVIDER_VALIDATED: "registration-provider-validated",
+      REJECTED: "registration-rejected",
     };
+
+    if (gate.status !== "VALIDATED" || !gate.transformEnabled) {
+      return {
+        status: "unavailable",
+        reason:
+          `Luna/MNI registration quality gate is ${gate.status}: ${gate.decision}`,
+        failure: qualityFailures[gate.status as Exclude<typeof gate.status, "VALIDATED">],
+        sourceSpace,
+        targetSpace,
+        transform: getTransform(
+          sourceReferenceSpaceId,
+          targetReferenceSpaceId,
+        ),
+      };
+    }
+
+    if (
+      registration.status !== "validated" ||
+      !registration.transformArtifact?.executable ||
+      registration.validation.status !== "passed"
+    ) {
+      return {
+        status: "unavailable",
+        reason:
+          "Luna/MNI registration quality gate is VALIDATED but its executable artifact or independent validation record is incomplete.",
+        failure: "registration-invalid",
+        sourceSpace,
+        targetSpace,
+        transform: getTransform(
+          sourceReferenceSpaceId,
+          targetReferenceSpaceId,
+        ),
+      };
+    }
   }
 
   if (sourceReferenceSpaceId === targetReferenceSpaceId) {
@@ -323,6 +375,22 @@ export function transformCoordinateStrict(
 
 export function getLunaReferenceRegistration(): LunaReferenceRegistration {
   return BRAIN_LUNA_REFERENCE_REGISTRATION;
+}
+
+/**
+ * A concise operational predicate for future callers. It intentionally requires
+ * both a validated quality gate and a checksum-bound executable artifact with
+ * passed independent validation; provider context alone never enables Luna.
+ */
+export function isLunaMniTransformEnabled(): boolean {
+  const registration = BRAIN_LUNA_REFERENCE_REGISTRATION;
+  return (
+    registration.qualityGate.status === "VALIDATED" &&
+    registration.qualityGate.transformEnabled &&
+    registration.status === "validated" &&
+    registration.transformArtifact?.executable === true &&
+    registration.validation.status === "passed"
+  );
 }
 
 export function getCoordinateTransform(

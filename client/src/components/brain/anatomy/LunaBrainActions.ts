@@ -161,8 +161,8 @@ export const lunaBrainActions = {
       ok: true,
       message: context.hraSpatialRegistration
         ? `${context.referenceSpace.label}. The checksum-pinned raw HRA v1.1 asset has an authoritative HRA Brain-Female / HRA CCF placement; viewer presentation coordinates remain separate and MNI ICBM 152 2009c remains not established.`
-        : registration?.status === "unavailable"
-          ? `${context.referenceSpace.label}. This is the current observation space; Luna Local has no validated mapping to MNI ICBM 152 2009c Nonlinear Asymmetric.`
+        : registration?.qualityGate.status === "NOT_ESTABLISHED"
+          ? `${context.referenceSpace.label}. P33 registration quality is NOT_ESTABLISHED: Luna Local has no independently validated mapping to MNI ICBM 152 2009c Nonlinear Asymmetric.`
           : context.referenceSpace.label,
       data: context.referenceSpace,
     };
@@ -178,12 +178,18 @@ export const lunaBrainActions = {
       };
     }
 
+    const transformEnabled =
+      registration.qualityGate.status === "VALIDATED" &&
+      registration.qualityGate.transformEnabled &&
+      registration.status === "validated" &&
+      registration.transformArtifact?.executable === true &&
+      registration.validation.status === "passed";
+
     return {
-      ok: registration.status === "validated",
-      message:
-        registration.status === "validated"
-          ? "The Luna reference registration is validated and available for its documented spaces."
-          : `MNI registration is ${registration.status}: ${registration.validation.summary}`,
+      ok: transformEnabled,
+      message: transformEnabled
+        ? "The Luna reference registration is validated and available for its documented spaces."
+        : `MNI registration quality gate is ${registration.qualityGate.status}: ${registration.qualityGate.decision}`,
       data: registration,
     };
   },
@@ -237,11 +243,17 @@ export const lunaBrainActions = {
     }
 
     const registration = context.registration;
-    if (registration?.status !== "validated") {
+    const transformEnabled =
+      registration?.qualityGate.status === "VALIDATED" &&
+      registration.qualityGate.transformEnabled &&
+      registration.status === "validated" &&
+      registration.transformArtifact?.executable === true &&
+      registration.validation.status === "passed";
+    if (!transformEnabled) {
       return {
         ok: false,
         message:
-          registration?.validation.summary ??
+          registration?.qualityGate.decision ??
           "No validated Luna coordinate transform is available.",
         data: null,
       };
@@ -300,7 +312,7 @@ export const lunaBrainActions = {
       message: context.hraSpatialRegistration
         ? `Scientific provenance includes ${context.hraSpatialRegistration.asset.label}; HRA placement is ${context.hraSpatialRegistration.status}, while MNI registration remains ${context.hraSpatialRegistration.mni.status}.`
         : context.registration
-          ? `Scientific provenance includes ${context.registration.sourceAsset.label}; registration status is ${context.registration.status}.`
+          ? `Scientific provenance includes ${context.registration.sourceAsset.label}; registration quality gate is ${context.registration.qualityGate.status}.`
           : "Dataset provenance is available without a formal registration record.",
       data: {
         dataset: context.provenance,

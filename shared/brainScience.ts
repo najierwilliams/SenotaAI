@@ -174,6 +174,34 @@ export type LunaRegistrationValidationStatus =
   | "unavailable";
 
 /**
+ * Scientific quality status for a Luna-native registration. This is separate
+ * from a legacy availability field so a consumer cannot mistake an HRA object
+ * placement, a visual alignment, or a provider-context registration for a
+ * validated Luna-native transform.
+ *
+ * Only `VALIDATED` may enable a future Luna-native coordinate transform, and
+ * only when its checksum-bound executable artifact and independent validation
+ * evidence are also present. `PROVIDER_VALIDATED` is retained for an upstream
+ * provider relation that Luna cannot execute or independently validate.
+ */
+export type LunaRegistrationQualityStatus =
+  | "NOT_ESTABLISHED"
+  | "EXPERIMENTAL"
+  | "VALIDATED"
+  | "PROVIDER_VALIDATED"
+  | "REJECTED";
+
+export interface LunaRegistrationQualityGate {
+  status: LunaRegistrationQualityStatus;
+  assessedAt: string;
+  assessmentVersion: string;
+  decision: string;
+  transformEnabled: boolean;
+  requiredEvidence: string[];
+  missingEvidence: string[];
+}
+
+/**
  * A versioned record of the scientific relationship between Luna's source
  * asset and an external reference space. It is deliberately present even when
  * unavailable so consumers can expose the precise missing evidence rather than
@@ -198,6 +226,8 @@ export interface LunaReferenceRegistration {
   targetUnits: string | null;
   sourceOrientation: string | null;
   targetOrientation: string | null;
+  /** P33 evidence gate; only a VALIDATED gate with a valid artifact may transform Luna-native coordinates. */
+  qualityGate: LunaRegistrationQualityGate;
   provenance: {
     sourceUrls: string[];
     citations: string[];

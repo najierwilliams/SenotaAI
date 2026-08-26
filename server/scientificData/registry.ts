@@ -169,6 +169,34 @@ export const BRAIN_COORDINATE_TRANSFORMS: BrainCoordinateTransform[] = [
       "No validated transform from MNI ICBM 152 2009c to the Luna GLB coordinate frame is configured. Provider coordinates are not projected into the viewer.",
   },
   {
+    id: "luna-raw-hra-v11-allen-brain-glb-to-ebrains-mni-icbm-152-2009c",
+    sourceReferenceSpaceId: "luna-raw-hra-v11-allen-brain-glb",
+    targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+    status: "unavailable",
+    transformType: "unavailable",
+    version: null,
+    method: null,
+    documentationUrl: null,
+    confidence: null,
+    reversible: null,
+    note:
+      "P33 NOT_ESTABLISHED: the checksum-pinned raw HRA GLB lacks a documented GLB-to-Allen-volume correspondence, native-coordinate convention, transform artifact, and independently validated landmark residuals for MNI ICBM 152 2009c Nonlinear Asymmetric.",
+  },
+  {
+    id: "ebrains-mni-icbm-152-2009c-to-luna-raw-hra-v11-allen-brain-glb",
+    sourceReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
+    targetReferenceSpaceId: "luna-raw-hra-v11-allen-brain-glb",
+    status: "unavailable",
+    transformType: "unavailable",
+    version: null,
+    method: null,
+    documentationUrl: null,
+    confidence: null,
+    reversible: null,
+    note:
+      "P33 NOT_ESTABLISHED: MNI ICBM 152 2009c coordinates cannot be projected into the raw HRA GLB without the same verified forward chain and independent validation.",
+  },
+  {
     id: "allen-donor-mr-to-mni",
     sourceReferenceSpaceId: "allen-human-donor-mr",
     targetReferenceSpaceId: "ebrains-mni-icbm-152-2009c",
@@ -197,7 +225,7 @@ export const BRAIN_LUNA_REFERENCE_REGISTRATION: LunaReferenceRegistration = {
     label: "HuBMAP CCF Brain-female v1.1 / Allen_F_Brain.glb",
     provider: "HuBMAP Human Reference Atlas",
     sourceUrl:
-      "https://cdn.humanatlas.io/hra-releases/v1.1/models/Allen_F_Brain.glb",
+      "https://cdn.humanatlas.io/digital-objects/ref-organ/brain-female/v1.1/assets/Allen_F_Brain.glb",
     sourceVersion: "HRA Brain-female v1.1",
     license: "CC BY 4.0",
   },
@@ -208,6 +236,27 @@ export const BRAIN_LUNA_REFERENCE_REGISTRATION: LunaReferenceRegistration = {
   targetUnits: "millimetres",
   sourceOrientation: null,
   targetOrientation: null,
+  qualityGate: {
+    status: "NOT_ESTABLISHED",
+    assessedAt: "2026-08-26",
+    assessmentVersion: "P33",
+    decision:
+      "A reproducible, independently validated transform from the exact Luna/HRA Allen_F_Brain GLB to MNI ICBM 152 2009c Nonlinear Asymmetric is not established. No Luna-native or reverse MNI coordinate conversion is enabled.",
+    transformEnabled: false,
+    requiredEvidence: [
+      "Checksum-bound source asset/version plus documented native coordinate units, axes, handedness, and origin.",
+      "Declared MNI ICBM 152 2009c Nonlinear Asymmetric target template/version and an executable, direction-specific transform chain.",
+      "Documented GLB-to-Allen 3D/ICBM 2009b correspondence and any explicit 2009b Nonlinear Symmetric to 2009c Nonlinear Asymmetric conversion artifact.",
+      "Independent source-target landmark pairs distributed across bilateral, anterior-posterior, and superior-inferior anatomy, with residuals and quality metrics.",
+      "Independent validation review that binds results to the exact source checksum and transformation artifact hashes.",
+    ],
+    missingEvidence: [
+      "No published raw GLB mesh-generation, per-vertex, or voxel correspondence to the Allen Human Reference Atlas 3D annotation volume.",
+      "No published raw GLB-to-ICBM 2009b Nonlinear Symmetric affine, deformation field, or native coordinate-convention artifact.",
+      "No published ICBM 2009b Nonlinear Symmetric-to-ICBM 2009c Nonlinear Asymmetric conversion artifact for this chain.",
+      "No independent GLB-to-MNI landmark-pair file, residual distribution, target-registration quality metric, or validation report.",
+    ],
+  },
   provenance: {
     sourceUrls: [
       "https://hubmapconsortium.github.io/ccf-releases/v1.1/docs/ref-organs/brain-female.html",
@@ -221,9 +270,9 @@ export const BRAIN_LUNA_REFERENCE_REGISTRATION: LunaReferenceRegistration = {
       "Fonov VS, et al. ICBM 152 Nonlinear Atlases (2009).",
     ],
     notes: [
-      "The repository GLB is byte-identical to the documented HuBMAP v1.1 Allen_F_Brain.glb asset.",
-      "HuBMAP documents a mirrored and resized presentation model derived from the Allen Human Reference Atlas, but does not publish a mesh-to-MNI transform, mesh coordinate convention, or landmark validation artifact.",
-      "The Allen Human Reference Atlas 3D volume was drawn on ICBM 2009b Nonlinear Symmetric, while this target is MNI ICBM 152 2009c Nonlinear Asymmetric; no authoritative 2009b-to-HRA-GLB-to-2009c transform chain was found.",
+      "The repository GLB is byte-identical to the documented HuBMAP v1.1 Allen_F_Brain.glb asset (SHA-256 c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc).",
+      "HuBMAP documents a mirrored and resized presentation model derived from the Allen Human Reference Atlas, but does not publish a mesh-to-MNI transform, native mesh coordinate convention, mesh-generation correspondence, or landmark validation artifact.",
+      "The Allen Human Reference Atlas 3D volume was drawn on ICBM 2009b Nonlinear Symmetric, while this target is MNI ICBM 152 2009c Nonlinear Asymmetric; no authoritative raw-GLB-to-2009b or 2009b-to-2009c chain artifact was found.",
     ],
   },
   validation: {

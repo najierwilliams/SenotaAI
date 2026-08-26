@@ -258,16 +258,21 @@ export default function AnatomicalInspector({
                 <div className="mt-2 rounded-md border border-amber-300/10 bg-amber-300/5 p-2.5 text-[10px] leading-relaxed text-white/50">
                   <div className="flex items-center justify-between gap-2">
                     <span className="uppercase tracking-wider text-white/35">MNI registration</span>
-                    <span className={observationContext.registration.status === "validated" ? "text-emerald-300" : "text-amber-200"}>
-                      {observationContext.registration.status === "validated" ? "Validated" : "Unavailable"}
+                    <span className={observationContext.registration.qualityGate.status === "VALIDATED" ? "text-emerald-300" : "text-amber-200"}>
+                      {observationContext.registration.qualityGate.status.replace(/_/g, " ")}
                     </span>
                   </div>
                   <p className="mt-1 text-white/55">
-                    {observationContext.registration.sourceAsset.label}; not a documented MNI frame.
+                    {observationContext.registration.sourceAsset.label}; native Luna/HRA coordinates are not an MNI frame.
                   </p>
                   <p className="mt-1 text-white/40">
-                    {observationContext.registration.validation.summary}
+                    {observationContext.registration.qualityGate.decision}
                   </p>
+                  {!observationContext.registration.qualityGate.transformEnabled && (
+                    <p className="mt-1 text-amber-100/60">
+                      No Luna-native or reverse-MNI coordinate is emitted. Direct MNI → Julich queries below accept independently known MNI 2009c millimetre coordinates only.
+                    </p>
+                  )}
                 </div>
               )}
               {structureEvidence && (

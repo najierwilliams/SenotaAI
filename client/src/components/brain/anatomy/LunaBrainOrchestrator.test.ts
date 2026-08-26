@@ -56,6 +56,12 @@ const unavailableRegistration = {
     label: "HuBMAP CCF Brain-female v1.1 / Allen_F_Brain.glb",
     sha256: "c5711a1a8bc62ca930b8bcf076def15315c11f5ad9bc7901e51f698406d38dbc",
   },
+  qualityGate: {
+    status: "NOT_ESTABLISHED",
+    transformEnabled: false,
+    decision:
+      "A reproducible, independently validated Luna/HRA GLB to MNI ICBM 152 2009c Nonlinear Asymmetric transform is not established.",
+  },
   validation: {
     summary:
       "No Luna Local-to-MNI transform was validated because the verified GLB has no published coordinate convention, transform artifact, or landmark correspondence to MNI ICBM 152 2009c Nonlinear Asymmetric.",
@@ -382,11 +388,14 @@ describe("Luna Brain orchestration", () => {
       "Can you map this to MNI?",
     );
     expect(mapping.message).toContain("cannot map this Luna Local point to MNI");
-    expect(mapping.message).toContain("No Luna Local-to-MNI transform was validated");
+    expect(mapping.message).toContain("transform is not established");
 
     const registration = lunaBrainActions.getRegistrationStatus();
     expect(registration.ok).toBe(false);
     expect(registration.data.status).toBe("unavailable");
+    expect(registration.data.qualityGate.status).toBe("NOT_ESTABLISHED");
+    expect(registration.message).toContain("NOT_ESTABLISHED");
+    expect(lunaBrainActions.getTransformStatus().ok).toBe(false);
     expect(lunaBrainActions.getScientificProvenance().data.registration?.sourceAsset.sha256).toBe(
       unavailableRegistration.sourceAsset.sha256,
     );
