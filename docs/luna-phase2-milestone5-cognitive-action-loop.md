@@ -72,7 +72,7 @@ The existing owner autonomy setting was already enabled; the owner separately en
 | Queue evidence | Provider-issued run ID `1K-1M1V51hKy661Ytt7yy0hsiN9rdeF6sE`; real private Queue callback records observed. |
 | Bounded resource envelope | `4 / 24 / 2 / 900 / 12 / 24000` for workers, steps, retries, seconds, model requests, and token budget. |
 | Reports and validation | `8` auditable report objects linked through immutable validation; `8` immutable validations, `2` `ACCEPTED`. |
-| Learning | Exactly `1` Luna-owned `INFERENCE` memory admitted. The other five displayed review-required handoffs remained audit records and created warning attention; they were not admitted to memory. |
+| Learning | Exactly `1` Luna-owned `INFERENCE` memory admitted. Five displayed review-required handoffs remained audit records and created warning attention; they were not admitted to memory. Only accepted records are eligible for memory admission. |
 | Reflection and audit | `1` reflection and `1` `MISSION_COMPLETED` audit record. |
 | Duplicate/infinite-loop check | The console presented `NO ACTION` after completion. A subsequent owner-scoped constrained reassessment created no candidate or mission; the verifier still reported exactly `1` decision for the acceptance gap. |
 
