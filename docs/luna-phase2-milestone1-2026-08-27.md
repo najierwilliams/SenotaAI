@@ -13,6 +13,8 @@
 | Owner-gated API compatibility | VERIFIED | The existing `knowledge.cognitive.home` and `knowledge.cognitive.context` procedures were extended in place; no endpoint, secret, or public worker surface was introduced. |
 | Cognitive Console | VERIFIED | The owner console shows registered worker roles, persisted memory count, completed mission count, open attention count, and the grounding statement. |
 | Production release | VERIFIED | Commit `1193deb2e1153e91ba604624c3e69241d1414098`, deployment `dpl_DAveNGrWhDDwTgj5hmdxsQxzEYja`, `READY`, production aliases attached, three Node functions. |
+| Owner-gated home response | VERIFIED | Production response was `200`; the projection reported persisted stored version `1`, 17 registry worker roles, current-state counters, knowledge-state counters, and history counters. |
+| Owner-gated context response | VERIFIED | Production response was `200`; declared `bounded-source-and-truth-aware`, enforced requested limit `5`, returned 5 provenance-labeled `RESEARCH`/`LUNA`/`INFERENCE` selections matching `durable` and `queue`, and disclosed zero inactive/project-filter omissions. |
 
 ## Exact source changes
 
@@ -27,6 +29,8 @@
 ## Validation
 
 Focused cognitive tests passed: **2 files, 9 tests**. `pnpm build` and independent `pnpm exec vite build` passed. `git diff --check` passed. `pnpm check` continues to report only the known unrelated `server/_core/imageGeneration.ts` `server/storage` import error. Non-fatal analytics placeholder and chunk-size warnings are unchanged.
+
+Production acceptance used the rendered owner console and read-only same-origin requests through its existing owner-session transport. The `knowledge.cognitive.home` request returned `200` with `observedSelfModel`; the `knowledge.cognitive.context` request returned `200` with the declared policy, a bounded selection, truth/source labels, matched terms, retrieval scores, omissions, and the seven-kind memory taxonomy. No mission was dispatched and no cognitive/scientific record was created or changed for this verification.
 
 ## Protected boundaries
 
