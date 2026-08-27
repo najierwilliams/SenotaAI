@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Request, Response } from "express";
 import { afterEach, describe, expect, it } from "vitest";
-import expressApiRelay, { restoreExpressApiPath } from "../api/index";
+import expressApiRelay, { restoreExpressApiPath } from "./vercel-api-relay";
 
 const openServers: ReturnType<typeof createServer>[] = [];
 
