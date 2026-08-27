@@ -6,6 +6,13 @@ import type {
   LunaClaimLifecycleState,
   LunaClaimRevision,
   LunaCognitiveState,
+  LunaCuriosityCandidate,
+  LunaCuriosityStatus,
+  LunaKnowledgeGap,
+  LunaKnowledgeGapRevision,
+  LunaKnowledgeGapStatus,
+  LunaPriorityAssessment,
+  LunaPriorityTargetType,
   LunaGoal,
   LunaGoalStatus,
   LunaMemory,
@@ -25,6 +32,7 @@ import type {
 } from "@shared/lunaCognitive";
 import { isLunaRoutineOwnedTruth, isLunaScientificElevation, workerContract } from "@shared/lunaCognitive";
 import { getOrCreateKnowledgeWorkspace } from "../knowledgeSpace/supabase";
+import { explainLunaPriority } from "./milestone3";
 
 const OWNER_PREFIX = "senota-user-";
 const MAX_LIST = 200;
@@ -78,6 +86,10 @@ export type LunaCognitiveSnapshot = {
   claims: LunaClaim[];
   claimEvidence: LunaClaimEvidence[];
   claimRevisions: LunaClaimRevision[];
+  knowledgeGaps: LunaKnowledgeGap[];
+  knowledgeGapRevisions: LunaKnowledgeGapRevision[];
+  curiosityCandidates: LunaCuriosityCandidate[];
+  priorityAssessments: LunaPriorityAssessment[];
   projects: LunaProject[];
   goals: LunaGoal[];
   tasks: LunaTask[];
@@ -252,6 +264,37 @@ function mapClaimRevision(row: Record<string, unknown>): LunaClaimRevision {
   return {
     id: String(row.id), workspaceId: String(row.workspace_id), claimId: String(row.claim_id), priorClaimId: asString(row.prior_claim_id),
     revisionKind: row.revision_kind as LunaClaimRevision["revisionKind"], reason: String(row.reason), actorScope: String(row.actor_scope), snapshot: asRecord(row.snapshot), createdAt: String(row.created_at),
+  };
+}
+
+function mapKnowledgeGap(row: Record<string, unknown>): LunaKnowledgeGap {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), projectId: asString(row.project_id), claimId: asString(row.claim_id), relatedObjectId: asString(row.related_object_id),
+    title: String(row.title), question: String(row.question), requestedEvidence: String(row.requested_evidence ?? ""), rationale: String(row.rationale ?? ""),
+    severity: row.severity as LunaKnowledgeGap["severity"], status: row.status as LunaKnowledgeGapStatus, sourceType: row.source_type as LunaKnowledgeGap["sourceType"],
+    provenance: asRecord(row.provenance), currentVersion: asNumber(row.current_version, 1), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+  };
+}
+
+function mapKnowledgeGapRevision(row: Record<string, unknown>): LunaKnowledgeGapRevision {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), gapId: String(row.gap_id), revisionKind: row.revision_kind as LunaKnowledgeGapRevision["revisionKind"],
+    reason: String(row.reason), actorScope: String(row.actor_scope), snapshot: asRecord(row.snapshot), createdAt: String(row.created_at),
+  };
+}
+
+function mapCuriosityCandidate(row: Record<string, unknown>): LunaCuriosityCandidate {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), gapId: String(row.gap_id), proposedAction: String(row.proposed_action), rationale: String(row.rationale ?? ""),
+    estimatedCost: row.estimated_cost as LunaCuriosityCandidate["estimatedCost"], status: row.status as LunaCuriosityStatus, createdBy: row.created_by as LunaCuriosityCandidate["createdBy"], createdAt: String(row.created_at),
+  };
+}
+
+function mapPriorityAssessment(row: Record<string, unknown>): LunaPriorityAssessment {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), targetType: row.target_type as LunaPriorityTargetType, targetId: String(row.target_id),
+    urgencyScore: asNumber(row.urgency_score), impactScore: asNumber(row.impact_score), evidenceScore: asNumber(row.evidence_score), unblockScore: asNumber(row.unblock_score), riskScore: asNumber(row.risk_score), priorityScore: asNumber(row.priority_score),
+    explanation: String(row.explanation), assumptions: asStringArray(row.assumptions), actorScope: String(row.actor_scope), createdAt: String(row.created_at),
   };
 }
 
@@ -520,6 +563,85 @@ export async function reviseLunaClaim(input: { userId: number; claimId: string; 
   return revised;
 }
 
+export async function listLunaKnowledgeGaps(userId: number, limit = MAX_LIST) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_knowledge_gaps", scopedParams(workspace.id, "*", { order: "status.asc,severity.desc,updated_at.desc", limit: String(Math.min(Math.max(1, limit), MAX_LIST)) }))).map(mapKnowledgeGap);
+}
+
+export async function listLunaKnowledgeGapRevisions(userId: number, limit = 1_000) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_knowledge_gap_revisions", scopedParams(workspace.id, "*", { order: "created_at.desc", limit: String(Math.min(Math.max(1, limit), 1_000)) }))).map(mapKnowledgeGapRevision);
+}
+
+export async function listLunaCuriosityCandidates(userId: number, limit = MAX_LIST) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_curiosity_candidates", scopedParams(workspace.id, "*", { order: "status.asc,created_at.desc", limit: String(Math.min(Math.max(1, limit), MAX_LIST)) }))).map(mapCuriosityCandidate);
+}
+
+export async function listLunaPriorityAssessments(userId: number, limit = MAX_LIST) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_priority_assessments", scopedParams(workspace.id, "*", { order: "priority_score.desc,created_at.desc", limit: String(Math.min(Math.max(1, limit), MAX_LIST)) }))).map(mapPriorityAssessment);
+}
+
+async function assertOwnedLunaTarget(workspaceId: string, table: string, id: string, label: string) {
+  const target = await rows(table, scopedParams(workspaceId, "id", { id: `eq.${id}`, limit: "1" }));
+  if (!target[0]) throw new Error(`${label} is unavailable in this owner workspace.`);
+}
+
+async function createLunaKnowledgeGapRevisionRecord(input: { workspaceId: string; gapId: string; revisionKind: LunaKnowledgeGapRevision["revisionKind"]; reason: string; actor: string; snapshot: Record<string, unknown> }) {
+  return mapKnowledgeGapRevision(await insert("luna_knowledge_gap_revisions", {
+    workspace_id: input.workspaceId, gap_id: input.gapId, revision_kind: input.revisionKind, reason: requiredText(input.reason, "Knowledge-gap revision reason", 1, 4_000),
+    actor_scope: requiredText(input.actor, "Knowledge-gap revision actor", 1, 128), snapshot: input.snapshot,
+  }));
+}
+
+export async function createLunaKnowledgeGap(input: { userId: number; title: string; question: string; requestedEvidence?: string; rationale?: string; severity?: LunaKnowledgeGap["severity"]; projectId?: string | null; claimId?: string | null; relatedObjectId?: string | null; provenance?: Record<string, unknown>; sourceType?: LunaKnowledgeGap["sourceType"]; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  if (input.projectId) await assertOwnedLunaTarget(workspace.id, "luna_projects", input.projectId, "Knowledge-gap project");
+  if (input.claimId) await assertOwnedLunaTarget(workspace.id, "luna_claims", input.claimId, "Knowledge-gap claim");
+  if (input.relatedObjectId) await assertOwnedLunaTarget(workspace.id, "luna_knowledge_objects", input.relatedObjectId, "Knowledge-gap Knowledge Space object");
+  const sourceType = input.sourceType ?? "OWNER";
+  const row = await insert("luna_knowledge_gaps", {
+    workspace_id: workspace.id, project_id: input.projectId ?? null, claim_id: input.claimId ?? null, related_object_id: input.relatedObjectId ?? null,
+    title: requiredText(input.title, "Knowledge-gap title", 1, 240), question: requiredText(input.question, "Knowledge-gap question", 1, 4_000),
+    requested_evidence: requiredText(input.requestedEvidence ?? "", "Requested evidence", 0, 4_000), rationale: requiredText(input.rationale ?? "", "Knowledge-gap rationale", 0, 8_000),
+    severity: input.severity ?? "WARNING", source_type: sourceType, provenance: input.provenance ?? {}, current_version: 1,
+  });
+  const gap = mapKnowledgeGap(row); const actor = input.actor ?? workspace.ownerScope;
+  await createLunaKnowledgeGapRevisionRecord({ workspaceId: workspace.id, gapId: gap.id, revisionKind: "CREATED", reason: "Knowledge gap recorded.", actor, snapshot: asRecord(row) });
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "KNOWLEDGE_GAP_CREATED", subjectType: "KNOWLEDGE_GAP", subjectId: gap.id, detail: { severity: gap.severity, sourceType: gap.sourceType, claimId: gap.claimId, relatedObjectId: gap.relatedObjectId } });
+  return gap;
+}
+
+export async function createLunaCuriosityCandidate(input: { userId: number; gapId: string; proposedAction: string; rationale?: string; estimatedCost: LunaCuriosityCandidate["estimatedCost"]; createdBy?: LunaCuriosityCandidate["createdBy"]; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  await assertOwnedLunaTarget(workspace.id, "luna_knowledge_gaps", input.gapId, "Curiosity candidate knowledge gap");
+  const createdBy = input.createdBy ?? "OWNER";
+  const row = await insert("luna_curiosity_candidates", {
+    workspace_id: workspace.id, gap_id: input.gapId, proposed_action: requiredText(input.proposedAction, "Curiosity candidate action", 1, 4_000),
+    rationale: requiredText(input.rationale ?? "", "Curiosity candidate rationale", 0, 4_000), estimated_cost: input.estimatedCost, created_by: createdBy,
+  });
+  const candidate = mapCuriosityCandidate(row); const actor = input.actor ?? workspace.ownerScope;
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "CURIOSITY_CANDIDATE_CREATED", subjectType: "CURIOSITY", subjectId: candidate.id, detail: { gapId: candidate.gapId, estimatedCost: candidate.estimatedCost, status: candidate.status } });
+  return candidate;
+}
+
+const PRIORITY_TARGET_TABLES: Record<LunaPriorityTargetType, string> = { PROJECT: "luna_projects", GOAL: "luna_goals", TASK: "luna_tasks", GAP: "luna_knowledge_gaps", CURIOSITY: "luna_curiosity_candidates" };
+
+export async function createLunaPriorityAssessment(input: { userId: number; targetType: LunaPriorityTargetType; targetId: string; urgencyScore: number; impactScore: number; evidenceScore: number; unblockScore: number; riskScore: number; assumptions?: string[]; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  await assertOwnedLunaTarget(workspace.id, PRIORITY_TARGET_TABLES[input.targetType], input.targetId, "Priority target");
+  const priority = explainLunaPriority({ urgencyScore: Number(input.urgencyScore), impactScore: Number(input.impactScore), evidenceScore: Number(input.evidenceScore), unblockScore: Number(input.unblockScore), riskScore: Number(input.riskScore) });
+  const actor = input.actor ?? workspace.ownerScope;
+  const row = await insert("luna_priority_assessments", {
+    workspace_id: workspace.id, target_type: input.targetType, target_id: input.targetId, urgency_score: Number(input.urgencyScore), impact_score: Number(input.impactScore), evidence_score: Number(input.evidenceScore), unblock_score: Number(input.unblockScore), risk_score: Number(input.riskScore), priority_score: priority.priorityScore,
+    explanation: priority.explanation, assumptions: (input.assumptions ?? []).map(item => requiredText(item, "Priority assumption", 1, 1_000)).slice(0, 30), actor_scope: actor,
+  });
+  const assessment = mapPriorityAssessment(row);
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "PRIORITY_ASSESSED", subjectType: "PRIORITY", subjectId: assessment.id, detail: { targetType: assessment.targetType, targetId: assessment.targetId, priorityScore: assessment.priorityScore } });
+  return assessment;
+}
+
 export async function createLunaProject(input: { userId: number; title: string; summary?: string; priority?: number; focusObjectId?: string | null; createdBy: LunaProject["createdBy"]; actor?: string }) {
   const workspace = await workspaceFor(input.userId);
   const row = await insert("luna_projects", { workspace_id: workspace.id, owner_scope: workspace.ownerScope, title: requiredText(input.title, "Project title", 1, 240), summary: requiredText(input.summary ?? "", "Project summary", 0, 16_000), priority: boundedInt(input.priority ?? 3, 1, 5, "Project priority"), focus_object_id: input.focusObjectId ?? null, created_by: input.createdBy, current_version: 1 });
@@ -713,10 +835,10 @@ export function calculateBlockedTasks(tasks: LunaTask[]): LunaTask[] {
 
 export async function getLunaCognitiveSnapshot(userId: number): Promise<LunaCognitiveSnapshot> {
   const self = await getOrCreateLunaSelfState(userId);
-  const [memories, claims, claimEvidence, claimRevisions, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity] = await Promise.all([
-    listLunaMemories(userId), listLunaClaims(userId), listLunaClaimEvidence(userId), listLunaClaimRevisions(userId), listLunaProjects(userId), listLunaGoals(userId), listLunaTasks(userId), listLunaMissions(userId), listLunaWorkers(userId), listLunaAttention(userId), listLunaReflections(userId), listLunaRecoveries(userId), listLunaActivity(userId),
+  const [memories, claims, claimEvidence, claimRevisions, knowledgeGaps, knowledgeGapRevisions, curiosityCandidates, priorityAssessments, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity] = await Promise.all([
+    listLunaMemories(userId), listLunaClaims(userId), listLunaClaimEvidence(userId), listLunaClaimRevisions(userId), listLunaKnowledgeGaps(userId), listLunaKnowledgeGapRevisions(userId), listLunaCuriosityCandidates(userId), listLunaPriorityAssessments(userId), listLunaProjects(userId), listLunaGoals(userId), listLunaTasks(userId), listLunaMissions(userId), listLunaWorkers(userId), listLunaAttention(userId), listLunaReflections(userId), listLunaRecoveries(userId), listLunaActivity(userId),
   ]);
-  return { state: calculateLunaCognitiveState({ self: self.self, autonomyEnabled: self.autonomyEnabled, maintenanceEnabled: self.maintenanceEnabled, missions, workers, tasks, attention }), memories, claims, claimEvidence, claimRevisions, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity };
+  return { state: calculateLunaCognitiveState({ self: self.self, autonomyEnabled: self.autonomyEnabled, maintenanceEnabled: self.maintenanceEnabled, missions, workers, tasks, attention }), memories, claims, claimEvidence, claimRevisions, knowledgeGaps, knowledgeGapRevisions, curiosityCandidates, priorityAssessments, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity };
 }
 
 export function assertNoScientificElevation(input: { truthState: LunaTruthState; actor: string }) {

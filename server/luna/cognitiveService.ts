@@ -17,6 +17,7 @@ import {
 } from "./supabase";
 import { buildObservedLunaSelfModel, explainMemoryRetrieval } from "./milestone1";
 import { inspectLunaClaims } from "./milestone2";
+import { inspectLunaAttentionSystem } from "./milestone3";
 
 export type LunaActivitySummary = {
   currentObjective: string | null;
@@ -119,5 +120,6 @@ export async function getLunaCognitiveHome(userId: number) {
     unresolvedAttentionCount: snapshot.attention.filter(item => item.state === "OPEN").length,
   });
   const claimInspections = inspectLunaClaims({ claims: snapshot.claims, evidence: snapshot.claimEvidence, revisions: snapshot.claimRevisions, limit: 12 });
-  return { snapshot, summary, self, observedSelfModel, claimInspections };
+  const attentionSystem = inspectLunaAttentionSystem({ gaps: snapshot.knowledgeGaps, curiosity: snapshot.curiosityCandidates, assessments: snapshot.priorityAssessments });
+  return { snapshot, summary, self, observedSelfModel, claimInspections, attentionSystem };
 }

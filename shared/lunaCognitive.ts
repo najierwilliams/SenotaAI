@@ -174,6 +174,72 @@ export type LunaClaimRevision = {
   createdAt: string;
 };
 
+export const LUNA_KNOWLEDGE_GAP_STATUSES = ["OPEN", "WATCHING", "RESOLVED", "DISMISSED"] as const;
+export type LunaKnowledgeGapStatus = (typeof LUNA_KNOWLEDGE_GAP_STATUSES)[number];
+export const LUNA_CURIOSITY_STATUSES = ["PROPOSED", "APPROVED", "DISMISSED", "COMPLETED"] as const;
+export type LunaCuriosityStatus = (typeof LUNA_CURIOSITY_STATUSES)[number];
+export const LUNA_PRIORITY_TARGET_TYPES = ["PROJECT", "GOAL", "TASK", "GAP", "CURIOSITY"] as const;
+export type LunaPriorityTargetType = (typeof LUNA_PRIORITY_TARGET_TYPES)[number];
+
+export type LunaKnowledgeGap = {
+  id: string;
+  workspaceId: string;
+  projectId: string | null;
+  claimId: string | null;
+  relatedObjectId: string | null;
+  title: string;
+  question: string;
+  requestedEvidence: string;
+  rationale: string;
+  severity: LunaAttentionSeverity;
+  status: LunaKnowledgeGapStatus;
+  sourceType: "OWNER" | "LUNA" | "SYSTEM";
+  provenance: LunaProvenance;
+  currentVersion: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LunaKnowledgeGapRevision = {
+  id: string;
+  workspaceId: string;
+  gapId: string;
+  revisionKind: "CREATED" | "UPDATED" | "RESOLVED" | "DISMISSED";
+  reason: string;
+  actorScope: string;
+  snapshot: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type LunaCuriosityCandidate = {
+  id: string;
+  workspaceId: string;
+  gapId: string;
+  proposedAction: string;
+  rationale: string;
+  estimatedCost: "LOW" | "MODERATE" | "HIGH";
+  status: LunaCuriosityStatus;
+  createdBy: "OWNER" | "LUNA" | "SYSTEM";
+  createdAt: string;
+};
+
+export type LunaPriorityAssessment = {
+  id: string;
+  workspaceId: string;
+  targetType: LunaPriorityTargetType;
+  targetId: string;
+  urgencyScore: number;
+  impactScore: number;
+  evidenceScore: number;
+  unblockScore: number;
+  riskScore: number;
+  priorityScore: number;
+  explanation: string;
+  assumptions: string[];
+  actorScope: string;
+  createdAt: string;
+};
+
 export type LunaMemory = {
   id: string;
   workspaceId: string;
