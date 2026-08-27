@@ -41,7 +41,7 @@ import { consolidateLunaOwnedExactDuplicateMemories, getLunaActivitySummary, get
 import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMission, resumeLunaMission, runLunaRecoverySweep } from "../luna/orchestrator";
 import { getLunaRuntimeAvailability } from "../luna/runtime";
 import { assessAndDispatchLunaCognitiveAction } from "../luna/cognitiveActionService";
-import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCuriosityCandidate, createLunaGoal, createLunaKnowledgeGap, createLunaMemory, createLunaPriorityAssessment, createLunaProject, getLunaCognitiveSnapshot, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
+import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCuriosityCandidate, createLunaGoal, createLunaKnowledgeGap, createLunaMemory, createLunaPriorityAssessment, createLunaProject, getLunaCognitiveSnapshot, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = readKnowledgeCookie(ctx.req.header("cookie"));
@@ -469,6 +469,26 @@ export const knowledgeRouter = router({
           title: boundedText(240).min(1), question: boundedText(4_000).min(1), requestedEvidence: boundedText(4_000).optional(), rationale: boundedText(8_000).optional(),
           severity: z.enum(["INFO", "WARNING", "ACTION_REQUIRED"]).optional(), projectId: uuidSchema.nullable().optional(), claimId: uuidSchema.nullable().optional(), relatedObjectId: uuidSchema.nullable().optional(), provenance: z.record(z.string(), z.unknown()).optional(),
         })).mutation(async ({ input }) => { try { return await createLunaKnowledgeGap({ userId: KNOWLEDGE_OWNER_ID, ...input, sourceType: "OWNER", actor: "knowledge-owner" }); } catch (error) { return databaseError(error); } }),
+        dismissTemporaryAcceptance: knowledgeOwnerProcedure.input(z.object({ gapId: uuidSchema })).mutation(async ({ input }) => {
+          try {
+            const snapshot = await getLunaCognitiveSnapshot(KNOWLEDGE_OWNER_ID);
+            const gap = snapshot.knowledgeGaps.find(item => item.id === input.gapId);
+            if (!gap || gap.provenance?.method !== "MILESTONE_5_USER_ACCEPTANCE_TEST") {
+              throw new TRPCError({ code: "FORBIDDEN", message: "Only the labelled temporary Milestone 5 acceptance condition can be dismissed here." });
+            }
+            if (gap.status === "DISMISSED") return gap;
+            return await updateLunaKnowledgeGap({
+              userId: KNOWLEDGE_OWNER_ID,
+              gapId: gap.id,
+              status: "DISMISSED",
+              actor: "knowledge-owner",
+              reason: "Owner dismissed the completed temporary Milestone 5 user acceptance condition.",
+            });
+          } catch (error) {
+            if (error instanceof TRPCError) throw error;
+            return databaseError(error);
+          }
+        }),
       }),
       curiosity: router({
         create: knowledgeOwnerProcedure.input(z.object({ gapId: uuidSchema, proposedAction: boundedText(4_000).min(1), rationale: boundedText(4_000).optional(), estimatedCost: z.enum(["LOW", "MODERATE", "HIGH"]) })).mutation(async ({ input }) => { try { return await createLunaCuriosityCandidate({ userId: KNOWLEDGE_OWNER_ID, ...input, createdBy: "OWNER", actor: "knowledge-owner" }); } catch (error) { return databaseError(error); } }),
