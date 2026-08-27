@@ -123,6 +123,57 @@ export type LunaProvenance = {
   note?: string;
 };
 
+export const LUNA_CLAIM_LIFECYCLE_STATES = ["ACTIVE", "SUPERSEDED", "RETRACTED", "REQUIRES_REVIEW"] as const;
+export type LunaClaimLifecycleState = (typeof LUNA_CLAIM_LIFECYCLE_STATES)[number];
+
+export const LUNA_CLAIM_EVIDENCE_ROLES = ["SUPPORTS", "CONTRADICTS", "CONTEXT", "DERIVED_FROM"] as const;
+export type LunaClaimEvidenceRole = (typeof LUNA_CLAIM_EVIDENCE_ROLES)[number];
+
+export type LunaClaim = {
+  id: string;
+  workspaceId: string;
+  projectId: string | null;
+  missionId: string | null;
+  subject: string;
+  predicate: string;
+  objectText: string;
+  statement: string;
+  truthState: LunaTruthState;
+  confidence: number;
+  lifecycleState: LunaClaimLifecycleState;
+  provenance: LunaProvenance;
+  assumptions: string[];
+  currentVersion: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LunaClaimEvidence = {
+  id: string;
+  workspaceId: string;
+  claimId: string;
+  sourceMemoryId: string | null;
+  sourceObjectId: string | null;
+  sourceRelationshipId: string | null;
+  evidenceRole: LunaClaimEvidenceRole;
+  sourceExcerpt: string;
+  confidence: number | null;
+  provenance: LunaProvenance;
+  createdAt: string;
+};
+
+export type LunaClaimRevision = {
+  id: string;
+  workspaceId: string;
+  claimId: string;
+  priorClaimId: string | null;
+  revisionKind: "CREATED" | "REVISED" | "SUPERSEDED" | "RETRACTED" | "CONTRADICTION_RECORDED";
+  reason: string;
+  actorScope: string;
+  snapshot: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type LunaMemory = {
   id: string;
   workspaceId: string;
@@ -305,7 +356,7 @@ export type LunaWorkerContract = {
   role: LunaWorkerRole;
   purpose: string;
   allowedToolClasses: LunaToolCall["toolClass"][];
-  allowedOutputs: Array<"MEMORY" | "KNOWLEDGE_OBJECT" | "RELATIONSHIP" | "TASK" | "PROJECT" | "REPORT" | "ATTENTION" | "REFLECTION">;
+  allowedOutputs: Array<"MEMORY" | "CLAIM" | "KNOWLEDGE_OBJECT" | "RELATIONSHIP" | "TASK" | "PROJECT" | "REPORT" | "ATTENTION" | "REFLECTION">;
   mayElevateScientificTruth: false;
   mayModifyProviderSnapshot: false;
   mayCreateBiologicalTarget: false;
@@ -336,9 +387,9 @@ export const LUNA_WORKER_CONTRACTS: readonly LunaWorkerContract[] = [
   { role: "PLANNER_AGENT", purpose: "Turns a bounded objective into a persisted task graph.", allowedToolClasses: ["KNOWLEDGE"], allowedOutputs: ["TASK", "REPORT", "ATTENTION"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
   { role: "SCOUT", purpose: "Discovers permitted source candidates and records provenance.", allowedToolClasses: ["RESEARCH", "PROVIDER", "KNOWLEDGE"], allowedOutputs: ["KNOWLEDGE_OBJECT", "REPORT", "ATTENTION"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
   { role: "RESEARCHER", purpose: "Extracts bounded working findings from approved inputs.", allowedToolClasses: ["RESEARCH", "DOCUMENT", "KNOWLEDGE"], allowedOutputs: ["KNOWLEDGE_OBJECT", "MEMORY", "REPORT", "ATTENTION"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
-  { role: "VALIDATOR", purpose: "Classifies evidence quality and conflicts without elevating unsupported claims.", allowedToolClasses: ["KNOWLEDGE", "PROVIDER", "DOCUMENT"], allowedOutputs: ["RELATIONSHIP", "ATTENTION", "REPORT"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
+  { role: "VALIDATOR", purpose: "Classifies evidence quality and conflicts without elevating unsupported claims.", allowedToolClasses: ["KNOWLEDGE", "PROVIDER", "DOCUMENT"], allowedOutputs: ["CLAIM", "RELATIONSHIP", "ATTENTION", "REPORT"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
   { role: "ORGANIZER", purpose: "Creates reversible placements, tags, and Luna-owned structure.", allowedToolClasses: ["KNOWLEDGE"], allowedOutputs: ["KNOWLEDGE_OBJECT", "RELATIONSHIP", "REPORT"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
-  { role: "LINKER", purpose: "Creates typed, provenance-backed non-authoritative relationships.", allowedToolClasses: ["KNOWLEDGE"], allowedOutputs: ["RELATIONSHIP", "REPORT", "ATTENTION"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
+  { role: "LINKER", purpose: "Creates typed, provenance-backed non-authoritative relationships.", allowedToolClasses: ["KNOWLEDGE"], allowedOutputs: ["CLAIM", "RELATIONSHIP", "REPORT", "ATTENTION"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
   { role: "DATA_ANALYST", purpose: "Performs bounded analysis on supplied data and records assumptions.", allowedToolClasses: ["DOCUMENT", "KNOWLEDGE"], allowedOutputs: ["KNOWLEDGE_OBJECT", "REPORT", "ATTENTION"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
   { role: "PROVENANCE_AGENT", purpose: "Records source, version, license, and retrieval provenance.", allowedToolClasses: ["PROVIDER", "DOCUMENT", "KNOWLEDGE"], allowedOutputs: ["KNOWLEDGE_OBJECT", "ATTENTION", "REPORT"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },
   { role: "LICENSE_AGENT", purpose: "Detects absent or restrictive license information for attention.", allowedToolClasses: ["DOCUMENT", "KNOWLEDGE"], allowedOutputs: ["ATTENTION", "REPORT"], mayElevateScientificTruth: false, mayModifyProviderSnapshot: false, mayCreateBiologicalTarget: false },

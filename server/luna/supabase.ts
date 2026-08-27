@@ -1,5 +1,10 @@
 import type {
   LunaAttentionItem,
+  LunaClaim,
+  LunaClaimEvidence,
+  LunaClaimEvidenceRole,
+  LunaClaimLifecycleState,
+  LunaClaimRevision,
   LunaCognitiveState,
   LunaGoal,
   LunaGoalStatus,
@@ -70,6 +75,9 @@ export type LunaCognitiveAuditEvent = {
 export type LunaCognitiveSnapshot = {
   state: LunaCognitiveState;
   memories: LunaMemory[];
+  claims: LunaClaim[];
+  claimEvidence: LunaClaimEvidence[];
+  claimRevisions: LunaClaimRevision[];
   projects: LunaProject[];
   goals: LunaGoal[];
   tasks: LunaTask[];
@@ -219,6 +227,31 @@ function mapMemory(row: Record<string, unknown>): LunaMemory {
     projectId: asString(row.project_id), missionId: asString(row.mission_id), tags: asStringArray(row.tags),
     provenance: asRecord(row.provenance), active: asBoolean(row.is_active), currentVersion: asNumber(row.current_version, 1),
     createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+  };
+}
+
+function mapClaim(row: Record<string, unknown>): LunaClaim {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), projectId: asString(row.project_id), missionId: asString(row.mission_id),
+    subject: String(row.subject), predicate: String(row.predicate), objectText: String(row.object_text), statement: String(row.statement),
+    truthState: row.truth_state as LunaTruthState, confidence: asNumber(row.confidence, 0.5), lifecycleState: row.lifecycle_state as LunaClaimLifecycleState,
+    provenance: asRecord(row.provenance), assumptions: asStringArray(row.assumptions), currentVersion: asNumber(row.current_version, 1),
+    createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+  };
+}
+
+function mapClaimEvidence(row: Record<string, unknown>): LunaClaimEvidence {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), claimId: String(row.claim_id), sourceMemoryId: asString(row.source_memory_id),
+    sourceObjectId: asString(row.source_object_id), sourceRelationshipId: asString(row.source_relationship_id), evidenceRole: row.evidence_role as LunaClaimEvidenceRole,
+    sourceExcerpt: String(row.source_excerpt ?? ""), confidence: row.confidence === null ? null : asNumber(row.confidence), provenance: asRecord(row.provenance), createdAt: String(row.created_at),
+  };
+}
+
+function mapClaimRevision(row: Record<string, unknown>): LunaClaimRevision {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), claimId: String(row.claim_id), priorClaimId: asString(row.prior_claim_id),
+    revisionKind: row.revision_kind as LunaClaimRevision["revisionKind"], reason: String(row.reason), actorScope: String(row.actor_scope), snapshot: asRecord(row.snapshot), createdAt: String(row.created_at),
   };
 }
 
@@ -400,6 +433,91 @@ export async function listLunaMemories(userId: number, limit = 100) {
   const workspace = await workspaceFor(userId);
   const params = scopedParams(workspace.id, "*", { is_active: "eq.true", order: "importance.desc,updated_at.desc", limit: String(Math.min(Math.max(1, limit), MAX_LIST)) });
   return (await rows("luna_memories", params)).map(mapMemory);
+}
+
+export async function listLunaClaims(userId: number, limit = MAX_LIST) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_claims", scopedParams(workspace.id, "*", { order: "lifecycle_state.asc,confidence.desc,updated_at.desc", limit: String(Math.min(Math.max(1, limit), MAX_LIST)) }))).map(mapClaim);
+}
+
+export async function listLunaClaimEvidence(userId: number, limit = 1_000) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_claim_evidence", scopedParams(workspace.id, "*", { order: "created_at.desc", limit: String(Math.min(Math.max(1, limit), 1_000)) }))).map(mapClaimEvidence);
+}
+
+export async function listLunaClaimRevisions(userId: number, limit = 1_000) {
+  const workspace = await workspaceFor(userId);
+  return (await rows("luna_claim_revisions", scopedParams(workspace.id, "*", { order: "created_at.desc", limit: String(Math.min(Math.max(1, limit), 1_000)) }))).map(mapClaimRevision);
+}
+
+async function assertClaimAnchorOwnership(input: { workspaceId: string; sourceMemoryId?: string | null; sourceObjectId?: string | null; sourceRelationshipId?: string | null }) {
+  const sources = [
+    { table: "luna_memories", id: input.sourceMemoryId },
+    { table: "luna_knowledge_objects", id: input.sourceObjectId },
+    { table: "luna_knowledge_relationships", id: input.sourceRelationshipId },
+  ].filter((source): source is { table: string; id: string } => Boolean(source.id));
+  if (sources.length !== 1) throw new Error("Claim evidence must reference exactly one persisted memory, Knowledge Space object, or relationship.");
+  const source = sources[0];
+  const owned = await rows(source.table, scopedParams(input.workspaceId, "id", { id: `eq.${source.id}`, limit: "1" }));
+  if (!owned[0]) throw new Error("Claim evidence source is unavailable in this owner workspace.");
+}
+
+async function createLunaClaimRevisionRecord(input: { workspaceId: string; claimId: string; priorClaimId?: string | null; revisionKind: LunaClaimRevision["revisionKind"]; reason: string; actor: string; snapshot: Record<string, unknown> }) {
+  return mapClaimRevision(await insert("luna_claim_revisions", {
+    workspace_id: input.workspaceId, claim_id: input.claimId, prior_claim_id: input.priorClaimId ?? null, revision_kind: input.revisionKind,
+    reason: requiredText(input.reason, "Claim revision reason", 1, 4_000), actor_scope: requiredText(input.actor, "Claim revision actor", 1, 128), snapshot: input.snapshot,
+  }));
+}
+
+export async function createLunaClaim(input: { userId: number; subject: string; predicate: string; objectText: string; statement: string; truthState?: LunaTruthState; confidence?: number; assumptions?: string[]; provenance?: Record<string, unknown>; projectId?: string | null; missionId?: string | null; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  const truthState = boundedTruth(input.truthState ?? "INFERENCE");
+  const confidence = Number(input.confidence ?? 0.5);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error("Claim confidence must be a number from 0 to 1.");
+  const row = await insert("luna_claims", {
+    workspace_id: workspace.id, owner_scope: workspace.ownerScope, project_id: input.projectId ?? null, mission_id: input.missionId ?? null,
+    subject: requiredText(input.subject, "Claim subject", 1, 1_000), predicate: requiredText(input.predicate, "Claim predicate", 1, 1_000),
+    object_text: requiredText(input.objectText, "Claim object", 1, 12_000), statement: requiredText(input.statement, "Claim statement", 1, 16_000),
+    truth_state: truthState, confidence, assumptions: (input.assumptions ?? []).map(item => requiredText(item, "Claim assumption", 1, 1_000)).slice(0, 30), provenance: input.provenance ?? {}, current_version: 1,
+  });
+  const claim = mapClaim(row); const actor = input.actor ?? workspace.ownerScope;
+  await createLunaClaimRevisionRecord({ workspaceId: workspace.id, claimId: claim.id, revisionKind: "CREATED", reason: "Claim created.", actor, snapshot: asRecord(row) });
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "CLAIM_CREATED", subjectType: "CLAIM", subjectId: claim.id, missionId: claim.missionId, detail: { truthState: claim.truthState, confidence: claim.confidence, lifecycleState: claim.lifecycleState } });
+  return claim;
+}
+
+export async function createLunaClaimEvidence(input: { userId: number; claimId: string; sourceMemoryId?: string | null; sourceObjectId?: string | null; sourceRelationshipId?: string | null; evidenceRole: LunaClaimEvidenceRole; sourceExcerpt?: string; confidence?: number | null; provenance?: Record<string, unknown>; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  const claimRows = await rows("luna_claims", scopedParams(workspace.id, "*", { id: `eq.${input.claimId}`, limit: "1" }));
+  if (!claimRows[0]) throw new Error("Claim is unavailable in this owner workspace.");
+  await assertClaimAnchorOwnership({ workspaceId: workspace.id, sourceMemoryId: input.sourceMemoryId, sourceObjectId: input.sourceObjectId, sourceRelationshipId: input.sourceRelationshipId });
+  const confidence = input.confidence === null || input.confidence === undefined ? null : Number(input.confidence);
+  if (confidence !== null && (!Number.isFinite(confidence) || confidence < 0 || confidence > 1)) throw new Error("Evidence confidence must be a number from 0 to 1.");
+  const row = await insert("luna_claim_evidence", {
+    workspace_id: workspace.id, claim_id: input.claimId, source_memory_id: input.sourceMemoryId ?? null, source_object_id: input.sourceObjectId ?? null, source_relationship_id: input.sourceRelationshipId ?? null,
+    evidence_role: input.evidenceRole, source_excerpt: requiredText(input.sourceExcerpt ?? "", "Claim evidence excerpt", 0, 4_000), confidence, provenance: input.provenance ?? {},
+  });
+  const evidence = mapClaimEvidence(row); const actor = input.actor ?? workspace.ownerScope;
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "CLAIM_EVIDENCE_LINKED", subjectType: "CLAIM_EVIDENCE", subjectId: evidence.id, missionId: mapClaim(claimRows[0]).missionId, detail: { claimId: evidence.claimId, evidenceRole: evidence.evidenceRole, sourceMemoryId: evidence.sourceMemoryId, sourceObjectId: evidence.sourceObjectId, sourceRelationshipId: evidence.sourceRelationshipId } });
+  return evidence;
+}
+
+export async function reviseLunaClaim(input: { userId: number; claimId: string; statement?: string; truthState?: LunaTruthState; confidence?: number; lifecycleState?: LunaClaimLifecycleState; assumptions?: string[]; reason: string; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  const currentRows = await rows("luna_claims", scopedParams(workspace.id, "*", { id: `eq.${input.claimId}`, limit: "1" }));
+  if (!currentRows[0]) throw new Error("Claim is unavailable in this owner workspace.");
+  const current = mapClaim(currentRows[0]); const patchValues: Record<string, unknown> = { current_version: current.currentVersion + 1 };
+  if (input.statement !== undefined) patchValues.statement = requiredText(input.statement, "Claim statement", 1, 16_000);
+  if (input.truthState !== undefined) patchValues.truth_state = boundedTruth(input.truthState);
+  if (input.confidence !== undefined) { const confidence = Number(input.confidence); if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error("Claim confidence must be a number from 0 to 1."); patchValues.confidence = confidence; }
+  if (input.lifecycleState !== undefined) patchValues.lifecycle_state = input.lifecycleState;
+  if (input.assumptions !== undefined) patchValues.assumptions = input.assumptions.map(item => requiredText(item, "Claim assumption", 1, 1_000)).slice(0, 30);
+  const row = await patch("luna_claims", scopedParams(workspace.id, "*", { id: `eq.${input.claimId}`, limit: "1" }), patchValues);
+  const revised = mapClaim(row); const actor = input.actor ?? workspace.ownerScope;
+  const revisionKind: LunaClaimRevision["revisionKind"] = revised.lifecycleState === "SUPERSEDED" ? "SUPERSEDED" : revised.lifecycleState === "RETRACTED" ? "RETRACTED" : "REVISED";
+  await createLunaClaimRevisionRecord({ workspaceId: workspace.id, claimId: revised.id, priorClaimId: current.id, revisionKind, reason: requiredText(input.reason, "Claim revision reason", 3, 4_000), actor, snapshot: asRecord(row) });
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "CLAIM_REVISED", subjectType: "CLAIM", subjectId: revised.id, missionId: revised.missionId, detail: { priorVersion: current.currentVersion, version: revised.currentVersion, revisionKind, lifecycleState: revised.lifecycleState } });
+  return revised;
 }
 
 export async function createLunaProject(input: { userId: number; title: string; summary?: string; priority?: number; focusObjectId?: string | null; createdBy: LunaProject["createdBy"]; actor?: string }) {
@@ -595,10 +713,10 @@ export function calculateBlockedTasks(tasks: LunaTask[]): LunaTask[] {
 
 export async function getLunaCognitiveSnapshot(userId: number): Promise<LunaCognitiveSnapshot> {
   const self = await getOrCreateLunaSelfState(userId);
-  const [memories, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity] = await Promise.all([
-    listLunaMemories(userId), listLunaProjects(userId), listLunaGoals(userId), listLunaTasks(userId), listLunaMissions(userId), listLunaWorkers(userId), listLunaAttention(userId), listLunaReflections(userId), listLunaRecoveries(userId), listLunaActivity(userId),
+  const [memories, claims, claimEvidence, claimRevisions, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity] = await Promise.all([
+    listLunaMemories(userId), listLunaClaims(userId), listLunaClaimEvidence(userId), listLunaClaimRevisions(userId), listLunaProjects(userId), listLunaGoals(userId), listLunaTasks(userId), listLunaMissions(userId), listLunaWorkers(userId), listLunaAttention(userId), listLunaReflections(userId), listLunaRecoveries(userId), listLunaActivity(userId),
   ]);
-  return { state: calculateLunaCognitiveState({ self: self.self, autonomyEnabled: self.autonomyEnabled, maintenanceEnabled: self.maintenanceEnabled, missions, workers, tasks, attention }), memories, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity };
+  return { state: calculateLunaCognitiveState({ self: self.self, autonomyEnabled: self.autonomyEnabled, maintenanceEnabled: self.maintenanceEnabled, missions, workers, tasks, attention }), memories, claims, claimEvidence, claimRevisions, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity };
 }
 
 export function assertNoScientificElevation(input: { truthState: LunaTruthState; actor: string }) {

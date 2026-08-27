@@ -10,7 +10,7 @@ import {
   KNOWLEDGE_WORKER_ROLES,
   isScientificTruthStateUserAssignable,
 } from "@shared/knowledgeSpace";
-import { LUNA_MEMORY_KINDS, LUNA_TRUTH_STATES } from "@shared/lunaCognitive";
+import { LUNA_CLAIM_EVIDENCE_ROLES, LUNA_CLAIM_LIFECYCLE_STATES, LUNA_MEMORY_KINDS, LUNA_TRUTH_STATES } from "@shared/lunaCognitive";
 import { publicProcedure, router } from "../_core/trpc";
 import { KNOWLEDGE_OWNER_COOKIE, KNOWLEDGE_OWNER_ID, createKnowledgeOwnerSession, isKnowledgeOwnerConfigured, isValidKnowledgeOwnerPassword, isValidKnowledgeOwnerSession, readKnowledgeCookie } from "../knowledgeSpace/ownerAuth";
 import { getSessionCookieOptions } from "../_core/cookies";
@@ -40,7 +40,7 @@ import { runKnowledgeMission } from "../knowledgeSpace/missionRunner";
 import { consolidateLunaOwnedExactDuplicateMemories, getLunaActivitySummary, getLunaCognitiveHome, reconcileLunaAttention, retrieveLunaContext } from "../luna/cognitiveService";
 import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMission, resumeLunaMission, runLunaRecoverySweep } from "../luna/orchestrator";
 import { getLunaRuntimeAvailability } from "../luna/runtime";
-import { archiveDuplicateLunaMemory, createLunaGoal, createLunaMemory, createLunaProject, getLunaCognitiveSnapshot, rollbackLunaOwnedMemory, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
+import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaGoal, createLunaMemory, createLunaProject, getLunaCognitiveSnapshot, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = readKnowledgeCookie(ctx.req.header("cookie"));
@@ -62,6 +62,8 @@ const boundedText = (max: number) => z.string().trim().max(max);
 const tagsSchema = z.array(z.string().trim().min(1).max(48)).max(24);
 const lunaMemoryKindSchema = z.enum(LUNA_MEMORY_KINDS);
 const lunaTruthStateSchema = z.enum(LUNA_TRUTH_STATES);
+const lunaClaimLifecycleSchema = z.enum(LUNA_CLAIM_LIFECYCLE_STATES);
+const lunaClaimEvidenceRoleSchema = z.enum(LUNA_CLAIM_EVIDENCE_ROLES);
 
 function prohibitLunaTruthElevation(truthState: z.infer<typeof lunaTruthStateSchema>) {
   if (["FACT", "EVIDENCE", "VALIDATED", "PROVIDER_CONFIRMED"].includes(truthState)) {
@@ -455,6 +457,48 @@ export const knowledgeRouter = router({
         reason: boundedText(1_000).min(3),
       }).refine(input => Object.keys(input).some(key => key !== "reason"), "Provide a cognitive-state update.")).mutation(async ({ input }) => {
         try { return await updateLunaSelfState({ userId: KNOWLEDGE_OWNER_ID, ...input }); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    claim: router({
+      create: knowledgeOwnerProcedure.input(z.object({
+        subject: boundedText(1_000).min(1),
+        predicate: boundedText(1_000).min(1),
+        objectText: boundedText(12_000).min(1),
+        statement: boundedText(16_000).min(1),
+        truthState: lunaTruthStateSchema.default("INFERENCE"),
+        confidence: z.number().finite().min(0).max(1).optional(),
+        assumptions: z.array(boundedText(1_000).min(1)).max(30).optional(),
+        provenance: z.record(z.string(), z.unknown()).optional(),
+        projectId: uuidSchema.nullable().optional(),
+        missionId: uuidSchema.nullable().optional(),
+      })).mutation(async ({ input }) => {
+        prohibitLunaTruthElevation(input.truthState);
+        try { return await createLunaClaim({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+      }),
+      revise: knowledgeOwnerProcedure.input(z.object({
+        claimId: uuidSchema,
+        statement: boundedText(16_000).min(1).optional(),
+        truthState: lunaTruthStateSchema.optional(),
+        confidence: z.number().finite().min(0).max(1).optional(),
+        lifecycleState: lunaClaimLifecycleSchema.optional(),
+        assumptions: z.array(boundedText(1_000).min(1)).max(30).optional(),
+        reason: boundedText(4_000).min(3),
+      }).refine(input => Object.keys(input).some(key => key !== "claimId" && key !== "reason"), "Provide a claim revision.")).mutation(async ({ input }) => {
+        if (input.truthState) prohibitLunaTruthElevation(input.truthState);
+        try { return await reviseLunaClaim({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+      }),
+      evidence: knowledgeOwnerProcedure.input(z.object({
+        claimId: uuidSchema,
+        sourceMemoryId: uuidSchema.nullable().optional(),
+        sourceObjectId: uuidSchema.nullable().optional(),
+        sourceRelationshipId: uuidSchema.nullable().optional(),
+        evidenceRole: lunaClaimEvidenceRoleSchema,
+        sourceExcerpt: boundedText(4_000).optional(),
+        confidence: z.number().finite().min(0).max(1).nullable().optional(),
+        provenance: z.record(z.string(), z.unknown()).optional(),
+      }).refine(input => [input.sourceMemoryId, input.sourceObjectId, input.sourceRelationshipId].filter(Boolean).length === 1, "Claim evidence must reference exactly one persisted source.")).mutation(async ({ input }) => {
+        try { return await createLunaClaimEvidence({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
       }),
     }),
 
