@@ -1,4 +1,5 @@
 import type { LunaDurableRuntime, LunaRuntimeDispatch, LunaRuntimeResult, LunaRuntimeStatus } from "@shared/lunaCognitive";
+import { VercelQueueLunaDurableRuntime } from "./vercelQueueRuntime";
 
 export type LunaRuntimeAvailability = { status: LunaRuntimeStatus; provider: string; detail: string };
 
@@ -31,6 +32,9 @@ export class UnavailableLunaDurableRuntime implements LunaDurableRuntime {
  */
 export function getLunaDurableRuntime(): LunaDurableRuntime {
   const provider = process.env.LUNA_DURABLE_RUNTIME_PROVIDER?.trim().toLowerCase();
+  // Vercel Functions provide VERCEL_REGION and the Queue SDK authenticates there through
+  // Vercel-managed OIDC. A local process remains unavailable rather than emulating a worker.
+  if (provider === "vercel-queues" || process.env.VERCEL_REGION?.trim()) return new VercelQueueLunaDurableRuntime();
   if (!provider) return new UnavailableLunaDurableRuntime();
   return new UnavailableLunaDurableRuntime(`Luna durable runtime provider '${provider}' is selected but no verified provider adapter is installed. The mission will remain waiting rather than running inside a web request.`);
 }

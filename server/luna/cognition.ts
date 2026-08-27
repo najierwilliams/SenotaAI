@@ -108,10 +108,12 @@ export function buildCognitivePlan(objective: string, priority = 3): CognitivePl
     tasks: [
       { key: "plan", title: "Define bounded research plan", details: `Create an auditable scope and task graph for: ${compactObjective}`, role: "PLANNER_AGENT", dependsOnKeys: [], priority: boundedPriority },
       { key: "retrieve", title: "Retrieve relevant durable context", details: "Retrieve source-ranked memory and Knowledge Space context without expanding unbounded prompt context.", role: "MEMORY_AGENT", dependsOnKeys: ["plan"], priority: boundedPriority },
-      { key: "research", title: "Collect permitted research observations", details: "Use only configured, permitted tool adapters and record provider/license/provenance or provider failure.", role: "SCOUT", dependsOnKeys: ["retrieve"], priority: boundedPriority },
+      { key: "scout_context", title: "Collect permitted source candidates", details: "Use only configured, permitted tool adapters and record source gaps without external claims.", role: "SCOUT", dependsOnKeys: ["retrieve"], priority: boundedPriority },
+      { key: "scout_gaps", title: "Identify bounded evidence gaps", details: "Independently inspect supplied durable context for unresolved questions and provenance gaps without external claims.", role: "SCOUT", dependsOnKeys: ["retrieve"], priority: boundedPriority },
+      { key: "research", title: "Extract bounded working findings", details: "Analyze only supplied durable context and both persisted Scout handoffs; preserve provenance and uncertainty.", role: "RESEARCHER", dependsOnKeys: ["scout_context", "scout_gaps"], priority: boundedPriority },
       { key: "validate", title: "Validate evidence and classify uncertainty", details: "Separate retained evidence, inference, hypotheses, provider failures, and unresolved scientific claims.", role: "VALIDATOR", dependsOnKeys: ["research"], priority: boundedPriority },
-      { key: "organize", title: "Create reversible Luna-owned knowledge updates", details: "Create only versioned, auditable, non-authoritative Luna-owned notes, links, and memory updates.", role: "LINKER", dependsOnKeys: ["validate"], priority: boundedPriority },
-      { key: "reflect", title: "Reflect and schedule eligible follow-up work", details: "Summarize actual changes, gaps, failures, attention items, and eligible next steps from persisted state.", role: "REFLECTION_AGENT", dependsOnKeys: ["organize"], priority: boundedPriority },
+      { key: "synthesize", title: "Create reversible Luna-owned synthesis", details: "Create only versioned, auditable, non-authoritative Luna-owned notes, links, and memory updates from validated persisted handoffs.", role: "SYNTHESIS_AGENT", dependsOnKeys: ["validate"], priority: boundedPriority },
+      { key: "reflect", title: "Reflect and schedule eligible follow-up work", details: "Summarize actual changes, gaps, failures, attention items, and eligible next steps from persisted state.", role: "REFLECTION_AGENT", dependsOnKeys: ["synthesize"], priority: boundedPriority },
     ],
     unresolvedAssumptions: [
       "No worker may promote Luna-generated output to scientific authority.",

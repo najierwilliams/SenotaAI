@@ -409,9 +409,17 @@ export async function createLunaTask(input: { userId: number; title: string; det
   return task;
 }
 
-export async function createLunaWorker(input: { userId: number; missionId: string; taskId?: string | null; role: LunaWorkerRole; inputSummary: string; attempt?: number; actor?: string }) {
+export async function createLunaWorker(input: { userId: number; missionId: string; taskId?: string | null; role: LunaWorkerRole; inputSummary: string; attempt?: number; workerId?: string; actor?: string }) {
   const workspace = await workspaceFor(input.userId);
-  const row = await insert("luna_workers", { workspace_id: workspace.id, mission_id: input.missionId, task_id: input.taskId ?? null, role: input.role, input_summary: requiredText(input.inputSummary, "Worker input summary", 0, 12_000), attempt: boundedInt(input.attempt ?? 1, 1, 6, "Worker attempt") });
+  let row: Record<string, unknown>;
+  try {
+    row = await insert("luna_workers", { id: input.workerId, workspace_id: workspace.id, mission_id: input.missionId, task_id: input.taskId ?? null, role: input.role, input_summary: requiredText(input.inputSummary, "Worker input summary", 0, 12_000), attempt: boundedInt(input.attempt ?? 1, 1, 6, "Worker attempt") });
+  } catch (error) {
+    if (!input.workerId) throw error;
+    const existing = await rows("luna_workers", scopedParams(workspace.id, "*", { id: `eq.${input.workerId}`, mission_id: `eq.${input.missionId}`, limit: "1" }));
+    if (!existing[0]) throw error;
+    return mapWorker(existing[0]);
+  }
   const worker = mapWorker(row); const actor = input.actor ?? "luna:orchestrator";
   await cognitiveVersion({ workspaceId: workspace.id, subjectType: "WORKER", subjectId: worker.id, version: 1, action: "CREATED", actor, reason: "Worker dispatched.", snapshot: asRecord(row), missionId: worker.missionId });
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "WORKER_QUEUED", subjectType: "WORKER", subjectId: worker.id, missionId: worker.missionId, workerId: worker.id, detail: { role: worker.role, taskId: worker.taskId } });
@@ -439,7 +447,7 @@ export async function listLunaReflections(userId: number) { const workspace = aw
 export async function listLunaRecoveries(userId: number) { const workspace = await workspaceFor(userId); return (await rows("luna_recovery_records", scopedParams(workspace.id, "*", { status: "eq.REQUIRED", order: "created_at.desc", limit: String(MAX_LIST) }))).map(mapRecovery); }
 export async function listLunaActivity(userId: number) { const workspace = await workspaceFor(userId); return (await rows("luna_cognitive_audit_events", scopedParams(workspace.id, "*", { order: "created_at.desc", limit: String(MAX_LIST) }))).map(mapAudit); }
 
-export async function updateLunaMission(input: { userId: number; missionId: string; status?: LunaMissionStatus; currentFocus?: string | null; rootTaskId?: string | null; pauseRequested?: boolean; cancelRequested?: boolean; runtimeRunId?: string | null; modelRequestsUsed?: number; tokenUsage?: number; errorMessage?: string | null; resumeAfter?: string | null; finished?: boolean; actor?: string; reason: string }) {
+export async function updateLunaMission(input: { userId: number; missionId: string; status?: LunaMissionStatus; currentFocus?: string | null; rootTaskId?: string | null; pauseRequested?: boolean; cancelRequested?: boolean; runtimeRunId?: string | null; modelRequestsUsed?: number; tokenUsage?: number; errorMessage?: string | null; resumeAfter?: string | null; started?: boolean; finished?: boolean; actor?: string; reason: string }) {
   const workspace = await workspaceFor(input.userId); const params = scopedParams(workspace.id, "*", { id: `eq.${input.missionId}`, limit: "1" });
   const patchValues: Record<string, unknown> = {};
   if (input.status !== undefined) patchValues.status = input.status;
@@ -452,6 +460,7 @@ export async function updateLunaMission(input: { userId: number; missionId: stri
   if (input.tokenUsage !== undefined) patchValues.token_usage = input.tokenUsage;
   if (input.errorMessage !== undefined) patchValues.error_message = input.errorMessage;
   if (input.resumeAfter !== undefined) patchValues.resume_after = input.resumeAfter;
+  if (input.started) patchValues.started_at = new Date().toISOString();
   if (input.finished) patchValues.finished_at = new Date().toISOString();
   const row = await patch("luna_missions", params, patchValues); const mission = mapMission(row); const actor = input.actor ?? "luna:orchestrator";
   await cognitiveVersion({ workspaceId: workspace.id, subjectType: "MISSION", subjectId: mission.id, version: await nextCognitiveVersion(workspace.id, "MISSION", mission.id), action: "UPDATED", actor, reason: requiredText(input.reason, "Mission update reason", 3, 1_000), snapshot: asRecord(row), missionId: mission.id });
@@ -459,10 +468,17 @@ export async function updateLunaMission(input: { userId: number; missionId: stri
   return mission;
 }
 
-export async function updateLunaWorker(input: { userId: number; workerId: string; missionId: string; state: LunaWorkerState; outputSummary?: string | null; handoffToRole?: LunaWorkerRole | null; errorMessage?: string | null; actor?: string }) {
+export async function updateLunaWorker(input: { userId: number; workerId: string; missionId: string; state: LunaWorkerState; outputSummary?: string | null; handoffToRole?: LunaWorkerRole | null; errorMessage?: string | null; resetForRetry?: boolean; actor?: string }) {
   const workspace = await workspaceFor(input.userId); const params = scopedParams(workspace.id, "*", { id: `eq.${input.workerId}`, mission_id: `eq.${input.missionId}`, limit: "1" });
   const terminal = ["COMPLETED", "FAILED", "CANCELLED"].includes(input.state);
-  const row = await patch("luna_workers", params, { state: input.state, output_summary: input.outputSummary, handoff_to_role: input.handoffToRole, error_message: input.errorMessage, started_at: input.state === "RUNNING" ? new Date().toISOString() : undefined, finished_at: terminal ? new Date().toISOString() : undefined });
+  const row = await patch("luna_workers", params, {
+    state: input.state,
+    output_summary: input.outputSummary,
+    handoff_to_role: input.handoffToRole,
+    error_message: input.resetForRetry ? null : input.errorMessage,
+    started_at: input.state === "RUNNING" ? new Date().toISOString() : undefined,
+    finished_at: input.resetForRetry ? null : terminal ? new Date().toISOString() : undefined,
+  });
   const worker = mapWorker(row); const actor = input.actor ?? "luna:orchestrator";
   await cognitiveVersion({ workspaceId: workspace.id, subjectType: "WORKER", subjectId: worker.id, version: await nextCognitiveVersion(workspace.id, "WORKER", worker.id), action: "UPDATED", actor, reason: `Worker state changed to ${worker.state}.`, snapshot: asRecord(row), missionId: worker.missionId });
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "WORKER_UPDATED", subjectType: "WORKER", subjectId: worker.id, missionId: worker.missionId, workerId: worker.id, detail: { state: worker.state, handoffToRole: worker.handoffToRole } });
@@ -475,6 +491,21 @@ export async function createLunaAttention(input: { userId: number; severity: Lun
   const item = mapAttention(row); const actor = input.actor ?? "luna:system";
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "ATTENTION_CREATED", subjectType: "ATTENTION", subjectId: item.id, missionId: item.missionId, detail: { severity: item.severity, category: item.category } });
   return item;
+}
+
+/** Records actual provider/runtime activity in the immutable cognitive audit stream. */
+export async function recordLunaRuntimeEvent(input: { userId: number; action: string; subjectType: string; subjectId?: string | null; missionId?: string | null; workerId?: string | null; detail: Record<string, unknown>; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  await cognitiveAudit({
+    workspaceId: workspace.id,
+    actor: input.actor ?? "luna:runtime",
+    action: requiredText(input.action, "Runtime activity action", 1, 120),
+    subjectType: requiredText(input.subjectType, "Runtime activity subject type", 1, 120),
+    subjectId: input.subjectId ?? null,
+    missionId: input.missionId ?? null,
+    workerId: input.workerId ?? null,
+    detail: input.detail,
+  });
 }
 
 export async function createLunaRecovery(input: { userId: number; missionId: string; workerId?: string | null; reason: string; resumePayload?: Record<string, unknown>; actor?: string }) {

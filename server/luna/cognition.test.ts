@@ -52,9 +52,10 @@ describe("Luna cognitive core", () => {
     expect(result).toEqual([{ canonicalMemoryId: "canonical", duplicateMemoryIds: ["duplicate"], normalizedContent: "luna retained an inferred research note." }]);
   });
 
-  it("builds an actual dependency order with planning, retrieval, validation, organization, and reflection", () => {
+  it("builds an actual dependency order with planning, bounded parallel scouting, research, validation, synthesis, and reflection", () => {
     const plan = buildCognitivePlan("Research the hippocampus knowledge gap", 5);
-    expect(plan.tasks.map(item => item.role)).toEqual(["PLANNER_AGENT", "MEMORY_AGENT", "SCOUT", "VALIDATOR", "LINKER", "REFLECTION_AGENT"]);
+    expect(plan.tasks.map(item => item.role)).toEqual(["PLANNER_AGENT", "MEMORY_AGENT", "SCOUT", "SCOUT", "RESEARCHER", "VALIDATOR", "SYNTHESIS_AGENT", "REFLECTION_AGENT"]);
+    expect(plan.tasks.find(item => item.key === "research")?.dependsOnKeys).toEqual(["scout_context", "scout_gaps"]);
     expect(plan.tasks.find(item => item.key === "validate")?.dependsOnKeys).toEqual(["research"]);
     expect(plan.unresolvedAssumptions.join(" ")).toContain("NOT_ESTABLISHED");
     expect(plan.unresolvedAssumptions.join(" ")).toContain("biological");

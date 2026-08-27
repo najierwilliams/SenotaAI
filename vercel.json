@@ -5,6 +5,11 @@
   "functions": {
     "server.js": {
       "includeFiles": "public/**"
+    },
+    "api/luna/queue-consumer.ts": {
+      "experimentalTriggers": [
+        { "type": "queue/v2beta", "topic": "luna_worker_v1" }
+      ]
     }
   },
   "headers": [

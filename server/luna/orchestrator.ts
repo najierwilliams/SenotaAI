@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { buildCognitivePlan } from "./cognition";
 import { getLunaDurableRuntime, type LunaRuntimeAvailability } from "./runtime";
 import {
@@ -8,7 +8,9 @@ import {
   createLunaRecovery,
   createLunaTask,
   createLunaWorker,
+  calculateEligibleTasks,
   getLunaCognitiveSnapshot,
+  recordLunaRuntimeEvent,
   getOrCreateLunaSelfState,
   markLunaMissionWaitingForRuntime,
   recoverIncompleteLunaMissions,
@@ -101,12 +103,59 @@ export async function planLunaMission(input: { userId: number; objective: string
   return { mission: updatedMission, projectId: project.id, goalId: goal.id, tasks };
 }
 
-export async function queueMissionWorkers(input: { userId: number; mission: LunaMission; tasks: LunaTask[] }) {
-  const roles = workerRolesForTaskGraph(input.tasks.map(task => ({ role: task.workerRole ?? "REVIEW_AGENT" })), input.mission.maxWorkers);
+function deterministicWorkerId(missionId: string, taskId: string, attempt = 1) {
+  const hash = createHash("sha256").update(`luna-worker:${missionId}:${taskId}:${attempt}`).digest("hex");
+  const bytes = hash.slice(0, 32).split("");
+  bytes[12] = "5";
+  bytes[16] = ["8", "9", "a", "b"][Number.parseInt(bytes[16] ?? "0", 16) & 0x03] ?? "8";
+  return `${bytes.slice(0, 8).join("")}-${bytes.slice(8, 12).join("")}-${bytes.slice(12, 16).join("")}-${bytes.slice(16, 20).join("")}-${bytes.slice(20, 32).join("")}`;
+}
+
+/**
+ * Materializes only dependency-eligible worker records. The mission may have more total roles
+ * than its concurrent-worker budget; later workers are created from the durable task graph only
+ * after their prerequisites complete. A stable worker ID makes queue redelivery idempotent.
+ */
+export async function queueMissionWorkers(input: { userId: number; mission: LunaMission }) {
+  const snapshot = await getLunaCognitiveSnapshot(input.userId);
+  const tasks = snapshot.tasks.filter(task => task.missionId === input.mission.id);
+  const existing = snapshot.workers.filter(worker => worker.missionId === input.mission.id);
+  const active = existing.filter(worker => ["QUEUED", "RUNNING", "WAITING"].includes(worker.state)).length;
+  const capacity = Math.max(0, input.mission.maxWorkers - active);
+  if (!capacity) return [];
+
   const workers = [];
-  for (const role of roles) {
-    const task = input.tasks.find(item => item.workerRole === role) ?? null;
-    workers.push(await createLunaWorker({ userId: input.userId, missionId: input.mission.id, taskId: task?.id ?? null, role, inputSummary: task?.details ?? `Durable role ${role} is awaiting its eligible handoff.` }));
+  for (const task of calculateEligibleTasks(tasks).slice(0, capacity)) {
+    if (!task.workerRole) continue;
+    const workerId = deterministicWorkerId(input.mission.id, task.id);
+    const existingWorker = existing.find(worker => worker.id === workerId) ?? null;
+    if (existingWorker?.state === "PAUSED") {
+      const requeued = await updateLunaWorker({ userId: input.userId, workerId, missionId: input.mission.id, state: "QUEUED", resetForRetry: true, actor: "luna:queue" });
+      await recordLunaRuntimeEvent({ userId: input.userId, action: "WORKER_REQUEUED", subjectType: "WORKER", subjectId: requeued.id, missionId: input.mission.id, workerId: requeued.id, actor: "luna:queue", detail: { taskId: task.id, role: requeued.role, reason: "Mission resumed." } });
+      workers.push(requeued);
+      continue;
+    }
+    if (existingWorker) continue;
+    const worker = await createLunaWorker({
+      userId: input.userId,
+      workerId,
+      missionId: input.mission.id,
+      taskId: task.id,
+      role: task.workerRole,
+      inputSummary: task.details,
+      actor: "luna:queue",
+    });
+    await recordLunaRuntimeEvent({
+      userId: input.userId,
+      action: "WORKER_MATERIALIZED",
+      subjectType: "WORKER",
+      subjectId: worker.id,
+      missionId: input.mission.id,
+      workerId: worker.id,
+      actor: "luna:queue",
+      detail: { taskId: task.id, role: worker.role, idempotentWorkerId: workerId },
+    });
+    workers.push(worker);
   }
   return workers;
 }
@@ -124,16 +173,28 @@ export async function dispatchLunaMission(input: { userId: number; missionId: st
   if (status.status !== "CONFIGURED") {
     return { mission: await markLunaMissionWaitingForRuntime({ userId: input.userId, missionId: mission.id, detail: status.detail }), runtime: { provider: runtime.provider, ...status } satisfies LunaRuntimeAvailability, accepted: false };
   }
-  const result = await runtime.dispatch({ missionId: mission.id, workspaceId: mission.workspaceId, idempotencyKey: `mission:${mission.id}` });
+  if (mission.runtimeRunId && mission.status === "RUNNING") {
+    return { mission, runtime: { provider: runtime.provider, ...status } satisfies LunaRuntimeAvailability, accepted: true };
+  }
+  const result = await runtime.dispatch({ missionId: mission.id, workspaceId: mission.workspaceId, idempotencyKey: `mission:${mission.id}:${mission.resumeAfter ?? "initial"}` });
   if (!result.accepted || !result.runId) {
     return { mission: await markLunaMissionWaitingForRuntime({ userId: input.userId, missionId: mission.id, detail: result.message }), runtime: { provider: runtime.provider, status: result.runtimeStatus, detail: result.message } satisfies LunaRuntimeAvailability, accepted: false };
   }
-  const updated = await updateLunaMission({ userId: input.userId, missionId: mission.id, status: "RUNNING", runtimeRunId: result.runId, currentFocus: "Durable worker runtime accepted mission dispatch", actor: "luna:runtime", reason: "Configured runtime accepted a durable mission dispatch." });
+  const updated = await updateLunaMission({ userId: input.userId, missionId: mission.id, status: "RUNNING", runtimeRunId: result.runId, currentFocus: "Vercel Queue accepted durable mission dispatch", errorMessage: null, started: !mission.startedAt, actor: "luna:runtime", reason: "Vercel Queue accepted a provider-issued durable mission run." });
+  await recordLunaRuntimeEvent({ userId: input.userId, action: "MISSION_QUEUE_ACCEPTED", subjectType: "MISSION", subjectId: mission.id, missionId: mission.id, actor: "luna:runtime", detail: { provider: runtime.provider, runtimeRunId: result.runId, providerMessage: result.message } });
   return { mission: updated, runtime: { provider: runtime.provider, status: result.runtimeStatus, detail: result.message } satisfies LunaRuntimeAvailability, accepted: true };
 }
 
 export async function pauseLunaMission(userId: number, missionId: string) {
-  return updateLunaMission({ userId, missionId, status: "PAUSED", pauseRequested: true, currentFocus: "Paused by owner", actor: "owner", reason: "Owner paused mission." });
+  const snapshot = await getLunaCognitiveSnapshot(userId);
+  const mission = snapshot.missions.find(item => item.id === missionId);
+  if (!mission) throw new Error("Luna mission was not found in this owner workspace.");
+  const paused = await updateLunaMission({ userId, missionId, status: "PAUSED", pauseRequested: true, currentFocus: "Paused by owner", actor: "owner", reason: "Owner paused mission." });
+  for (const worker of snapshot.workers.filter(item => item.missionId === missionId && ["QUEUED", "WAITING"].includes(item.state))) {
+    await updateLunaWorker({ userId, workerId: worker.id, missionId, state: "PAUSED", actor: "owner" });
+  }
+  await recordLunaRuntimeEvent({ userId, action: "MISSION_PAUSED", subjectType: "MISSION", subjectId: missionId, missionId, actor: "owner", detail: { runtimeRunId: mission.runtimeRunId, activeWorkersAtRequest: snapshot.workers.filter(item => item.missionId === missionId && item.state === "RUNNING").length } });
+  return paused;
 }
 
 export async function cancelLunaMission(userId: number, missionId: string) {
@@ -145,12 +206,14 @@ export async function cancelLunaMission(userId: number, missionId: string) {
   const updated = await updateLunaMission({ userId, missionId, status: "CANCELLED", cancelRequested: true, currentFocus: "Cancelled by owner", finished: true, actor: "owner", reason: "Owner cancelled mission." });
   for (const worker of snapshot.workers.filter(item => item.missionId === missionId && ["QUEUED", "RUNNING", "WAITING", "PAUSED"].includes(item.state))) {
     await updateLunaWorker({ userId, workerId: worker.id, missionId, state: "CANCELLED", actor: "owner" });
+    if (worker.taskId) await updateLunaTask({ userId, taskId: worker.taskId, status: "CANCELLED", actor: "owner", reason: "Owner cancelled the mission before this worker task completed." });
   }
+  await recordLunaRuntimeEvent({ userId, action: "MISSION_CANCELLED", subjectType: "MISSION", subjectId: missionId, missionId, actor: "owner", detail: { runtimeRunId: mission.runtimeRunId, cancellationMethod: "Persisted lifecycle flag checked by private queue consumer at safe execution boundaries." } });
   return updated;
 }
 
 export async function resumeLunaMission(userId: number, missionId: string, runtime?: LunaDurableRuntime) {
-  const resumed = await updateLunaMission({ userId, missionId, status: "QUEUED", pauseRequested: false, cancelRequested: false, currentFocus: "Queued for durable resumption", actor: "owner", reason: "Owner resumed mission." });
+  const resumed = await updateLunaMission({ userId, missionId, status: "QUEUED", pauseRequested: false, cancelRequested: false, runtimeRunId: null, resumeAfter: new Date().toISOString(), currentFocus: "Queued for durable resumption", actor: "owner", reason: "Owner resumed mission; a new provider queue message is required." });
   return dispatchLunaMission({ userId, missionId: resumed.id, runtime });
 }
 
