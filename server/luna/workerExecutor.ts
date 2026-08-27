@@ -64,11 +64,6 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
   if (!mission || !worker) throw new Error("Persisted Luna mission or worker is unavailable.");
   if (mission.cancelRequested || mission.status === "CANCELLED") throw new Error("Cancelled Luna mission cannot execute a worker step.");
   if (mission.pauseRequested || mission.status === "PAUSED") throw new Error("Paused Luna mission cannot execute a worker step.");
-  if (mission.modelRequestsUsed >= mission.maxModelRequests || mission.tokenUsage >= mission.maxTokenBudget) {
-    await updateLunaMission({ userId: input.userId, missionId: mission.id, status: "LIMIT_REACHED", currentFocus: "Mission budget limit reached", finished: true, actor: "luna:orchestrator", reason: "Model request or token budget was already exhausted." });
-    await createLunaAttention({ userId: input.userId, missionId: mission.id, severity: "ACTION_REQUIRED", category: "MISSION", title: "Luna mission budget limit reached", detail: "No additional model or worker action was started after the persisted budget limit was reached.", actor: "luna:orchestrator" });
-    throw new Error("Luna mission budget limit reached.");
-  }
   if (!["QUEUED", "WAITING", "PAUSED"].includes(worker.state)) throw new Error("Only a queued, waiting, or paused worker can execute a durable step.");
   const task = worker.taskId ? snapshot.tasks.find(item => item.id === worker.taskId) ?? null : null;
   if (task && !["ELIGIBLE", "PENDING"].includes(task.status)) throw new Error("Worker task is not eligible for execution.");
@@ -89,7 +84,8 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
     let output: string;
     let modelRequestUsed = false;
     let estimatedTokens = 0;
-    if (["MEMORY_AGENT", "MAINTENANCE_AGENT", "PLANNER_AGENT"].includes(worker.role)) {
+    const modelBudgetAvailable = mission.modelRequestsUsed < mission.maxModelRequests && mission.tokenUsage < mission.maxTokenBudget;
+    if (["MEMORY_AGENT", "MAINTENANCE_AGENT", "PLANNER_AGENT"].includes(worker.role) || !modelBudgetAvailable) {
       output = deterministicWorkerResult({ role: worker.role, objective: mission.objective, contextCount: context.memories.length });
     } else if (!model.isConfigured()) {
       output = deterministicWorkerResult({ role: worker.role, objective: mission.objective, contextCount: context.memories.length });
