@@ -515,7 +515,7 @@ export async function reviseLunaClaim(input: { userId: number; claimId: string; 
   const row = await patch("luna_claims", scopedParams(workspace.id, "*", { id: `eq.${input.claimId}`, limit: "1" }), patchValues);
   const revised = mapClaim(row); const actor = input.actor ?? workspace.ownerScope;
   const revisionKind: LunaClaimRevision["revisionKind"] = revised.lifecycleState === "SUPERSEDED" ? "SUPERSEDED" : revised.lifecycleState === "RETRACTED" ? "RETRACTED" : "REVISED";
-  await createLunaClaimRevisionRecord({ workspaceId: workspace.id, claimId: revised.id, priorClaimId: current.id, revisionKind, reason: requiredText(input.reason, "Claim revision reason", 3, 4_000), actor, snapshot: asRecord(row) });
+  await createLunaClaimRevisionRecord({ workspaceId: workspace.id, claimId: revised.id, revisionKind, reason: requiredText(input.reason, "Claim revision reason", 3, 4_000), actor, snapshot: asRecord(row) });
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "CLAIM_REVISED", subjectType: "CLAIM", subjectId: revised.id, missionId: revised.missionId, detail: { priorVersion: current.currentVersion, version: revised.currentVersion, revisionKind, lifecycleState: revised.lifecycleState } });
   return revised;
 }
