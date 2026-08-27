@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("Vercel deployment routing", () => {
-  it("keeps ordinary /api routes on the released Express router when an exact private Queue function exists", async () => {
+  it("rewrites ordinary /api routes to the released Express router while excluding the exact private Queue function", async () => {
     const config = JSON.parse(
       await readFile(resolve(process.cwd(), "vercel.json"), "utf8"),
     ) as {
@@ -14,7 +14,7 @@ describe("Vercel deployment routing", () => {
       headers?: Array<{ source?: string; headers?: Array<{ key?: string; value?: string }> }>;
     };
     const relay = await readFile(
-      resolve(process.cwd(), "api", "[...path].ts"),
+      resolve(process.cwd(), "api", "index.ts"),
       "utf8",
     );
 
@@ -31,6 +31,10 @@ describe("Vercel deployment routing", () => {
       },
     });
     expect(config.rewrites).toEqual([
+      {
+        source: "/api/:path((?!luna/queue-consumer(?:/|$)).*)",
+        destination: "/api?path=:path*",
+      },
       {
         source: "/:path((?!api(?:/|$)|assets(?:/|$)).*)",
         destination: "/index.html",
@@ -53,7 +57,8 @@ describe("Vercel deployment routing", () => {
 
     expect(relay).toContain('import expressApp from "../server/vercel-entry"');
     expect(relay).toContain("function restoreExpressApiPath");
-    expect(relay).toContain('path === "/api" || path.startsWith("/api/")');
+    expect(relay).toContain('path.startsWith("/api/")');
+    expect(relay).toContain("const routeValue = request.query?.path");
     expect(relay).toContain("request.url = `/api/${normalizedPath}${query}`");
     expect(relay).toContain("return expressApp(request, response)");
   });

@@ -33,6 +33,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/api/:path((?!luna/queue-consumer(?:/|$)).*)",
+      "destination": "/api?path=:path*"
+    },
     { "source": "/:path((?!api(?:/|$)|assets(?:/|$)).*)", "destination": "/index.html" }
   ]
 }
