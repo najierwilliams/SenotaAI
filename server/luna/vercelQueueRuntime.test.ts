@@ -48,7 +48,7 @@ describe("Vercel Queue Luna durable runtime", () => {
   });
 
   it("retries only retryable queue failures and acknowledges terminal failures", () => {
-    expect(lunaQueueRetry(new Error("retry"), metadata(1))).toEqual({ afterSeconds: 5 });
+    expect(lunaQueueRetry(new Error("retry"), metadata(1))).toBeUndefined();
     expect(lunaQueueRetry(new Error("retry"), metadata(6))).toEqual({ acknowledge: true });
   });
 });

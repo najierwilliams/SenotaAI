@@ -187,9 +187,11 @@ export async function handleLunaQueueMessage(message: unknown, metadata: Message
   return runWorker(message, metadata, dependencies);
 }
 
-export function lunaQueueRetry(error: unknown, metadata: MessageMetadata): RetryDirective {
+export function lunaQueueRetry(error: unknown, metadata: MessageMetadata): RetryDirective | undefined {
   if (error instanceof LunaQueueTerminalError || metadata.deliveryCount >= MAX_QUEUE_DELIVERIES) return { acknowledge: true };
-  return { afterSeconds: retryDelaySeconds(metadata.deliveryCount) };
+  // No directive intentionally leaves the private callback failed. Vercel Queue then redelivers
+  // from the configured private trigger, preserving provider rather than application retry proof.
+  return undefined;
 }
 
 export function createLunaQueueConsumer() {

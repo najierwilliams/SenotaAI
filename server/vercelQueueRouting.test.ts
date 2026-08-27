@@ -8,7 +8,7 @@ describe("Vercel Queue and Express function layout", () => {
     const pkg = JSON.parse(await readFile(resolve(process.cwd(), "package.json"), "utf8")) as { scripts: { build: string } };
     expect(config.functions["api/index.ts"].includeFiles).toBe("server.js");
     expect(config.functions["api/luna/queue-consumer.ts"].includeFiles).toBe("api/luna/queue-consumer.bundle.js");
-    expect(config.functions["api/luna/queue-consumer.ts"].experimentalTriggers).toEqual([{ type: "queue/v2beta", topic: "luna_worker_v1" }]);
+    expect(config.functions["api/luna/queue-consumer.ts"].experimentalTriggers).toEqual([{ type: "queue/v2beta", topic: "luna_worker_v1", retryAfterSeconds: 5 }]);
     expect(config.rewrites).toContainEqual({ source: "/api/:path((?!luna/queue-consumer(?:/|$)).*)", destination: "/api" });
     expect(pkg.scripts.build).toContain("--outfile=api/luna/queue-consumer.bundle.js");
   });

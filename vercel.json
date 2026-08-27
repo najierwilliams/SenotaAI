@@ -7,7 +7,7 @@
     "api/index.ts": { "includeFiles": "server.js" },
     "api/luna/queue-consumer.ts": {
       "includeFiles": "api/luna/queue-consumer.bundle.js",
-      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "luna_worker_v1" }]
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "luna_worker_v1", "retryAfterSeconds": 5 }]
     }
   },
   "headers": [
