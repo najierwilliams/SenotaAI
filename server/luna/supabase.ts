@@ -265,11 +265,42 @@ async function cognitiveAudit(input: { workspaceId: string; actor: string; actio
   });
 }
 
-async function cognitiveVersion(input: { workspaceId: string; subjectType: string; subjectId: string | null; version: number; action: string; actor: string; reason: string; snapshot: Record<string, unknown>; missionId?: string | null }) {
-  await insert("luna_cognitive_versions", {
-    workspace_id: input.workspaceId, subject_type: input.subjectType, subject_id: input.subjectId, version: input.version,
-    action: input.action, changed_by: input.actor, reason: input.reason, snapshot: input.snapshot, mission_id: input.missionId ?? null,
-  });
+type LunaCognitiveVersionInput = { workspaceId: string; subjectType: string; subjectId: string | null; version: number; action: string; actor: string; reason: string; snapshot: Record<string, unknown>; missionId?: string | null };
+
+function isUniqueCognitiveVersionConflict(error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail.includes("23505") && detail.includes("luna_cognitive_versions");
+}
+
+/**
+ * Preserves immutable audit/version entries when independent Queue callbacks update the
+ * same mission concurrently. A unique-conflict retry allocates a new monotonic version;
+ * it never overwrites the already persisted concurrent version.
+ */
+export async function persistLunaCognitiveVersion(input: LunaCognitiveVersionInput, dependencies: {
+  insertVersion?: (values: Record<string, unknown>) => Promise<unknown>;
+  nextVersion?: (workspaceId: string, subjectType: string, subjectId: string) => Promise<number>;
+} = {}) {
+  const insertVersion = dependencies.insertVersion ?? ((values: Record<string, unknown>) => insert("luna_cognitive_versions", values));
+  const nextVersion = dependencies.nextVersion ?? nextCognitiveVersion;
+  let version = input.version;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      await insertVersion({
+        workspace_id: input.workspaceId, subject_type: input.subjectType, subject_id: input.subjectId, version,
+        action: input.action, changed_by: input.actor, reason: input.reason, snapshot: input.snapshot, mission_id: input.missionId ?? null,
+      });
+      return version;
+    } catch (error) {
+      if (!input.subjectId || !isUniqueCognitiveVersionConflict(error) || attempt === 5) throw error;
+      version = await nextVersion(input.workspaceId, input.subjectType, input.subjectId);
+    }
+  }
+  throw new Error("Luna cognitive version allocation exhausted unexpectedly.");
+}
+
+async function cognitiveVersion(input: LunaCognitiveVersionInput) {
+  await persistLunaCognitiveVersion(input);
 }
 
 async function workspaceFor(userId: number) {
