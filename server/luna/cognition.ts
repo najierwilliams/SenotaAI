@@ -67,7 +67,7 @@ export function retrieveRelevantMemories(input: { query: string; memories: LunaM
   const limit = Math.min(Math.max(input.limit ?? 8, 1), 20);
   return input.memories
     .filter(memory => memory.active)
-    .filter(memory => !input.projectId || memory.projectId === input.projectId || memory.memoryKind === "SELF")
+    .filter(memory => !input.projectId || memory.projectId === null || memory.projectId === input.projectId || memory.memoryKind === "SELF")
     .map(memory => {
       const textTerms = new Set([...terms(memory.content), ...memory.tags.flatMap(terms)]);
       const matchedTerms = queryTerms.filter(term => textTerms.has(term));

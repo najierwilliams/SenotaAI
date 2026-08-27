@@ -15,6 +15,7 @@ import {
   listLunaMissions,
   listLunaTasks,
 } from "./supabase";
+import { buildObservedLunaSelfModel, explainMemoryRetrieval } from "./milestone1";
 
 export type LunaActivitySummary = {
   currentObjective: string | null;
@@ -32,6 +33,13 @@ export async function retrieveLunaContext(input: { userId: number; query: string
   return {
     memories: retrieved,
     promptContext: buildBoundedCognitiveContext({ objective: input.query, memories: retrieved }),
+    explanation: explainMemoryRetrieval({
+      query: input.query,
+      limit: input.limit ?? 8,
+      memories,
+      retrieved,
+      projectId: input.projectId,
+    }),
   };
 }
 
@@ -100,5 +108,14 @@ export async function getLunaCognitiveHome(userId: number) {
     getLunaActivitySummary(userId),
     getOrCreateLunaSelfState(userId),
   ]);
-  return { snapshot, summary, self };
+  const observedSelfModel = buildObservedLunaSelfModel({
+    self: self.self,
+    state: snapshot.state,
+    memories: snapshot.memories,
+    missionStatuses: snapshot.missions.map(mission => mission.status),
+    workerStates: snapshot.workers.map(worker => worker.state),
+    reflectionCount: snapshot.reflections.length,
+    unresolvedAttentionCount: snapshot.attention.filter(item => item.state === "OPEN").length,
+  });
+  return { snapshot, summary, self, observedSelfModel };
 }
