@@ -3,40 +3,19 @@
   "framework": "express",
   "buildCommand": "pnpm build",
   "functions": {
-    "server.js": {
-      "includeFiles": "public/**"
-    },
-    "api/luna/queue-consumer.js": {
-      "experimentalTriggers": [
-        { "type": "queue/v2beta", "topic": "luna_worker_v1" }
-      ]
+    "server.js": { "includeFiles": "public/**" },
+    "api/index.ts": { "includeFiles": "server.js" },
+    "api/luna/queue-consumer.ts": {
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "luna_worker_v1" }]
     }
   },
   "headers": [
-    {
-      "source": "/index.html",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
-      ]
-    },
-    {
-      "source": "/:path((?!api(?:/|$)|assets(?:/|$)).*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }
-      ]
-    },
-    {
-      "source": "/assets/:path*",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31556952, immutable" }
-      ]
-    }
+    { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }] },
+    { "source": "/:path((?!api(?:/|$)|assets(?:/|$)).*)", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0, must-revalidate" }] },
+    { "source": "/assets/:path*", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31556952, immutable" }] }
   ],
   "rewrites": [
-    {
-      "source": "/api/:path((?!luna/queue-consumer(?:/|$)).*)",
-      "destination": "/api?path=:path*"
-    },
+    { "source": "/api/:path((?!luna/queue-consumer(?:/|$)).*)", "destination": "/api" },
     { "source": "/:path((?!api(?:/|$)|assets(?:/|$)).*)", "destination": "/index.html" }
   ]
 }

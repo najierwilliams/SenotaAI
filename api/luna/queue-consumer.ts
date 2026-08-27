@@ -1,9 +1,7 @@
-const queueConsumerBundlePath = "../../server/luna/queue-consumer.bundle.js";
-const queueConsumer = import(queueConsumerBundlePath).then(
-  (module) => module.default as (...args: any[]) => unknown,
-);
+import { createLunaQueueConsumer } from "../../server/luna/vercelQueueConsumer";
 
-/** Vercel Queue private callback wrapper; never mounted in the public Express router. */
-export default async function queueConsumerCallback(...args: any[]) {
-  return (await queueConsumer)(...args);
-}
+/**
+ * Private Vercel Queue push consumer. Its `queue/v2beta` trigger makes this
+ * function unreachable from the public internet; it is not Express-mounted.
+ */
+export default createLunaQueueConsumer();
