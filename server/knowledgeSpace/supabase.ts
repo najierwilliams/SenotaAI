@@ -667,6 +667,9 @@ export async function createKnowledgeObject(input: {
   scientificMetadata?: KnowledgeScientificMetadata;
   provenance?: KnowledgeProvenance;
   parentObjectId?: string | null;
+  actor?: string;
+  cognitiveMissionId?: string | null;
+  reason?: string;
 }): Promise<KnowledgeObject> {
   const workspace = await getOrCreateKnowledgeWorkspace(input.userId);
   const row = await insert<Record<string, unknown>>(KNOWLEDGE_TABLE, {
@@ -697,10 +700,13 @@ export async function createKnowledgeObject(input: {
       sort_order: 0,
     });
   }
-  await writeVersion(object, "CREATED", workspace.ownerScope, "Knowledge object created.");
-  await audit(workspace.id, workspace.ownerScope, "KNOWLEDGE_CREATED", object.objectType, object.id, {
+  const actor = input.actor ?? workspace.ownerScope;
+  const reason = input.reason ?? "Knowledge object created.";
+  await writeVersion(object, "CREATED", actor, reason);
+  await audit(workspace.id, actor, "KNOWLEDGE_CREATED", object.objectType, object.id, {
     sourceType: object.sourceType,
     truthState: object.truthState,
+    cognitiveMissionId: input.cognitiveMissionId ?? null,
   });
   return object;
 }

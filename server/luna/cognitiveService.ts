@@ -1,0 +1,104 @@
+import {
+  buildBoundedCognitiveContext,
+  calculateCognitiveHealth,
+  deriveAttentionFromState,
+  findExactDuplicateMemoryClusters,
+  retrieveRelevantMemories,
+} from "./cognition";
+import {
+  archiveDuplicateLunaMemory,
+  createLunaAttention,
+  getLunaCognitiveSnapshot,
+  getOrCreateLunaSelfState,
+  listLunaAttention,
+  listLunaMemories,
+  listLunaMissions,
+  listLunaTasks,
+} from "./supabase";
+
+export type LunaActivitySummary = {
+  currentObjective: string | null;
+  currentTask: string | null;
+  activeWorkers: number;
+  recentAction: string | null;
+  nextAction: string | null;
+  blockers: string[];
+  health: "HEALTHY" | "DEGRADED" | "ACTION_REQUIRED";
+};
+
+export async function retrieveLunaContext(input: { userId: number; query: string; projectId?: string | null; limit?: number }) {
+  const memories = await listLunaMemories(input.userId, 200);
+  const retrieved = retrieveRelevantMemories({ query: input.query, memories, projectId: input.projectId, limit: input.limit ?? 8 });
+  return {
+    memories: retrieved,
+    promptContext: buildBoundedCognitiveContext({ objective: input.query, memories: retrieved }),
+  };
+}
+
+/**
+ * Consolidates only byte-for-byte normalized duplicates. It never silently merges semantic
+ * near-matches, source/provider evidence, or manually created user memories.
+ */
+export async function consolidateLunaOwnedExactDuplicateMemories(input: { userId: number; missionId?: string | null }) {
+  const memories = await listLunaMemories(input.userId, 200);
+  const clusters = findExactDuplicateMemoryClusters(memories)
+    .filter(cluster => {
+      const duplicateRows = cluster.duplicateMemoryIds.map(id => memories.find(memory => memory.id === id)).filter(Boolean);
+      return duplicateRows.every(memory => memory?.sourceType === "LUNA" || memory?.sourceType === "SYSTEM");
+    });
+  const archived = [] as string[];
+  for (const cluster of clusters) {
+    for (const duplicateMemoryId of cluster.duplicateMemoryIds) {
+      await archiveDuplicateLunaMemory({ userId: input.userId, canonicalMemoryId: cluster.canonicalMemoryId, duplicateMemoryId, missionId: input.missionId ?? null });
+      archived.push(duplicateMemoryId);
+    }
+  }
+  return { clusters, archivedMemoryIds: archived };
+}
+
+/** Creates attention records only for factual persisted-state conditions. */
+export async function reconcileLunaAttention(input: { userId: number }) {
+  const [tasks, missions, memories, existing] = await Promise.all([
+    listLunaTasks(input.userId),
+    listLunaMissions(input.userId),
+    listLunaMemories(input.userId, 200),
+    listLunaAttention(input.userId),
+  ]);
+  const generated = deriveAttentionFromState({ tasks, missions, memories });
+  const openKeys = new Set(existing.filter(item => item.state === "OPEN").map(item => `${item.severity}|${item.category}|${item.title}|${item.detail}`));
+  const created = [];
+  for (const item of generated) {
+    const key = `${item.severity}|${item.category}|${item.title}|${item.detail}`;
+    if (openKeys.has(key)) continue;
+    created.push(await createLunaAttention({ userId: input.userId, ...item, actor: "luna:maintenance" }));
+    openKeys.add(key);
+  }
+  return created;
+}
+
+export async function getLunaActivitySummary(userId: number): Promise<LunaActivitySummary> {
+  const snapshot = await getLunaCognitiveSnapshot(userId);
+  const activeMission = snapshot.missions.find(mission => ["RUNNING", "PLANNING", "WAITING_FOR_PROVIDER", "WAITING_FOR_RUNTIME"].includes(mission.status)) ?? null;
+  const activeTask = snapshot.tasks.find(task => task.status === "IN_PROGRESS") ?? snapshot.tasks.find(task => task.status === "ELIGIBLE") ?? null;
+  const recent = snapshot.activity[0] ?? null;
+  const health = calculateCognitiveHealth({ tasks: snapshot.tasks, missions: snapshot.missions, memories: snapshot.memories, attention: snapshot.attention });
+  const blockers = snapshot.attention.filter(item => item.state === "OPEN" && item.severity === "ACTION_REQUIRED").map(item => item.title).slice(0, 8);
+  return {
+    currentObjective: activeMission?.objective ?? null,
+    currentTask: activeTask?.title ?? null,
+    activeWorkers: snapshot.workers.filter(worker => ["QUEUED", "RUNNING", "WAITING"].includes(worker.state)).length,
+    recentAction: recent ? `${recent.action}: ${recent.subjectType}` : null,
+    nextAction: activeTask ? `Run eligible task: ${activeTask.title}` : activeMission?.status === "WAITING_FOR_RUNTIME" ? "Await durable-runtime activation or dispatch through a configured runtime." : null,
+    blockers,
+    health: health.health,
+  };
+}
+
+export async function getLunaCognitiveHome(userId: number) {
+  const [snapshot, summary, self] = await Promise.all([
+    getLunaCognitiveSnapshot(userId),
+    getLunaActivitySummary(userId),
+    getOrCreateLunaSelfState(userId),
+  ]);
+  return { snapshot, summary, self };
+}

@@ -10,6 +10,7 @@ import {
   KNOWLEDGE_WORKER_ROLES,
   isScientificTruthStateUserAssignable,
 } from "@shared/knowledgeSpace";
+import { LUNA_MEMORY_KINDS, LUNA_TRUTH_STATES } from "@shared/lunaCognitive";
 import { publicProcedure, router } from "../_core/trpc";
 import { KNOWLEDGE_OWNER_COOKIE, KNOWLEDGE_OWNER_ID, createKnowledgeOwnerSession, isKnowledgeOwnerConfigured, isValidKnowledgeOwnerPassword, isValidKnowledgeOwnerSession, readKnowledgeCookie } from "../knowledgeSpace/ownerAuth";
 import { getSessionCookieOptions } from "../_core/cookies";
@@ -36,6 +37,10 @@ import {
   updateKnowledgeObject,
 } from "../knowledgeSpace/supabase";
 import { runKnowledgeMission } from "../knowledgeSpace/missionRunner";
+import { consolidateLunaOwnedExactDuplicateMemories, getLunaActivitySummary, getLunaCognitiveHome, reconcileLunaAttention, retrieveLunaContext } from "../luna/cognitiveService";
+import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMission, resumeLunaMission, runLunaRecoverySweep } from "../luna/orchestrator";
+import { getLunaRuntimeAvailability } from "../luna/runtime";
+import { archiveDuplicateLunaMemory, createLunaGoal, createLunaMemory, createLunaProject, getLunaCognitiveSnapshot, rollbackLunaOwnedMemory, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = readKnowledgeCookie(ctx.req.header("cookie"));
@@ -55,6 +60,14 @@ const missionStateSchema = z.enum(KNOWLEDGE_MISSION_STATES);
 const uuidSchema = z.string().uuid();
 const boundedText = (max: number) => z.string().trim().max(max);
 const tagsSchema = z.array(z.string().trim().min(1).max(48)).max(24);
+const lunaMemoryKindSchema = z.enum(LUNA_MEMORY_KINDS);
+const lunaTruthStateSchema = z.enum(LUNA_TRUTH_STATES);
+
+function prohibitLunaTruthElevation(truthState: z.infer<typeof lunaTruthStateSchema>) {
+  if (["FACT", "EVIDENCE", "VALIDATED", "PROVIDER_CONFIRMED"].includes(truthState)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Luna cognitive notes may not be promoted to factual, evidence, validated, or provider-confirmed scientific authority. Use the immutable provider/reference registry for source facts." });
+  }
+}
 
 const scientificMetadataSchema = z.object({
   provider: boundedText(160).optional(),
@@ -402,6 +415,129 @@ export const knowledgeRouter = router({
       } catch (error) {
         return databaseError(error);
       }
+    }),
+  }),
+
+  cognitive: router({
+    status: publicProcedure.query(async () => ({
+      cloudReady: isKnowledgeSpaceCloudReady(),
+      runtime: await getLunaRuntimeAvailability(),
+      executionBoundary: "A durable provider must return a real run ID before Luna reports unattended mission execution.",
+      scientificBoundary: "P33_NOT_ESTABLISHED_AND_JULICH_UNMAPPED_REMAIN_LOCKED",
+      biologicalBoundary: "SOFTWARE_WORKERS_ONLY_NO_PHYSICAL_OR_BIOLOGICAL_NANOBOT_OPERATIONS",
+    })),
+
+    snapshot: knowledgeOwnerProcedure.query(async () => {
+      try { return await getLunaCognitiveSnapshot(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+    }),
+
+    home: knowledgeOwnerProcedure.query(async () => {
+      try { return await getLunaCognitiveHome(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+    }),
+
+    activity: knowledgeOwnerProcedure.query(async () => {
+      try { return await getLunaActivitySummary(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+    }),
+
+    context: knowledgeOwnerProcedure.input(z.object({ query: boundedText(2_000).min(1), projectId: uuidSchema.nullable().optional(), limit: z.number().int().min(1).max(20).optional() })).query(async ({ input }) => {
+      try { return await retrieveLunaContext({ userId: KNOWLEDGE_OWNER_ID, ...input }); } catch (error) { return databaseError(error); }
+    }),
+
+    self: router({
+      update: knowledgeOwnerProcedure.input(z.object({
+        currentFocus: boundedText(1_000).nullable().optional(),
+        autonomyEnabled: z.boolean().optional(),
+        maintenanceEnabled: z.boolean().optional(),
+        identitySummary: boundedText(4_000).optional(),
+        capabilities: z.array(boundedText(400).min(1)).max(30).optional(),
+        limitations: z.array(boundedText(400).min(1)).max(30).optional(),
+        uncertaintySummary: boundedText(4_000).optional(),
+        reason: boundedText(1_000).min(3),
+      }).refine(input => Object.keys(input).some(key => key !== "reason"), "Provide a cognitive-state update.")).mutation(async ({ input }) => {
+        try { return await updateLunaSelfState({ userId: KNOWLEDGE_OWNER_ID, ...input }); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    memory: router({
+      create: knowledgeOwnerProcedure.input(z.object({
+        memoryKind: lunaMemoryKindSchema,
+        content: boundedText(16_000).min(1),
+        importance: z.number().int().min(1).max(5).optional(),
+        truthState: lunaTruthStateSchema.default("INFERENCE"),
+        sourceType: z.enum(["USER", "LUNA", "SYSTEM"]),
+        sourceObjectIds: z.array(uuidSchema).max(100).optional(),
+        projectId: uuidSchema.nullable().optional(),
+        tags: tagsSchema.optional(),
+        provenance: z.record(z.string(), z.unknown()).optional(),
+      })).mutation(async ({ input }) => {
+        prohibitLunaTruthElevation(input.truthState);
+        try { return await createLunaMemory({ userId: KNOWLEDGE_OWNER_ID, ...input }); } catch (error) { return databaseError(error); }
+      }),
+      archive: knowledgeOwnerProcedure.input(z.object({
+        memoryId: uuidSchema,
+        reason: boundedText(1_000).min(3),
+      })).mutation(async ({ input }) => {
+        try {
+          return await updateLunaMemory({
+            userId: KNOWLEDGE_OWNER_ID,
+            memoryId: input.memoryId,
+            active: false,
+            archived: true,
+            actor: "knowledge-owner",
+            reason: input.reason,
+          });
+        } catch (error) { return databaseError(error); }
+      }),
+      rollback: knowledgeOwnerProcedure.input(z.object({
+        memoryId: uuidSchema,
+        version: z.number().int().min(1),
+        reason: boundedText(1_000).min(3),
+      })).mutation(async ({ input }) => {
+        try { return await rollbackLunaOwnedMemory({ userId: KNOWLEDGE_OWNER_ID, ...input }); } catch (error) { return databaseError(error); }
+      }),
+      consolidateExactDuplicates: knowledgeOwnerProcedure.mutation(async () => {
+        try { return await consolidateLunaOwnedExactDuplicateMemories({ userId: KNOWLEDGE_OWNER_ID }); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    project: router({
+      create: knowledgeOwnerProcedure.input(z.object({ title: boundedText(240).min(1), summary: boundedText(16_000).optional(), priority: z.number().int().min(1).max(5).optional(), focusObjectId: uuidSchema.nullable().optional() })).mutation(async ({ input }) => {
+        try { return await createLunaProject({ userId: KNOWLEDGE_OWNER_ID, ...input, createdBy: "USER" }); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    goal: router({
+      create: knowledgeOwnerProcedure.input(z.object({ title: boundedText(240).min(1), rationale: boundedText(16_000).min(1), projectId: uuidSchema.nullable().optional(), parentGoalId: uuidSchema.nullable().optional(), priority: z.number().int().min(1).max(5).optional(), truthState: lunaTruthStateSchema.default("PROPOSED") })).mutation(async ({ input }) => {
+        prohibitLunaTruthElevation(input.truthState);
+        try { return await createLunaGoal({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "owner" }); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    mission: router({
+      plan: knowledgeOwnerProcedure.input(z.object({ objective: boundedText(12_000).min(3), projectTitle: boundedText(240).optional(), focusObjectId: uuidSchema.nullable().optional(), priority: z.number().int().min(1).max(5).optional(), maxWorkers: z.number().int().min(1).max(12).optional(), maxModelRequests: z.number().int().min(0).max(100).optional(), maxTokenBudget: z.number().int().min(0).max(1_000_000).optional() })).mutation(async ({ input }) => {
+        try { return await planLunaMission({ userId: KNOWLEDGE_OWNER_ID, ...input }); } catch (error) { return databaseError(error); }
+      }),
+      dispatch: knowledgeOwnerProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ input }) => {
+        try { return await dispatchLunaMission({ userId: KNOWLEDGE_OWNER_ID, missionId: input.missionId }); } catch (error) { return databaseError(error); }
+      }),
+      pause: knowledgeOwnerProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ input }) => {
+        try { return await pauseLunaMission(KNOWLEDGE_OWNER_ID, input.missionId); } catch (error) { return databaseError(error); }
+      }),
+      cancel: knowledgeOwnerProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ input }) => {
+        try { return await cancelLunaMission(KNOWLEDGE_OWNER_ID, input.missionId); } catch (error) { return databaseError(error); }
+      }),
+      resume: knowledgeOwnerProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ input }) => {
+        try { return await resumeLunaMission(KNOWLEDGE_OWNER_ID, input.missionId); } catch (error) { return databaseError(error); }
+      }),
+      recover: knowledgeOwnerProcedure.mutation(async () => {
+        try { return await runLunaRecoverySweep(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    maintenance: router({
+      reconcile: knowledgeOwnerProcedure.mutation(async () => {
+        try { return await reconcileLunaAttention({ userId: KNOWLEDGE_OWNER_ID }); } catch (error) { return databaseError(error); }
+      }),
     }),
   }),
 });

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { LunaCognitiveConsole } from "@/components/knowledge/LunaCognitiveConsole";
 import {
   formatKnowledgeObjectType,
   formatKnowledgeTruthState,
@@ -21,6 +22,7 @@ import {
   BookOpen,
   Bot,
   Brain,
+  BrainCircuit,
   CheckCircle2,
   ChevronRight,
   CircleDot,
@@ -103,7 +105,7 @@ export default function KnowledgeSpace() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activePanel, setActivePanel] = useState<"workspace" | "graph" | "activity">("workspace");
+  const [activePanel, setActivePanel] = useState<"workspace" | "cognition" | "graph" | "activity">("workspace");
   const [query, setQuery] = useState("");
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [missionDialogOpen, setMissionDialogOpen] = useState(false);
@@ -262,6 +264,7 @@ export default function KnowledgeSpace() {
       <section className="grid gap-2 rounded-2xl border border-white/10 bg-card/60 p-2 sm:flex sm:items-center">
         {([
           ["workspace", FolderOpen, "Workspace"],
+          ["cognition", BrainCircuit, "Luna cognition"],
           ["graph", GitFork, "Knowledge graph"],
           ["activity", Activity, "Activity"],
         ] as const).map(([panel, Icon, label]) => <Button key={panel} variant="ghost" size="sm" onClick={() => setActivePanel(panel)} className={`justify-start rounded-xl ${activePanel === panel ? "bg-cyan-300/10 text-cyan-100" : "text-slate-400 hover:bg-white/5 hover:text-slate-100"}`}><Icon className="mr-2 size-4" />{label}</Button>)}
@@ -297,6 +300,7 @@ export default function KnowledgeSpace() {
         </div>
       ) : null}
 
+      {activePanel === "cognition" ? <LunaCognitiveConsole enabled={ownerAuthenticated} /> : null}
       {activePanel === "graph" ? <GraphPanel graph={graph.data} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setActivePanel("workspace"); }} /> : null}
       {activePanel === "activity" ? <ActivityPanel missions={missions} activity={activity} audit={audit.data ?? []} auditHint="Every persisted create, edit, soft-delete, restore, relationship, autonomy change, and mission transition creates a server-side audit event." /> : null}
 
