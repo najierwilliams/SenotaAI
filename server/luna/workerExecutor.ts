@@ -1,4 +1,5 @@
 import { workerContract, type LunaWorkerRole } from "@shared/lunaCognitive";
+import { shouldCreateMemoryRevision, shouldInjectControlledRetry } from "./acceptanceControls";
 import { createKnowledgeObject } from "../knowledgeSpace/supabase";
 import { retrieveLunaContext } from "./cognitiveService";
 import { invokeLunaControlledTool } from "./controlledTools";
@@ -12,6 +13,8 @@ import {
   updateLunaTask,
   updateLunaToolCall,
   updateLunaWorker,
+  updateLunaMemory,
+  recordLunaRuntimeEvent,
 } from "./supabase";
 
 const REPORT_CHARACTER_LIMIT = 18_000;
@@ -70,6 +73,13 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
 
   await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "RUNNING", actor: `luna:${worker.role.toLowerCase()}` });
   if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "IN_PROGRESS", actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker started a durable task step." });
+  if (shouldInjectControlledRetry({ objective: mission.objective, activity: snapshot.activity, workerId: worker.id })) {
+    const failure = "Luna acceptance control: deliberate first delivery failure after persisted worker start.";
+    await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "FAILED", errorMessage: failure, actor: "luna:acceptance" });
+    if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "RECOVERY_REQUIRED", errorMessage: failure, actor: "luna:acceptance", reason: "Acceptance control recorded an intentional worker interruption before Queue retry." });
+    await recordLunaRuntimeEvent({ userId: input.userId, action: "ACCEPTANCE_CONTROLLED_FAILURE", subjectType: "WORKER", subjectId: worker.id, missionId: mission.id, workerId: worker.id, actor: "luna:acceptance", detail: { control: "RETRY_ONCE", stage: "after_worker_started", guarantee: "The error is rethrown to QueueClient.handleNodeCallback so Vercel Queues, not a direct database mutation, schedules the retry." } });
+    throw new Error(failure);
+  }
   const toolCall = await createLunaToolCall({ userId: input.userId, missionId: mission.id, workerId: worker.id, toolName: "retrieve_persisted_context", toolClass: "KNOWLEDGE", requestSummary: "Retrieve bounded source-ranked Luna memory for a persisted worker task.", actor: `luna:${worker.role.toLowerCase()}` });
   await updateLunaToolCall({ userId: input.userId, missionId: mission.id, toolCallId: toolCall.id, status: "RUNNING", actor: `luna:${worker.role.toLowerCase()}` });
 
@@ -112,7 +122,11 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
       reason: "Bounded software-worker handoff persisted from durable mission context.",
     });
     if (contract.allowedOutputs.includes("MEMORY")) {
-      await createLunaMemory({ userId: input.userId, memoryKind: "RESEARCH", content: `${worker.role} completed a persisted handoff for mission ${mission.id}: ${output.slice(0, 1_400)}`, importance: 3, truthState: "INFERENCE", sourceType: "LUNA", sourceObjectIds: [report.id], projectId: mission.projectId, missionId: mission.id, tags: ["worker-handoff", worker.role.toLowerCase()], actor: workerActor });
+      const memory = await createLunaMemory({ userId: input.userId, memoryKind: "RESEARCH", content: `${worker.role} completed a persisted handoff for mission ${mission.id}: ${output.slice(0, 1_400)}`, importance: 3, truthState: "INFERENCE", sourceType: "LUNA", sourceObjectIds: [report.id], projectId: mission.projectId, missionId: mission.id, tags: ["worker-handoff", worker.role.toLowerCase()], actor: workerActor });
+      if (worker.role === "MEMORY_AGENT" && shouldCreateMemoryRevision({ objective: mission.objective, activity: snapshot.activity, workerId: worker.id })) {
+        const revised = await updateLunaMemory({ userId: input.userId, memoryId: memory.id, content: `${memory.content}\n\nAutonomous acceptance revision: this non-scientific, Luna-owned test record was updated by the bounded worker and remains an INFERENCE.`, actor: "luna:acceptance", reason: "Autonomous memory version-and-rollback acceptance control." });
+        await recordLunaRuntimeEvent({ userId: input.userId, action: "ACCEPTANCE_MEMORY_REVISION", subjectType: "MEMORY", subjectId: revised.id, missionId: mission.id, workerId: worker.id, actor: "luna:acceptance", detail: { control: "MEMORY_REVISION_ONCE", fromVersion: memory.currentVersion, toVersion: revised.currentVersion, truthState: "INFERENCE" } });
+      }
     }
     const nextWorker = snapshot.workers.find(item => item.missionId === mission.id && item.id !== worker.id && item.state === "QUEUED") ?? null;
     await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "COMPLETED", outputSummary: output.slice(0, 1_200), handoffToRole: nextWorker?.role ?? null, actor: `luna:${worker.role.toLowerCase()}` });
