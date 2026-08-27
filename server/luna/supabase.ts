@@ -309,15 +309,26 @@ export async function getOrCreateLunaSelfState(userId: number): Promise<{ self: 
   const params = scopedParams(workspace.id, "*", { limit: "1" });
   const existing = await rows("luna_cognitive_state", params);
   let row = existing[0];
+  let initialized = false;
   if (!row) {
-    row = await insert("luna_cognitive_state", {
-      workspace_id: workspace.id, owner_scope: workspace.ownerScope,
-      capabilities: ["Persistent Knowledge Space", "Evidence-bounded planning", "Audited software-worker coordination"],
-      limitations: ["Does not fabricate scientific evidence, provider records, coordinates, MNI registration, or Julich correspondence.", "Does not perform physical, clinical, cellular, molecular, or biological operations.", "Long-running background execution requires a configured durable runtime."],
-    });
+    try {
+      row = await insert("luna_cognitive_state", {
+        workspace_id: workspace.id, owner_scope: workspace.ownerScope,
+        capabilities: ["Persistent Knowledge Space", "Evidence-bounded planning", "Audited software-worker coordination"],
+        limitations: ["Does not fabricate scientific evidence, provider records, coordinates, MNI registration, or Julich correspondence.", "Does not perform physical, clinical, cellular, molecular, or biological operations.", "Long-running background execution requires a configured durable runtime."],
+      });
+      initialized = true;
+    } catch (error) {
+      const raced = await rows("luna_cognitive_state", params);
+      if (!raced[0]) throw error;
+      row = raced[0];
+    }
+  }
+  if (initialized && row) {
     await cognitiveVersion({ workspaceId: workspace.id, subjectType: "STATE", subjectId: workspace.id, version: 1, action: "CREATED", actor: "luna:system", reason: "Cognitive state initialized.", snapshot: asRecord(row) });
     await cognitiveAudit({ workspaceId: workspace.id, actor: "luna:system", action: "COGNITIVE_STATE_CREATED", subjectType: "STATE", subjectId: workspace.id, detail: { ownerScope: workspace.ownerScope } });
   }
+  if (!row) throw new Error("Luna cognitive state could not be loaded after initialization.");
   return { self: mapSelf(row), autonomyEnabled: asBoolean(row.autonomy_enabled), maintenanceEnabled: asBoolean(row.maintenance_enabled) };
 }
 
