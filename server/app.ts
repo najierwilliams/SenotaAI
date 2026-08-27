@@ -21,6 +21,7 @@ import { decayNanites } from "./npcMemory/nanites";
 import { verifyGitHubActionsReflectionToken } from "./npcMemory/reflectionSchedulerAuth";
 import { isGitHubCanonWebhookConfigured, processGitHubCanonPush, verifyGitHubCanonSignature } from "./npcMemory/githubCanonSync";
 import { NPC_ADMIN_COOKIE, createNpcAdminSession, isNpcAdminConfigured, isValidNpcAdminPassword, isValidNpcAdminSession } from "./npcMemory/adminAuth";
+import { KNOWLEDGE_OWNER_COOKIE, createKnowledgeOwnerSession, isKnowledgeOwnerConfigured, isValidKnowledgeOwnerPassword, isValidKnowledgeOwnerSession, readKnowledgeCookie } from "./knowledgeSpace/ownerAuth";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { appRouter } from "./routers";
 import { createContext } from "./_core/context";
@@ -71,6 +72,24 @@ export function createApp() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  app.post("/api/knowledge/owner/session", async (req, res) => {
+    if (!isKnowledgeOwnerConfigured()) return res.status(503).json({ error: "knowledge-owner-not-configured" });
+    const password = req.body?.password;
+    if (typeof password !== "string" || !isValidKnowledgeOwnerPassword(password)) return res.status(401).json({ error: "invalid-owner-password" });
+    res.cookie(KNOWLEDGE_OWNER_COOKIE, await createKnowledgeOwnerSession(), { ...getSessionCookieOptions(req), maxAge: 8 * 60 * 60 * 1000 });
+    return res.status(200).json({ ok: true });
+  });
+
+  app.get("/api/knowledge/owner/status", async (req, res) => {
+    const token = readKnowledgeCookie(req.header("cookie"));
+    return res.status(await isValidKnowledgeOwnerSession(token) ? 200 : 401).json({ configured: isKnowledgeOwnerConfigured(), authenticated: await isValidKnowledgeOwnerSession(token) });
+  });
+
+  app.delete("/api/knowledge/owner/session", async (req, res) => {
+    res.clearCookie(KNOWLEDGE_OWNER_COOKIE, { ...getSessionCookieOptions(req), maxAge: -1 });
+    return res.status(200).json({ ok: true });
+  });
 
   app.post("/api/npc/admin/session", async (req, res) => {
     if (!isNpcAdminConfigured()) return res.status(503).json({ error: "npc-admin-not-configured" });

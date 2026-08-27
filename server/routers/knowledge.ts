@@ -10,7 +10,9 @@ import {
   KNOWLEDGE_WORKER_ROLES,
   isScientificTruthStateUserAssignable,
 } from "@shared/knowledgeSpace";
-import { protectedProcedure, router } from "../_core/trpc";
+import { publicProcedure, router } from "../_core/trpc";
+import { KNOWLEDGE_OWNER_COOKIE, KNOWLEDGE_OWNER_ID, createKnowledgeOwnerSession, isKnowledgeOwnerConfigured, isValidKnowledgeOwnerPassword, isValidKnowledgeOwnerSession, readKnowledgeCookie } from "../knowledgeSpace/ownerAuth";
+import { getSessionCookieOptions } from "../_core/cookies";
 import {
   appendKnowledgeMissionActivity,
   createKnowledgeApproval,
@@ -34,6 +36,14 @@ import {
   updateKnowledgeObject,
 } from "../knowledgeSpace/supabase";
 import { runKnowledgeMission } from "../knowledgeSpace/missionRunner";
+
+const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
+  const token = readKnowledgeCookie(ctx.req.header("cookie"));
+  if (!await isValidKnowledgeOwnerSession(token)) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Knowledge Space requires the single-owner administrator session." });
+  }
+  return next({ ctx });
+});
 
 const objectTypeSchema = z.enum(KNOWLEDGE_OBJECT_TYPES);
 const sourceTypeSchema = z.enum(KNOWLEDGE_SOURCE_TYPES);
@@ -104,24 +114,41 @@ function databaseError(error: unknown): never {
 }
 
 export const knowledgeRouter = router({
-  status: protectedProcedure.query(() => ({
+  owner: router({
+    status: publicProcedure.query(async ({ ctx }) => {
+      const token = readKnowledgeCookie(ctx.req.header("cookie"));
+      return { configured: isKnowledgeOwnerConfigured(), authenticated: await isValidKnowledgeOwnerSession(token) };
+    }),
+    unlock: publicProcedure.input(z.object({ password: z.string().min(1).max(1_000) })).mutation(async ({ ctx, input }) => {
+      if (!isKnowledgeOwnerConfigured()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Knowledge Space administrator unlock is not configured." });
+      if (!isValidKnowledgeOwnerPassword(input.password)) throw new TRPCError({ code: "UNAUTHORIZED", message: "The administrator password is incorrect." });
+      ctx.res.cookie(KNOWLEDGE_OWNER_COOKIE, await createKnowledgeOwnerSession(), { ...getSessionCookieOptions(ctx.req), maxAge: 8 * 60 * 60 * 1000 });
+      return { authenticated: true, expiresInHours: 8 } as const;
+    }),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      ctx.res.clearCookie(KNOWLEDGE_OWNER_COOKIE, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+      return { authenticated: false } as const;
+    }),
+  }),
+
+  status: publicProcedure.query(() => ({
     cloudReady: isKnowledgeSpaceCloudReady(),
     persistence: isKnowledgeSpaceCloudReady() ? "server-only-supabase" : "unavailable",
     scientificBoundary: "P33_NOT_ESTABLISHED_REMAINS_LOCKED",
   })),
 
-  snapshot: protectedProcedure.query(async ({ ctx }) => {
+  snapshot: knowledgeOwnerProcedure.query(async ({ ctx }) => {
     try {
-      return await getKnowledgeWorkspaceSnapshot(ctx.user.id);
+      return await getKnowledgeWorkspaceSnapshot(KNOWLEDGE_OWNER_ID);
     } catch (error) {
       return databaseError(error);
     }
   }),
 
   object: router({
-    get: protectedProcedure.input(z.object({ objectId: uuidSchema })).query(async ({ ctx, input }) => {
+    get: knowledgeOwnerProcedure.input(z.object({ objectId: uuidSchema })).query(async ({ ctx, input }) => {
       try {
-        const object = await getKnowledgeObjectForUser(ctx.user.id, input.objectId);
+        const object = await getKnowledgeObjectForUser(KNOWLEDGE_OWNER_ID, input.objectId);
         if (!object) throw new TRPCError({ code: "NOT_FOUND", message: "Knowledge object not found." });
         return object;
       } catch (error) {
@@ -130,7 +157,7 @@ export const knowledgeRouter = router({
       }
     }),
 
-    create: protectedProcedure.input(z.object({
+    create: knowledgeOwnerProcedure.input(z.object({
       objectType: objectTypeSchema,
       title: boundedText(240).min(1),
       description: boundedText(12_000).optional(),
@@ -144,13 +171,13 @@ export const knowledgeRouter = router({
     })).mutation(async ({ ctx, input }) => {
       prohibitUnsupportedScientificElevation(input);
       try {
-        return await createKnowledgeObject({ userId: ctx.user.id, ...input });
+        return await createKnowledgeObject({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    update: protectedProcedure.input(z.object({
+    update: knowledgeOwnerProcedure.input(z.object({
       objectId: uuidSchema,
       title: boundedText(240).min(1).optional(),
       description: boundedText(12_000).optional(),
@@ -163,51 +190,51 @@ export const knowledgeRouter = router({
     }).refine((input) => Object.keys(input).some((key) => !["objectId", "reason"].includes(key)), "Provide at least one editable field."))
       .mutation(async ({ ctx, input }) => {
         try {
-          return await updateKnowledgeObject({ userId: ctx.user.id, ...input });
+          return await updateKnowledgeObject({ userId: KNOWLEDGE_OWNER_ID, ...input });
         } catch (error) {
           return databaseError(error);
         }
       }),
 
-    trash: protectedProcedure.input(z.object({ objectId: uuidSchema })).mutation(async ({ ctx, input }) => {
+    trash: knowledgeOwnerProcedure.input(z.object({ objectId: uuidSchema })).mutation(async ({ ctx, input }) => {
       try {
-        return await setKnowledgeObjectDeleted({ userId: ctx.user.id, objectId: input.objectId, deleted: true });
+        return await setKnowledgeObjectDeleted({ userId: KNOWLEDGE_OWNER_ID, objectId: input.objectId, deleted: true });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    restore: protectedProcedure.input(z.object({ objectId: uuidSchema })).mutation(async ({ ctx, input }) => {
+    restore: knowledgeOwnerProcedure.input(z.object({ objectId: uuidSchema })).mutation(async ({ ctx, input }) => {
       try {
-        return await setKnowledgeObjectDeleted({ userId: ctx.user.id, objectId: input.objectId, deleted: false });
+        return await setKnowledgeObjectDeleted({ userId: KNOWLEDGE_OWNER_ID, objectId: input.objectId, deleted: false });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    move: protectedProcedure.input(z.object({ objectId: uuidSchema, parentObjectId: uuidSchema.nullable() })).mutation(async ({ ctx, input }) => {
+    move: knowledgeOwnerProcedure.input(z.object({ objectId: uuidSchema, parentObjectId: uuidSchema.nullable() })).mutation(async ({ ctx, input }) => {
       try {
-        return await moveKnowledgeObject({ userId: ctx.user.id, ...input });
+        return await moveKnowledgeObject({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    reference: protectedProcedure.input(z.object({
+    reference: knowledgeOwnerProcedure.input(z.object({
       objectId: uuidSchema,
       parentObjectId: uuidSchema,
       label: boundedText(240).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       try {
-        return await createKnowledgeReference({ userId: ctx.user.id, ...input });
+        return await createKnowledgeReference({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    versions: protectedProcedure.input(z.object({ objectId: uuidSchema })).query(async ({ ctx, input }) => {
+    versions: knowledgeOwnerProcedure.input(z.object({ objectId: uuidSchema })).query(async ({ ctx, input }) => {
       try {
-        return await getKnowledgeVersions(ctx.user.id, input.objectId);
+        return await getKnowledgeVersions(KNOWLEDGE_OWNER_ID, input.objectId);
       } catch (error) {
         return databaseError(error);
       }
@@ -215,7 +242,7 @@ export const knowledgeRouter = router({
   }),
 
   relationship: router({
-    create: protectedProcedure.input(z.object({
+    create: knowledgeOwnerProcedure.input(z.object({
       sourceObjectId: uuidSchema,
       targetObjectId: uuidSchema,
       relationshipType: relationshipTypeSchema,
@@ -227,45 +254,45 @@ export const knowledgeRouter = router({
     })).mutation(async ({ ctx, input }) => {
       prohibitUnsupportedScientificElevation(input);
       try {
-        return await createKnowledgeRelationship({ userId: ctx.user.id, ...input });
+        return await createKnowledgeRelationship({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    graph: protectedProcedure.input(z.object({ focusObjectId: uuidSchema.optional() })).query(async ({ ctx, input }) => {
+    graph: knowledgeOwnerProcedure.input(z.object({ focusObjectId: uuidSchema.optional() })).query(async ({ ctx, input }) => {
       try {
-        return await getKnowledgeGraph(ctx.user.id, input.focusObjectId);
+        return await getKnowledgeGraph(KNOWLEDGE_OWNER_ID, input.focusObjectId);
       } catch (error) {
         return databaseError(error);
       }
     }),
   }),
 
-  search: protectedProcedure.input(z.object({ query: boundedText(120).optional() })).query(async ({ ctx, input }) => {
+  search: knowledgeOwnerProcedure.input(z.object({ query: boundedText(120).optional() })).query(async ({ ctx, input }) => {
     try {
-      return await searchKnowledge(ctx.user.id, input.query ?? "");
+      return await searchKnowledge(KNOWLEDGE_OWNER_ID, input.query ?? "");
     } catch (error) {
       return databaseError(error);
     }
   }),
 
-  audit: protectedProcedure.input(z.object({ limit: z.number().int().min(1).max(200).optional() })).query(async ({ ctx, input }) => {
+  audit: knowledgeOwnerProcedure.input(z.object({ limit: z.number().int().min(1).max(200).optional() })).query(async ({ ctx, input }) => {
     try {
-      return await getKnowledgeAudit(ctx.user.id, input.limit);
+      return await getKnowledgeAudit(KNOWLEDGE_OWNER_ID, input.limit);
     } catch (error) {
       return databaseError(error);
     }
   }),
 
   autonomy: router({
-    update: protectedProcedure.input(z.object({
+    update: knowledgeOwnerProcedure.input(z.object({
       autonomyLevel: autonomyLevelSchema.optional(),
       autonomyPaused: z.boolean().optional(),
     }).refine((input) => input.autonomyLevel !== undefined || input.autonomyPaused !== undefined, "Provide an autonomy setting."))
       .mutation(async ({ ctx, input }) => {
         try {
-          return await updateKnowledgeAutonomy({ userId: ctx.user.id, ...input });
+          return await updateKnowledgeAutonomy({ userId: KNOWLEDGE_OWNER_ID, ...input });
         } catch (error) {
           return databaseError(error);
         }
@@ -273,7 +300,7 @@ export const knowledgeRouter = router({
   }),
 
   mission: router({
-    create: protectedProcedure.input(z.object({
+    create: knowledgeOwnerProcedure.input(z.object({
       targetObjectId: uuidSchema.nullable().optional(),
       workerRole: workerRoleSchema,
       objective: boundedText(12_000).min(1),
@@ -285,48 +312,48 @@ export const knowledgeRouter = router({
       inputContext: z.record(z.string(), z.unknown()).optional(),
     })).mutation(async ({ ctx, input }) => {
       try {
-        return await createKnowledgeMission({ userId: ctx.user.id, ...input });
+        return await createKnowledgeMission({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    run: protectedProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ ctx, input }) => {
+    run: knowledgeOwnerProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ ctx, input }) => {
       try {
-        const mission = await getKnowledgeMissionForUser(ctx.user.id, input.missionId);
+        const mission = await getKnowledgeMissionForUser(KNOWLEDGE_OWNER_ID, input.missionId);
         if (!mission) throw new TRPCError({ code: "NOT_FOUND", message: "Knowledge worker mission not found." });
-        return await runKnowledgeMission(ctx.user.id, mission.id);
+        return await runKnowledgeMission(KNOWLEDGE_OWNER_ID, mission.id);
       } catch (error) {
         if (error instanceof TRPCError) throw error;
         return databaseError(error);
       }
     }),
 
-    stop: protectedProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ ctx, input }) => {
+    stop: knowledgeOwnerProcedure.input(z.object({ missionId: uuidSchema })).mutation(async ({ ctx, input }) => {
       try {
-        return await updateKnowledgeMission({ userId: ctx.user.id, missionId: input.missionId, state: "CANCELLED", stopRequested: true, errorMessage: "Stopped by user." });
+        return await updateKnowledgeMission({ userId: KNOWLEDGE_OWNER_ID, missionId: input.missionId, state: "CANCELLED", stopRequested: true, errorMessage: "Stopped by user." });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    stopAll: protectedProcedure.mutation(async ({ ctx }) => {
+    stopAll: knowledgeOwnerProcedure.mutation(async ({ ctx }) => {
       try {
-        return await stopKnowledgeMissions({ userId: ctx.user.id });
+        return await stopKnowledgeMissions({ userId: KNOWLEDGE_OWNER_ID });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    clearQueue: protectedProcedure.mutation(async ({ ctx }) => {
+    clearQueue: knowledgeOwnerProcedure.mutation(async ({ ctx }) => {
       try {
-        return await stopKnowledgeMissions({ userId: ctx.user.id, queuedOnly: true });
+        return await stopKnowledgeMissions({ userId: KNOWLEDGE_OWNER_ID, queuedOnly: true });
       } catch (error) {
         return databaseError(error);
       }
     }),
 
-    update: protectedProcedure.input(z.object({
+    update: knowledgeOwnerProcedure.input(z.object({
       missionId: uuidSchema,
       state: missionStateSchema.optional(),
       currentStep: z.number().int().min(0).max(50).optional(),
@@ -336,13 +363,13 @@ export const knowledgeRouter = router({
     }).refine((input) => Object.keys(input).some((key) => key !== "missionId"), "Provide a mission update."))
       .mutation(async ({ ctx, input }) => {
         try {
-          return await updateKnowledgeMission({ userId: ctx.user.id, ...input });
+          return await updateKnowledgeMission({ userId: KNOWLEDGE_OWNER_ID, ...input });
         } catch (error) {
           return databaseError(error);
         }
       }),
 
-    activity: protectedProcedure.input(z.object({
+    activity: knowledgeOwnerProcedure.input(z.object({
       missionId: uuidSchema,
       workerRole: workerRoleSchema,
       eventType: boundedText(80).min(1),
@@ -350,7 +377,7 @@ export const knowledgeRouter = router({
       detail: z.record(z.string(), z.unknown()).optional(),
     })).mutation(async ({ ctx, input }) => {
       try {
-        return await appendKnowledgeMissionActivity({ userId: ctx.user.id, ...input });
+        return await appendKnowledgeMissionActivity({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }
@@ -358,7 +385,7 @@ export const knowledgeRouter = router({
   }),
 
   approval: router({
-    create: protectedProcedure.input(z.object({
+    create: knowledgeOwnerProcedure.input(z.object({
       missionId: uuidSchema.nullable().optional(),
       targetObjectId: uuidSchema.nullable().optional(),
       actionType: boundedText(100).min(1),
@@ -371,7 +398,7 @@ export const knowledgeRouter = router({
       confidence: z.number().min(0).max(1).nullable().optional(),
     })).mutation(async ({ ctx, input }) => {
       try {
-        return await createKnowledgeApproval({ userId: ctx.user.id, ...input });
+        return await createKnowledgeApproval({ userId: KNOWLEDGE_OWNER_ID, ...input });
       } catch (error) {
         return databaseError(error);
       }

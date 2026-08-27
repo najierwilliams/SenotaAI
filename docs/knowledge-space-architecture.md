@@ -20,7 +20,7 @@ Knowledge Space is a native Luna workspace for durable objects, evidence context
 
 ## Persistence and ownership
 
-The persistent store is the existing Supabase project, accessed only through the server using the existing server-side service-role configuration. The browser never receives that credential. Row-level security is enabled on every dedicated table and no browser-facing policy has been created; the application enforces the verified owner session before issuing any Knowledge Space query or mutation.
+The persistent store is the existing Supabase project, accessed only through the server using the existing server-side service-role configuration. The browser never receives that credential. Row-level security is enabled on every dedicated table and no browser-facing policy has been created. Knowledge Space is a **single-owner** workspace: the existing NPC-management administrator password is verified only by the server and mints a separate signed `knowledge-owner` cookie with an eight-hour lifetime. It does not reuse the NPC administrator cookie, create a general account, store the password in browser storage, or expose a credential to the client. Only that cookie permits a Knowledge Space query or mutation.
 
 | Table | Responsibility |
 |---|---|
@@ -34,7 +34,7 @@ The persistent store is the existing Supabase project, accessed only through the
 | `luna_knowledge_mission_activity` | Ordered worker activity events. |
 | `luna_knowledge_approvals` | Separate review artifacts for future sensitive proposals. |
 
-A workspace is seeded only after its authenticated owner first opens Knowledge Space. The seed provides organizational folders and immutable context records for the released HRA, MNI, and Julich boundaries. It does not import a Luna-to-MNI transform, create a Julich crosswalk, or modify the released 102 HRA/UBERON identities.
+A workspace is seeded only after the single owner first opens Knowledge Space through the separate owner-session unlock. The seed provides organizational folders and immutable context records for the released HRA, MNI, and Julich boundaries. It does not import a Luna-to-MNI transform, create a Julich crosswalk, or modify the released 102 HRA/UBERON identities.
 
 ## Truth and provenance model
 
@@ -87,7 +87,8 @@ The focused Knowledge Space, P33 coordinate, scientific observation, and Luna co
 |---|---|
 | `supabase/migrations/20260827_knowledge_space.sql` | Dedicated database schema, indexes, immutability trigger, and RLS. |
 | `shared/knowledgeSpace.ts` | Shared typed object, truth, provenance, relationship, mission, and health contract. |
-| `server/knowledgeSpace/supabase.ts` | Server-only Supabase repository and ownership enforcement. |
+| `server/knowledgeSpace/supabase.ts` | Server-only Supabase repository and single-owner scope enforcement. |
+| `server/knowledgeSpace/ownerAuth.ts` | Separate eight-hour `knowledge-owner` session derived from server-side verification of the existing NPC-management administrator password. |
 | `server/knowledgeSpace/missionRunner.ts` | Bounded on-demand report runner with scientific/nanobot safety prompt. |
 | `server/routers/knowledge.ts` | Authenticated Knowledge Space API. |
 | `client/src/pages/KnowledgeSpace.tsx` | Responsive workspace, graph, review, and worker interface. |

@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { startLogin } from "@/const";
 import {
   formatKnowledgeObjectType,
   formatKnowledgeTruthState,
@@ -111,16 +110,26 @@ export default function KnowledgeSpace() {
   const [editing, setEditing] = useState(false);
   const [relationshipDialogOpen, setRelationshipDialogOpen] = useState(false);
   const [referenceDialogOpen, setReferenceDialogOpen] = useState(false);
-  const snapshot = trpc.knowledge.snapshot.useQuery(undefined, { retry: false });
+  const ownerStatus = trpc.knowledge.owner.status.useQuery(undefined, { retry: false });
+  const ownerUnlock = trpc.knowledge.owner.unlock.useMutation({
+    onSuccess: async () => {
+      toast.success("Knowledge Space unlocked for this private session.");
+      await utils.knowledge.owner.status.invalidate();
+      await utils.knowledge.snapshot.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const ownerAuthenticated = ownerStatus.data?.authenticated === true;
+  const snapshot = trpc.knowledge.snapshot.useQuery(undefined, { enabled: ownerAuthenticated, retry: false });
   const status = trpc.knowledge.status.useQuery(undefined, { retry: false });
-  const search = trpc.knowledge.search.useQuery({ query }, { enabled: query.trim().length >= 2, retry: false });
+  const search = trpc.knowledge.search.useQuery({ query }, { enabled: ownerAuthenticated && query.trim().length >= 2, retry: false });
   const graph = trpc.knowledge.relationship.graph.useQuery(
     { focusObjectId: selectedId ?? undefined },
-    { enabled: activePanel === "graph" && Boolean(selectedId), retry: false },
+    { enabled: ownerAuthenticated && activePanel === "graph" && Boolean(selectedId), retry: false },
   );
   const audit = trpc.knowledge.audit.useQuery(
     { limit: 100 },
-    { enabled: activePanel === "activity", retry: false },
+    { enabled: ownerAuthenticated && activePanel === "activity", retry: false },
   );
   const createObject = trpc.knowledge.object.create.useMutation({
     onSuccess: async (object) => {
@@ -222,10 +231,9 @@ export default function KnowledgeSpace() {
     }
   }, [objects, selectedId]);
 
-  if (snapshot.isLoading || status.isLoading) {
-    return <KnowledgeLoading />;
-  }
-
+  if (ownerStatus.isLoading) return <KnowledgeLoading />;
+  if (!ownerAuthenticated) return <KnowledgeOwnerUnlock configured={ownerStatus.data?.configured ?? false} error={ownerStatus.error?.message} pending={ownerUnlock.isPending} onUnlock={(password) => ownerUnlock.mutate({ password })} />;
+  if (snapshot.isLoading || status.isLoading) return <KnowledgeLoading />;
   if (snapshot.error || status.error || !snapshot.data || !status.data?.cloudReady) {
     return <KnowledgeUnavailable error={snapshot.error?.message ?? status.error?.message} />;
   }
@@ -394,7 +402,9 @@ function MissionDialog({ open, onOpenChange, selected, isCreating, onCreate }: {
 
 function KnowledgeLoading() { return <div className="grid min-h-[60vh] place-items-center rounded-3xl border border-white/10 bg-card/70"><div className="flex items-center gap-3 text-sm text-slate-400"><Loader2 className="size-5 animate-spin text-cyan-300" />Opening Knowledge Space…</div></div>; }
 
-function KnowledgeUnavailable({ error }: { error?: string }) { return <div className="mx-auto max-w-3xl rounded-3xl border border-amber-400/20 bg-card/80 p-7 sm:p-10"><div className="flex gap-4"><TriangleAlert className="size-7 shrink-0 text-amber-300" /><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Private persistence required</p><h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">Knowledge Space is ready for its owner session.</h1><p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">This workspace is deliberately server-backed and owner-scoped. It does not fall back to browser-local storage when the verified private session or server-side persistence service is unavailable.</p>{error ? <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 font-mono text-xs leading-5 text-slate-500">{error}</p> : null}<div className="mt-6 flex flex-wrap items-center gap-3"><Button onClick={startLogin} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">Open private Knowledge Space</Button><span className="flex items-center gap-2 text-xs text-slate-500"><ShieldCheck className="size-4 text-cyan-300" />P33 registration safeguards and Macro-only nanobot boundaries remain unchanged.</span></div></div></div></div>; }
+function KnowledgeOwnerUnlock({ configured, error, pending, onUnlock }: { configured: boolean; error?: string; pending: boolean; onUnlock: (password: string) => void }) { const [password, setPassword] = useState(""); return <div className="mx-auto max-w-3xl rounded-3xl border border-amber-400/20 bg-card/80 p-7 sm:p-10"><div className="flex gap-4"><ShieldCheck className="size-7 shrink-0 text-cyan-300" /><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">Single-owner workspace</p><h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">Unlock private Knowledge Space.</h1><p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">Use the existing NPC-management administrator password. It is verified only by the server and creates a separate, time-limited Knowledge Space owner session. No general user account or browser-local workspace is created.</p>{!configured ? <p className="mt-4 rounded-xl border border-amber-400/15 bg-amber-400/5 p-3 text-xs leading-5 text-amber-200">The server-side administrator password is not configured for this deployment.</p> : null}{error ? <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 font-mono text-xs leading-5 text-slate-500">{error}</p> : null}<form onSubmit={(event) => { event.preventDefault(); if (password) onUnlock(password); }} className="mt-6 max-w-sm"><Label htmlFor="knowledge-owner-password" className="text-xs text-slate-300">Administrator password</Label><Input id="knowledge-owner-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={!configured || pending} className="mt-2 border-white/10 bg-slate-950/40 text-slate-100" /><Button type="submit" disabled={!configured || pending || !password} className="mt-3 bg-cyan-300 text-slate-950 hover:bg-cyan-200">{pending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <ShieldCheck className="mr-2 size-4" />}Unlock Knowledge Space</Button></form><div className="mt-6 flex items-center gap-2 text-xs text-slate-500"><ShieldCheck className="size-4 text-cyan-300" />P33 registration safeguards and Macro-only nanobot boundaries remain unchanged.</div></div></div></div>; }
+
+function KnowledgeUnavailable({ error }: { error?: string }) { return <div className="mx-auto max-w-3xl rounded-3xl border border-amber-400/20 bg-card/80 p-7 sm:p-10"><div className="flex gap-4"><TriangleAlert className="size-7 shrink-0 text-amber-300" /><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Server persistence required</p><h1 className="mt-2 font-display text-3xl font-semibold tracking-[-0.04em] text-white">Knowledge Space cannot use a local fallback.</h1><p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">The verified owner session is active, but the server-side Supabase persistence service is unavailable. No workspace data is written to browser storage.</p>{error ? <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 font-mono text-xs leading-5 text-slate-500">{error}</p> : null}</div></div></div>; }
 
 function EmptyDetail({ onCreate }: { onCreate: () => void }) { return <div className="grid min-h-[640px] place-items-center p-8 text-center"><div className="max-w-sm"><div className="mx-auto grid size-12 place-items-center rounded-2xl bg-cyan-300/10 text-cyan-300"><BookOpen className="size-5" /></div><h2 className="mt-4 text-xl font-semibold text-white">Select a knowledge object</h2><p className="mt-2 text-sm leading-6 text-slate-500">Browse a folder, open an evidence record, or create the first user-owned note in this workspace.</p><Button onClick={onCreate} className="mt-5 bg-cyan-300 text-slate-950 hover:bg-cyan-200"><Plus className="mr-2 size-4" />Create object</Button></div></div>; }
 

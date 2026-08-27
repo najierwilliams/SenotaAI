@@ -1,11 +1,27 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { TrpcContext } from "../_core/context";
 import { knowledgeRouter } from "../routers/knowledge";
 import { calculateKnowledgeHealth, isKnowledgeSpaceCloudReady } from "./supabase";
 import { createKnowledgeWorkerReportPrompt } from "./missionRunner";
+import { KNOWLEDGE_OWNER_COOKIE, createKnowledgeOwnerSession, isValidKnowledgeOwnerSession } from "./ownerAuth";
+import { isValidNpcAdminSession } from "../npcMemory/adminAuth";
 import type { KnowledgeObject, KnowledgeRelationship } from "@shared/knowledgeSpace";
+
+let sessionToken = "";
+let previousJwtSecret: string | undefined;
+
+beforeAll(async () => {
+  previousJwtSecret = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = process.env.JWT_SECRET || "knowledge-space-test-signing-secret";
+  sessionToken = await createKnowledgeOwnerSession();
+});
+
+afterAll(() => {
+  if (previousJwtSecret === undefined) delete process.env.JWT_SECRET;
+  else process.env.JWT_SECRET = previousJwtSecret;
+});
 
 function context(): TrpcContext {
   return {
@@ -20,7 +36,7 @@ function context(): TrpcContext {
       updatedAt: new Date(),
       lastSignedIn: new Date(),
     },
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
+    req: { protocol: "https", headers: {}, header: (name: string) => name === "cookie" ? `${KNOWLEDGE_OWNER_COOKIE}=${sessionToken}` : undefined } as TrpcContext["req"],
     res: {} as TrpcContext["res"],
   };
 }
@@ -49,6 +65,16 @@ const object = (overrides: Partial<KnowledgeObject> = {}): KnowledgeObject => ({
 });
 
 describe("Knowledge Space boundaries", () => {
+  it("rejects every Knowledge Space query without the dedicated owner session", async () => {
+    const caller = knowledgeRouter.createCaller({ ...context(), req: { protocol: "https", headers: {}, header: () => undefined } as TrpcContext["req"] });
+    await expect(caller.snapshot()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("uses a token scope that is valid only for Knowledge Space, not NPC administration", async () => {
+    expect(await isValidKnowledgeOwnerSession(sessionToken)).toBe(true);
+    expect(await isValidNpcAdminSession(sessionToken)).toBe(false);
+  });
+
   it("never lets an owner-created object assert VERIFIED scientific truth", async () => {
     const caller = knowledgeRouter.createCaller(context());
     await expect(caller.object.create({
@@ -73,6 +99,8 @@ describe("Knowledge Space boundaries", () => {
   it("does not substitute browser-local storage when server persistence is unavailable", async () => {
     expect(isKnowledgeSpaceCloudReady()).toBe(false);
     const caller = knowledgeRouter.createCaller(context());
+    const status = await caller.status();
+    expect(status).toMatchObject({ cloudReady: false, persistence: "unavailable" });
     await expect(caller.snapshot()).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
