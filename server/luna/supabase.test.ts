@@ -68,4 +68,42 @@ describe("Luna cognitive persistence", () => {
     expect(second.self.workspaceId).toBe(workspace.id);
     expect(first.self.identitySummary).toBe(second.self.identitySummary);
   });
+
+  it("rejects an autonomous decision whose source is not in the verified owner workspace before writing", async () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "GET" && url.includes("luna_knowledge_gaps")) return new Response(JSON.stringify([]), { status: 200 });
+      throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createOrGetLunaAutonomousDecision } = await import("./supabase");
+    await expect(createOrGetLunaAutonomousDecision({
+      userId: 1, sourceType: "KNOWLEDGE_GAP", sourceId: "gap-outside-owner", decisionKey: "a".repeat(64),
+      objective: "Resolve a bounded persisted owner-scoped knowledge gap.", status: "RECOMMENDED", outcome: "NO_ACTION",
+      priorityScore: 0.8, policyVersion: "luna-m5-v1", rationale: "A deterministic owner-scoped test decision.", evidence: {},
+      budget: { maxWorkers: 4, maxSteps: 24, maxRetries: 2, maxDurationSeconds: 900, maxModelRequests: 12, maxTokenBudget: 24_000 },
+    })).rejects.toThrow("Autonomous decision source is unavailable in this owner workspace.");
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("luna_autonomous_decisions"), expect.objectContaining({ method: "POST" }));
+  });
+
+  it("rejects a result validation when its worker is not in the specified owner-scoped mission", async () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") !== "GET") throw new Error(`Unexpected write: ${init?.method} ${url}`);
+      if (url.includes("luna_missions")) return new Response(JSON.stringify([{ id: "mission-1" }]), { status: 200 });
+      if (url.includes("luna_workers")) return new Response(JSON.stringify([{ mission_id: "other-mission" }]), { status: 200 });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createOrGetLunaResultValidation } = await import("./supabase");
+    await expect(createOrGetLunaResultValidation({
+      userId: 1, missionId: "mission-1", workerId: "worker-outside-mission", status: "ACCEPTED", outputHash: "b".repeat(64),
+      resultSummary: "Bounded validation test.", checks: { nonEmpty: true }, detail: "The validation worker must belong to the persisted mission.",
+    })).rejects.toThrow("Validation worker is unavailable in the specified owner-scoped mission.");
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("luna_result_validations"), expect.objectContaining({ method: "POST" }));
+  });
 });

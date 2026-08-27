@@ -40,6 +40,7 @@ import { runKnowledgeMission } from "../knowledgeSpace/missionRunner";
 import { consolidateLunaOwnedExactDuplicateMemories, getLunaActivitySummary, getLunaCognitiveHome, reconcileLunaAttention, retrieveLunaContext } from "../luna/cognitiveService";
 import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMission, resumeLunaMission, runLunaRecoverySweep } from "../luna/orchestrator";
 import { getLunaRuntimeAvailability } from "../luna/runtime";
+import { assessAndDispatchLunaCognitiveAction } from "../luna/cognitiveActionService";
 import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCuriosityCandidate, createLunaGoal, createLunaKnowledgeGap, createLunaMemory, createLunaPriorityAssessment, createLunaProject, getLunaCognitiveSnapshot, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
@@ -451,6 +452,7 @@ export const knowledgeRouter = router({
         currentFocus: boundedText(1_000).nullable().optional(),
         autonomyEnabled: z.boolean().optional(),
         maintenanceEnabled: z.boolean().optional(),
+        cognitiveActionsEnabled: z.boolean().optional(),
         identitySummary: boundedText(4_000).optional(),
         capabilities: z.array(boundedText(400).min(1)).max(30).optional(),
         limitations: z.array(boundedText(400).min(1)).max(30).optional(),
@@ -591,6 +593,19 @@ export const knowledgeRouter = router({
       }),
       recover: knowledgeOwnerProcedure.mutation(async () => {
         try { return await runLunaRecoverySweep(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    action: router({
+      assessAndDispatch: knowledgeOwnerProcedure.mutation(async () => {
+        try { return await assessAndDispatchLunaCognitiveAction({ userId: KNOWLEDGE_OWNER_ID }); } catch (error) { return databaseError(error); }
+      }),
+      command: knowledgeOwnerProcedure.input(z.object({ message: boundedText(1_000).min(3) })).mutation(async ({ input }) => {
+        const normalized = input.message.toLowerCase().replace(/\s+/g, " ").trim();
+        if (!/^(run|assess|review|dispatch)\b/.test(normalized) || !/(cognitive|knowledge gap|attention)/.test(normalized)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cognitive commands are limited to an owner-scoped request to run, assess, review, or dispatch the next bounded cognitive action." });
+        }
+        try { return await assessAndDispatchLunaCognitiveAction({ userId: KNOWLEDGE_OWNER_ID }); } catch (error) { return databaseError(error); }
       }),
     }),
 

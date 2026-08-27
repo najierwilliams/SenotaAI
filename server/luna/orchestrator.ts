@@ -14,6 +14,7 @@ import {
   getOrCreateLunaSelfState,
   markLunaMissionWaitingForRuntime,
   recoverIncompleteLunaMissions,
+  updateLunaAutonomousDecision,
   updateLunaMission,
   updateLunaTask,
   updateLunaWorker,
@@ -42,11 +43,16 @@ export function workerRolesForTaskGraph(tasks: Array<{ role: LunaWorkerRole }>, 
   return roles.slice(0, Math.max(1, maximumWorkers));
 }
 
-export async function planLunaMission(input: { userId: number; objective: string; priority?: number; projectTitle?: string; focusObjectId?: string | null; maxWorkers?: number; maxModelRequests?: number; maxTokenBudget?: number }): Promise<PlannedLunaMission> {
+export async function planLunaMission(input: { userId: number; objective: string; priority?: number; projectTitle?: string; focusObjectId?: string | null; decisionId?: string | null; missionOrigin?: LunaMission["missionOrigin"]; idempotencyKey?: string; maxWorkers?: number; maxSteps?: number; maxRetries?: number; maxDurationSeconds?: number; maxModelRequests?: number; maxTokenBudget?: number }): Promise<PlannedLunaMission> {
   const self = await getOrCreateLunaSelfState(input.userId);
   if (!self.autonomyEnabled) throw new Error("Luna autonomy is disabled by the owner. Re-enable it before creating a mission.");
   const plan = buildCognitivePlan(input.objective, input.priority ?? 3);
   assertAcyclicTaskGraph(plan.tasks);
+  if (input.decisionId) {
+    const snapshot = await getLunaCognitiveSnapshot(input.userId);
+    const existing = snapshot.missions.find(mission => mission.decisionId === input.decisionId);
+    if (existing) return { mission: existing, projectId: existing.projectId ?? "", goalId: existing.goalId ?? "", tasks: snapshot.tasks.filter(task => task.missionId === existing.id) };
+  }
   const project = await createLunaProject({
     userId: input.userId,
     title: input.projectTitle?.trim() || plan.objective.slice(0, 240),
@@ -70,12 +76,17 @@ export async function planLunaMission(input: { userId: number; objective: string
     objective: plan.objective,
     projectId: project.id,
     goalId: goal.id,
+    decisionId: input.decisionId ?? null,
+    missionOrigin: input.missionOrigin ?? "OWNER",
     priority: input.priority ?? 3,
     maxWorkers: input.maxWorkers ?? 4,
+    maxSteps: input.maxSteps ?? 24,
+    maxRetries: input.maxRetries ?? 2,
+    maxDurationSeconds: input.maxDurationSeconds ?? 900,
     maxModelRequests: input.maxModelRequests ?? 12,
     maxTokenBudget: input.maxTokenBudget ?? 24_000,
-    idempotencyKey: `luna-${randomUUID()}`,
-    actor: "luna:planner",
+    idempotencyKey: input.idempotencyKey ?? `luna-${randomUUID()}`,
+    actor: input.missionOrigin === "AUTONOMOUS" ? "luna:autonomy" : "luna:planner",
   });
   const ids = new Map<string, string>();
   const tasks: LunaTask[] = [];
@@ -99,7 +110,7 @@ export async function planLunaMission(input: { userId: number; objective: string
     ids.set(planned.key, task.id); tasks.push(task);
   }
   const root = tasks[0];
-  const updatedMission = await updateLunaMission({ userId: input.userId, missionId: mission.id, rootTaskId: root?.id ?? null, currentFocus: root?.title ?? null, status: "QUEUED", actor: "luna:planner", reason: "Persisted cognitive plan and dependency graph were created." });
+  const updatedMission = await updateLunaMission({ userId: input.userId, missionId: mission.id, rootTaskId: root?.id ?? null, currentFocus: root?.title ?? null, status: "QUEUED", actor: input.missionOrigin === "AUTONOMOUS" ? "luna:autonomy" : "luna:planner", reason: "Persisted cognitive plan and dependency graph were created." });
   return { mission: updatedMission, projectId: project.id, goalId: goal.id, tasks };
 }
 
@@ -212,7 +223,10 @@ export async function cancelLunaMission(userId: number, missionId: string) {
     await updateLunaWorker({ userId, workerId: worker.id, missionId, state: "CANCELLED", actor: "owner" });
     if (worker.taskId) await updateLunaTask({ userId, taskId: worker.taskId, status: "CANCELLED", actor: "owner", reason: "Owner cancelled the mission before this worker task completed." });
   }
-  await recordLunaRuntimeEvent({ userId, action: "MISSION_CANCELLED", subjectType: "MISSION", subjectId: missionId, missionId, actor: "owner", detail: { runtimeRunId: mission.runtimeRunId, cancellationMethod: "Persisted lifecycle flag checked by private queue consumer at safe execution boundaries." } });
+  if (updated.decisionId) {
+    await updateLunaAutonomousDecision({ userId, decisionId: updated.decisionId, missionId: updated.id, status: "CANCELLED", outcome: "CANCELLED", actor: "owner", reason: "Owner cancelled the linked autonomous mission." });
+  }
+  await recordLunaRuntimeEvent({ userId, action: "MISSION_CANCELLED", subjectType: "MISSION", subjectId: missionId, missionId, actor: "owner", detail: { runtimeRunId: mission.runtimeRunId, decisionId: updated.decisionId, cancellationMethod: "Persisted lifecycle flag checked by private queue consumer at safe execution boundaries." } });
   return updated;
 }
 

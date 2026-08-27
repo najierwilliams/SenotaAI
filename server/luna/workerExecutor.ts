@@ -4,9 +4,11 @@ import { createKnowledgeObject } from "../knowledgeSpace/supabase";
 import { retrieveLunaContext } from "./cognitiveService";
 import { invokeLunaControlledTool } from "./controlledTools";
 import { getLunaModel, type LunaModel } from "./model";
+import { assessLunaWorkerResult } from "./learningService";
 import {
   createLunaAttention,
   createLunaMemory,
+  createOrGetLunaResultValidation,
   createLunaToolCall,
   getLunaCognitiveSnapshot,
   updateLunaMission,
@@ -160,8 +162,20 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
       cognitiveMissionId: mission.id,
       reason: "Bounded software-worker handoff persisted from durable mission context.",
     });
-    if (contract.allowedOutputs.includes("MEMORY")) {
-      const memory = await createLunaMemory({ userId: input.userId, memoryKind: "RESEARCH", content: `${worker.role} completed a persisted handoff for mission ${mission.id}: ${output.slice(0, 1_400)}`, importance: 3, truthState: "INFERENCE", sourceType: "LUNA", sourceObjectIds: [report.id], projectId: mission.projectId, missionId: mission.id, tags: ["worker-handoff", worker.role.toLowerCase()], actor: workerActor });
+    const resultAssessment = assessLunaWorkerResult(output);
+    const validation = await createOrGetLunaResultValidation({
+      userId: input.userId, missionId: mission.id, workerId: worker.id, reportObjectId: report.id,
+      status: resultAssessment.status, outputHash: resultAssessment.outputHash, resultSummary: resultAssessment.resultSummary,
+      checks: resultAssessment.checks, detail: resultAssessment.detail, actor: "luna:validator",
+    });
+    if (validation.validation.status !== "ACCEPTED") {
+      await createLunaAttention({
+        userId: input.userId, missionId: mission.id, severity: "WARNING", category: "KNOWLEDGE_GAP",
+        title: "Luna worker result requires validation review", detail: validation.validation.detail, actor: "luna:validator",
+      });
+    }
+    if (contract.allowedOutputs.includes("MEMORY") && validation.validation.status === "ACCEPTED") {
+      const memory = await createLunaMemory({ userId: input.userId, memoryKind: "RESEARCH", content: `${worker.role} completed a validated persisted handoff for mission ${mission.id}: ${output.slice(0, 1_400)}`, importance: 3, truthState: "INFERENCE", sourceType: "LUNA", sourceObjectIds: [report.id], projectId: mission.projectId, missionId: mission.id, tags: ["worker-handoff", "validated-inference", worker.role.toLowerCase()], actor: workerActor });
       if (worker.role === "MEMORY_AGENT" && shouldCreateMemoryRevision({ objective: mission.objective, activity: snapshot.activity, workerId: worker.id })) {
         const revised = await updateLunaMemory({ userId: input.userId, memoryId: memory.id, content: `${memory.content}\n\nAutonomous acceptance revision: this non-scientific, Luna-owned test record was updated by the bounded worker and remains an INFERENCE.`, actor: "luna:acceptance", reason: "Autonomous memory version-and-rollback acceptance control." });
         await recordLunaRuntimeEvent({ userId: input.userId, action: "ACCEPTANCE_MEMORY_REVISION", subjectType: "MEMORY", subjectId: revised.id, missionId: mission.id, workerId: worker.id, actor: "luna:acceptance", detail: { control: "MEMORY_REVISION_ONCE", fromVersion: memory.currentVersion, toVersion: revised.currentVersion, truthState: "INFERENCE" } });
@@ -171,7 +185,7 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
     const nextWorker = snapshot.workers.find(item => item.missionId === mission.id && item.id !== worker.id && item.state === "QUEUED") ?? null;
     await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "COMPLETED", outputSummary: output.slice(0, 1_200), handoffToRole: nextWorker?.role ?? null, actor: workerActor });
     if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "COMPLETED", actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker completed a persisted bounded handoff." });
-    await updateLunaMission({ userId: input.userId, missionId: mission.id, status: "RUNNING", currentFocus: nextWorker ? `Awaiting ${nextWorker.role} handoff` : "Awaiting durable task-graph evaluation", modelRequestsUsed: mission.modelRequestsUsed + (modelRequestUsed ? 1 : 0), tokenUsage: mission.tokenUsage + estimatedTokens, actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker result, report, memory, and audit records were persisted." });
+    await updateLunaMission({ userId: input.userId, missionId: mission.id, status: "RUNNING", currentFocus: nextWorker ? `Awaiting ${nextWorker.role} handoff` : "Awaiting durable task-graph evaluation", modelRequestsUsed: mission.modelRequestsUsed + (modelRequestUsed ? 1 : 0), tokenUsage: mission.tokenUsage + estimatedTokens, actor: `luna:${worker.role.toLowerCase()}`, reason: `Worker result, report, validation, and bounded learning records were persisted with validation status ${validation.validation.status}.` });
     return { workerId: worker.id, taskId: task?.id ?? null, reportObjectId: report.id, resultSummary: output.slice(0, 1_200), modelRequestUsed };
   } catch (error) {
     if (isLunaWorkerCancellationError(error)) throw error;

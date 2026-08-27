@@ -20,6 +20,7 @@ import { inspectLunaClaims } from "./milestone2";
 import { inspectLunaAttentionSystem } from "./milestone3";
 import { adviseLunaWorkerSelection } from "./milestone4";
 import { summarizeLunaLearning } from "./milestone5";
+import { assessNextLunaAutonomousDecision } from "./milestone5ActionLoop";
 
 export type LunaActivitySummary = {
   currentObjective: string | null;
@@ -125,5 +126,14 @@ export async function getLunaCognitiveHome(userId: number) {
   const attentionSystem = inspectLunaAttentionSystem({ gaps: snapshot.knowledgeGaps, curiosity: snapshot.curiosityCandidates, assessments: snapshot.priorityAssessments });
   const workerSelectionAdvice = adviseLunaWorkerSelection({ claims: snapshot.claims, gaps: snapshot.knowledgeGaps, memories: snapshot.memories });
   const learningSummary = summarizeLunaLearning({ reflections: snapshot.reflections, attention: snapshot.attention, gaps: snapshot.knowledgeGaps, claims: snapshot.claims });
-  return { snapshot, summary, self, observedSelfModel, claimInspections, attentionSystem, workerSelectionAdvice, learningSummary };
+  const actionCandidate = assessNextLunaAutonomousDecision({
+    autonomyEnabled: snapshot.state.autonomyEnabled,
+    cognitiveActionsEnabled: snapshot.state.cognitiveActionsEnabled,
+    gaps: snapshot.knowledgeGaps,
+    priorityAssessments: snapshot.priorityAssessments,
+    attention: snapshot.attention,
+    missions: snapshot.missions,
+    decisions: snapshot.decisions,
+  });
+  return { snapshot, summary, self, observedSelfModel, claimInspections, attentionSystem, workerSelectionAdvice, learningSummary, actionCandidate };
 }

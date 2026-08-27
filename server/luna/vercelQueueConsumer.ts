@@ -1,7 +1,7 @@
 import { QueueClient, type MessageMetadata, type RetryDirective } from "@vercel/queue";
 import type { LunaMission, LunaWorker } from "@shared/lunaCognitive";
 import { queueMissionWorkers } from "./orchestrator";
-import { calculateEligibleTasks, createLunaAttention, createLunaReflection, getLunaCognitiveSnapshot, recordLunaRuntimeEvent, updateLunaMission, updateLunaTask, updateLunaWorker } from "./supabase";
+import { calculateEligibleTasks, createLunaAttention, createLunaReflection, getLunaCognitiveSnapshot, recordLunaRuntimeEvent, updateLunaAutonomousDecision, updateLunaKnowledgeGap, updateLunaMission, updateLunaTask, updateLunaWorker } from "./supabase";
 import { executeLunaWorkerStep, isLunaWorkerCancellationError } from "./workerExecutor";
 import { createLunaQueueMessage, LUNA_VERCEL_QUEUE_TOPIC, type LunaQueueMessage, type LunaQueuePublisher } from "./vercelQueueRuntime";
 
@@ -90,29 +90,44 @@ async function startMission(message: LunaQueueMessage, metadata: MessageMetadata
     const fresh = await dependencies.snapshot(LUNA_QUEUE_OWNER_ID);
     const active = fresh.workers.some(worker => worker.missionId === mission.id && ["QUEUED", "RUNNING", "WAITING"].includes(worker.state));
     if (!active && fresh.tasks.filter(task => task.missionId === mission.id).every(task => task.status === "COMPLETED")) {
-      await completeMission(fresh.missions.find(item => item.id === mission.id) ?? mission, fresh.workers);
+      await completeMission(fresh.missions.find(item => item.id === mission.id) ?? mission, fresh.workers, dependencies.snapshot);
     }
   }
 }
 
-async function completeMission(mission: LunaMission, workers: LunaWorker[]) {
+async function completeMission(mission: LunaMission, workers: LunaWorker[], snapshotReader: typeof getLunaCognitiveSnapshot) {
   if (["COMPLETED", "CANCELLED"].includes(mission.status)) return;
+  const snapshot = await snapshotReader(LUNA_QUEUE_OWNER_ID);
   const reports = workers.filter(worker => worker.missionId === mission.id && worker.state === "COMPLETED").length;
+  const validations = snapshot.resultValidations.filter(validation => validation.missionId === mission.id);
+  const acceptedValidations = validations.filter(validation => validation.status === "ACCEPTED");
+  const reviewValidations = validations.filter(validation => validation.status !== "ACCEPTED");
+  const decision = snapshot.decisions.find(item => item.missionId === mission.id) ?? null;
+  if (decision) {
+    await updateLunaAutonomousDecision({ userId: LUNA_QUEUE_OWNER_ID, decisionId: decision.id, missionId: mission.id, status: "COMPLETED", outcome: "NO_ACTION", actor: runtimeActor(), reason: "Linked durable mission completed; no new follow-up was authorized by the completion event." });
+    if (decision.sourceType === "KNOWLEDGE_GAP" && acceptedValidations.length) {
+      await updateLunaKnowledgeGap({
+        userId: LUNA_QUEUE_OWNER_ID, gapId: decision.sourceId, status: "WATCHING", severity: "WARNING", actor: runtimeActor(),
+        rationale: `A bounded Luna mission completed with ${acceptedValidations.length} structurally accepted inference report(s). The gap remains WATCHING until an owner or immutable source independently resolves it.`,
+        reason: "Validated mission output lowers the source gap to WATCHING without asserting factual or scientific resolution.",
+      });
+    }
+  }
   await createLunaReflection({
     userId: LUNA_QUEUE_OWNER_ID,
     missionId: mission.id,
     projectId: mission.projectId,
-    summary: `Durable Vercel Queue mission completed with ${reports} persisted software-worker handoff(s). Outputs remain Luna-owned inferences unless separately supported by immutable source evidence.`,
-    newInferenceCount: reports,
+    summary: `Durable Vercel Queue mission completed with ${reports} persisted software-worker handoff(s), ${acceptedValidations.length} accepted bounded inference validation(s), and ${reviewValidations.length} validation record(s) requiring review. Outputs remain Luna-owned inferences unless separately supported by immutable source evidence.`,
+    newInferenceCount: acceptedValidations.length,
     newMemoryCount: 0,
-    unresolvedCount: 0,
+    unresolvedCount: reviewValidations.length,
     confidence: "UNKNOWN",
-    nextAction: "Review persisted handoffs, attention, and evidence gaps before initiating another bounded objective.",
+    nextAction: "Review persisted handoffs, validation records, attention, and evidence gaps before initiating another bounded objective.",
     truthState: "INFERENCE",
     actor: runtimeActor(),
   });
-  await updateLunaMission({ userId: LUNA_QUEUE_OWNER_ID, missionId: mission.id, status: "COMPLETED", currentFocus: "All dependency-eligible durable worker tasks completed", errorMessage: null, finished: true, actor: runtimeActor(), reason: "All persisted Luna task records reached COMPLETED." });
-  await recordLunaRuntimeEvent({ userId: LUNA_QUEUE_OWNER_ID, action: "MISSION_COMPLETED", subjectType: "MISSION", subjectId: mission.id, missionId: mission.id, actor: runtimeActor(), detail: { completedWorkers: reports, provider: "vercel-queues" } });
+  await updateLunaMission({ userId: LUNA_QUEUE_OWNER_ID, missionId: mission.id, status: "COMPLETED", currentFocus: "All dependency-eligible durable worker tasks completed", errorMessage: null, finished: true, actor: runtimeActor(), reason: "All persisted Luna task records reached COMPLETED and generated an evidence-bounded reflection." });
+  await recordLunaRuntimeEvent({ userId: LUNA_QUEUE_OWNER_ID, action: "MISSION_COMPLETED", subjectType: "MISSION", subjectId: mission.id, missionId: mission.id, actor: runtimeActor(), detail: { completedWorkers: reports, acceptedValidations: acceptedValidations.length, reviewValidations: reviewValidations.length, decisionId: decision?.id ?? null, provider: "vercel-queues" } });
 }
 
 async function handleWorkerFailure(message: LunaQueueMessage, metadata: MessageMetadata, error: unknown, dependencies: LunaQueueConsumerDependencies) {
@@ -132,9 +147,12 @@ async function handleWorkerFailure(message: LunaQueueMessage, metadata: MessageM
   }
 
   await updateLunaTask({ userId: LUNA_QUEUE_OWNER_ID, taskId: task.id, status: "FAILED", retriesUsed: task.maxRetries, errorMessage: detail, actor: runtimeActor(), reason: "Vercel Queue retry budget was exhausted." });
-  await updateLunaMission({ userId: LUNA_QUEUE_OWNER_ID, missionId: mission.id, status: "FAILED", currentFocus: "Worker retry budget exhausted", errorMessage: detail, finished: true, actor: runtimeActor(), reason: "A worker exhausted its bounded durable retry budget." });
+  const failedMission = await updateLunaMission({ userId: LUNA_QUEUE_OWNER_ID, missionId: mission.id, status: "FAILED", currentFocus: "Worker retry budget exhausted", errorMessage: detail, finished: true, actor: runtimeActor(), reason: "A worker exhausted its bounded durable retry budget." });
+  if (failedMission.decisionId) {
+    await updateLunaAutonomousDecision({ userId: LUNA_QUEUE_OWNER_ID, decisionId: failedMission.decisionId, missionId: failedMission.id, status: "FAILED", outcome: "FAILED", actor: runtimeActor(), reason: "The linked durable mission exhausted its declared worker retry budget." });
+  }
   await createLunaAttention({ userId: LUNA_QUEUE_OWNER_ID, missionId: mission.id, severity: "ACTION_REQUIRED", category: "MISSION", title: "Luna durable worker retry budget exhausted", detail, actor: runtimeActor() });
-  await recordLunaRuntimeEvent({ userId: LUNA_QUEUE_OWNER_ID, action: "WORKER_RETRY_EXHAUSTED", subjectType: "WORKER", subjectId: worker.id, missionId: mission.id, workerId: worker.id, actor: runtimeActor(), detail: { providerMessageId: metadata.messageId, deliveryCount: metadata.deliveryCount, maxRetries: task.maxRetries, error: detail } });
+  await recordLunaRuntimeEvent({ userId: LUNA_QUEUE_OWNER_ID, action: "WORKER_RETRY_EXHAUSTED", subjectType: "WORKER", subjectId: worker.id, missionId: mission.id, workerId: worker.id, actor: runtimeActor(), detail: { providerMessageId: metadata.messageId, deliveryCount: metadata.deliveryCount, maxRetries: task.maxRetries, decisionId: failedMission.decisionId, error: detail } });
   throw new LunaQueueTerminalError(detail);
 }
 
@@ -190,7 +208,7 @@ async function runWorker(message: LunaQueueMessage, metadata: MessageMetadata, d
   const latestMission = latest.missions.find(item => item.id === mission.id);
   const missionTasks = latest.tasks.filter(taskItem => taskItem.missionId === mission.id);
   if (latestMission && missionTasks.length > 0 && missionTasks.every(taskItem => taskItem.status === "COMPLETED")) {
-    await completeMission(latestMission, latest.workers);
+    await completeMission(latestMission, latest.workers, dependencies.snapshot);
   }
 }
 

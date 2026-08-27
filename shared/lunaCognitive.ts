@@ -111,6 +111,13 @@ export type LunaAttentionSeverity = (typeof LUNA_ATTENTION_SEVERITIES)[number];
 export const LUNA_RUNTIME_STATUSES = ["CONFIGURED", "UNAVAILABLE", "DISABLED", "DEGRADED"] as const;
 export type LunaRuntimeStatus = (typeof LUNA_RUNTIME_STATUSES)[number];
 
+export const LUNA_DECISION_STATUSES = ["RECOMMENDED", "DISPATCHED", "BLOCKED", "SUPPRESSED", "COMPLETED", "FAILED", "CANCELLED"] as const;
+export type LunaDecisionStatus = (typeof LUNA_DECISION_STATUSES)[number];
+export const LUNA_DECISION_OUTCOMES = ["DISPATCHED", "REQUIRES_OWNER_REVIEW", "NO_ACTION", "DUPLICATE_SUPPRESSED", "RUNTIME_UNAVAILABLE", "CANCELLED", "FAILED"] as const;
+export type LunaDecisionOutcome = (typeof LUNA_DECISION_OUTCOMES)[number];
+export const LUNA_RESULT_VALIDATION_STATUSES = ["ACCEPTED", "REJECTED", "NEEDS_REVIEW"] as const;
+export type LunaResultValidationStatus = (typeof LUNA_RESULT_VALIDATION_STATUSES)[number];
+
 export type LunaProvenance = {
   provider?: string;
   sourceUrl?: string;
@@ -240,6 +247,48 @@ export type LunaPriorityAssessment = {
   createdAt: string;
 };
 
+/** A deterministic, persisted assessment that may create at most one bounded mission. */
+export type LunaAutonomousDecision = {
+  id: string;
+  workspaceId: string;
+  sourceType: "KNOWLEDGE_GAP" | "ATTENTION" | "MAINTENANCE";
+  sourceId: string;
+  decisionKey: string;
+  objective: string;
+  status: LunaDecisionStatus;
+  outcome: LunaDecisionOutcome;
+  priorityScore: number;
+  policyVersion: string;
+  rationale: string;
+  evidence: Record<string, unknown>;
+  budget: {
+    maxWorkers: number;
+    maxSteps: number;
+    maxRetries: number;
+    maxDurationSeconds: number;
+    maxModelRequests: number;
+    maxTokenBudget: number;
+  };
+  missionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** A persisted check on a completed worker report before it is retained as learning context. */
+export type LunaResultValidation = {
+  id: string;
+  workspaceId: string;
+  missionId: string;
+  workerId: string;
+  reportObjectId: string | null;
+  status: LunaResultValidationStatus;
+  outputHash: string;
+  resultSummary: string;
+  checks: Record<string, boolean>;
+  detail: string;
+  createdAt: string;
+};
+
 export type LunaMemory = {
   id: string;
   workspaceId: string;
@@ -318,6 +367,8 @@ export type LunaMission = {
   workspaceId: string;
   projectId: string | null;
   goalId: string | null;
+  decisionId: string | null;
+  missionOrigin: "OWNER" | "AUTONOMOUS";
   objective: string;
   status: LunaMissionStatus;
   autonomyMode: "ON_DEMAND" | "MAINTENANCE" | "SCHEDULED";
@@ -410,6 +461,7 @@ export type LunaCognitiveState = {
   self: LunaSelfState;
   autonomyEnabled: boolean;
   maintenanceEnabled: boolean;
+  cognitiveActionsEnabled: boolean;
   activeMissionCount: number;
   activeWorkerCount: number;
   queuedTaskCount: number;
