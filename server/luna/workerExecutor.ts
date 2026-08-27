@@ -1,5 +1,5 @@
 import { workerContract, type LunaWorkerRole } from "@shared/lunaCognitive";
-import { shouldCreateMemoryRevision, shouldInjectControlledRetry } from "./acceptanceControls";
+import { shouldCreateMemoryRevision, shouldExerciseCancellationCheckpoints, shouldInjectControlledRetry } from "./acceptanceControls";
 import { createKnowledgeObject } from "../knowledgeSpace/supabase";
 import { retrieveLunaContext } from "./cognitiveService";
 import { invokeLunaControlledTool } from "./controlledTools";
@@ -18,6 +18,38 @@ import {
 } from "./supabase";
 
 const REPORT_CHARACTER_LIMIT = 18_000;
+const ACCEPTANCE_CANCELLATION_WINDOW_MS = 2_500;
+
+/** A cooperative, terminal stop—not a retriable worker failure. */
+export class LunaWorkerCancellationError extends Error {
+  constructor(readonly stage: string) {
+    super(`Luna worker stopped at cancellation checkpoint: ${stage}.`);
+    this.name = "LunaWorkerCancellationError";
+  }
+}
+
+export function isLunaWorkerCancellationError(error: unknown): error is LunaWorkerCancellationError {
+  return error instanceof LunaWorkerCancellationError;
+}
+
+async function assertWorkerNotCancelled(input: { userId: number; missionId: string; workerId: string; stage: string }) {
+  const snapshot = await getLunaCognitiveSnapshot(input.userId);
+  const mission = snapshot.missions.find(item => item.id === input.missionId);
+  const worker = snapshot.workers.find(item => item.id === input.workerId && item.missionId === input.missionId);
+  if (!mission || !worker || mission.cancelRequested || mission.status === "CANCELLED" || worker.state === "CANCELLED") {
+    await recordLunaRuntimeEvent({
+      userId: input.userId,
+      action: "WORKER_CANCELLED_CHECKPOINT",
+      subjectType: "WORKER",
+      subjectId: input.workerId,
+      missionId: input.missionId,
+      workerId: input.workerId,
+      actor: "luna:worker",
+      detail: { stage: input.stage, guarantee: "No further worker side effect is attempted after persisted cancellation is observed." },
+    });
+    throw new LunaWorkerCancellationError(input.stage);
+  }
+}
 
 export type LunaWorkerExecutionResult = {
   workerId: string;
@@ -71,8 +103,15 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
   const task = worker.taskId ? snapshot.tasks.find(item => item.id === worker.taskId) ?? null : null;
   if (task && !["ELIGIBLE", "PENDING"].includes(task.status)) throw new Error("Worker task is not eligible for execution.");
 
-  await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "RUNNING", actor: `luna:${worker.role.toLowerCase()}` });
-  if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "IN_PROGRESS", actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker started a durable task step." });
+  const workerActor = `luna:${worker.role.toLowerCase()}`;
+  await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "RUNNING", actor: workerActor });
+  if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "IN_PROGRESS", actor: workerActor, reason: "Worker started a durable task step." });
+  await recordLunaRuntimeEvent({ userId: input.userId, action: "WORKER_EXECUTION_ACTIVE", subjectType: "WORKER", subjectId: worker.id, missionId: mission.id, workerId: worker.id, actor: workerActor, detail: { role: worker.role, safeCheckpoint: "before_context_retrieval" } });
+  if (shouldExerciseCancellationCheckpoints(mission.objective)) {
+    await recordLunaRuntimeEvent({ userId: input.userId, action: "ACCEPTANCE_CANCELLATION_WINDOW", subjectType: "WORKER", subjectId: worker.id, missionId: mission.id, workerId: worker.id, actor: "luna:acceptance", detail: { control: "CANCELLATION_CHECKPOINTS", stage: "before_first_side_effect", delayMs: ACCEPTANCE_CANCELLATION_WINDOW_MS } });
+    await new Promise(resolve => setTimeout(resolve, ACCEPTANCE_CANCELLATION_WINDOW_MS));
+  }
+  await assertWorkerNotCancelled({ userId: input.userId, missionId: mission.id, workerId: worker.id, stage: "before_context_retrieval" });
   if (shouldInjectControlledRetry({ objective: mission.objective, activity: snapshot.activity, workerId: worker.id })) {
     const failure = "Luna acceptance control: deliberate first delivery failure after persisted worker start.";
     await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "FAILED", errorMessage: failure, actor: "luna:acceptance" });
@@ -110,7 +149,7 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
 
     const contract = workerContract(worker.role);
     if (!contract.allowedOutputs.includes("REPORT")) throw new Error(`${worker.role} is not permitted to create a worker handoff report.`);
-    const workerActor = `luna:${worker.role.toLowerCase()}`;
+    await assertWorkerNotCancelled({ userId: input.userId, missionId: mission.id, workerId: worker.id, stage: "before_report_persistence" });
     const report = await createKnowledgeObject({
       userId: input.userId, objectType: "NOTE", title: `Software worker handoff — ${worker.role.replace(/_/g, " ")}: ${mission.objective.slice(0, 150)}`,
       description: "Persisted software-worker handoff. This is a Luna-owned inferred working report, not provider evidence or scientific authority.",
@@ -128,12 +167,14 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
         await recordLunaRuntimeEvent({ userId: input.userId, action: "ACCEPTANCE_MEMORY_REVISION", subjectType: "MEMORY", subjectId: revised.id, missionId: mission.id, workerId: worker.id, actor: "luna:acceptance", detail: { control: "MEMORY_REVISION_ONCE", fromVersion: memory.currentVersion, toVersion: revised.currentVersion, truthState: "INFERENCE" } });
       }
     }
+    await assertWorkerNotCancelled({ userId: input.userId, missionId: mission.id, workerId: worker.id, stage: "before_completion" });
     const nextWorker = snapshot.workers.find(item => item.missionId === mission.id && item.id !== worker.id && item.state === "QUEUED") ?? null;
-    await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "COMPLETED", outputSummary: output.slice(0, 1_200), handoffToRole: nextWorker?.role ?? null, actor: `luna:${worker.role.toLowerCase()}` });
+    await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "COMPLETED", outputSummary: output.slice(0, 1_200), handoffToRole: nextWorker?.role ?? null, actor: workerActor });
     if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "COMPLETED", actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker completed a persisted bounded handoff." });
     await updateLunaMission({ userId: input.userId, missionId: mission.id, status: "RUNNING", currentFocus: nextWorker ? `Awaiting ${nextWorker.role} handoff` : "Awaiting durable task-graph evaluation", modelRequestsUsed: mission.modelRequestsUsed + (modelRequestUsed ? 1 : 0), tokenUsage: mission.tokenUsage + estimatedTokens, actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker result, report, memory, and audit records were persisted." });
     return { workerId: worker.id, taskId: task?.id ?? null, reportObjectId: report.id, resultSummary: output.slice(0, 1_200), modelRequestUsed };
   } catch (error) {
+    if (isLunaWorkerCancellationError(error)) throw error;
     const detail = error instanceof Error ? error.message : "Worker failed without an error message.";
     await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "FAILED", errorMessage: detail, actor: `luna:${worker.role.toLowerCase()}` }).catch(() => undefined);
     if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "RECOVERY_REQUIRED", errorMessage: detail, actor: `luna:${worker.role.toLowerCase()}`, reason: "Worker failed; task requires recovery or reassignment." }).catch(() => undefined);

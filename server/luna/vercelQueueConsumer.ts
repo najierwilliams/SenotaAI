@@ -2,7 +2,7 @@ import { QueueClient, type MessageMetadata, type RetryDirective } from "@vercel/
 import type { LunaMission, LunaWorker } from "@shared/lunaCognitive";
 import { queueMissionWorkers } from "./orchestrator";
 import { calculateEligibleTasks, createLunaAttention, createLunaReflection, getLunaCognitiveSnapshot, recordLunaRuntimeEvent, updateLunaMission, updateLunaTask, updateLunaWorker } from "./supabase";
-import { executeLunaWorkerStep } from "./workerExecutor";
+import { executeLunaWorkerStep, isLunaWorkerCancellationError } from "./workerExecutor";
 import { createLunaQueueMessage, LUNA_VERCEL_QUEUE_TOPIC, type LunaQueueMessage, type LunaQueuePublisher } from "./vercelQueueRuntime";
 
 export const LUNA_QUEUE_OWNER_ID = 1;
@@ -165,6 +165,19 @@ async function runWorker(message: LunaQueueMessage, metadata: MessageMetadata, d
   try {
     await dependencies.executeWorker({ userId: LUNA_QUEUE_OWNER_ID, missionId: mission.id, workerId: worker.id });
   } catch (error) {
+    if (isLunaWorkerCancellationError(error)) {
+      await recordLunaRuntimeEvent({
+        userId: LUNA_QUEUE_OWNER_ID,
+        action: "WORKER_QUEUE_CANCELLED",
+        subjectType: "WORKER",
+        subjectId: worker.id,
+        missionId: mission.id,
+        workerId: worker.id,
+        actor: runtimeActor(),
+        detail: { providerMessageId: metadata.messageId, deliveryCount: metadata.deliveryCount, stage: error.stage, guarantee: "Cancelled worker was acknowledged without retry or recovery transition." },
+      });
+      return;
+    }
     return handleWorkerFailure(message, metadata, error, dependencies);
   }
 

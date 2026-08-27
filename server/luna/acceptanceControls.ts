@@ -1,8 +1,8 @@
-export type LunaAcceptanceControl = "RETRY_ONCE" | "MEMORY_REVISION_ONCE";
+export type LunaAcceptanceControl = "RETRY_ONCE" | "MEMORY_REVISION_ONCE" | "CANCELLATION_CHECKPOINTS";
 
 const PREFIX = "[[LUNA_ACCEPTANCE:";
 const SUFFIX = "]]";
-const ALLOWED = new Set<LunaAcceptanceControl>(["RETRY_ONCE", "MEMORY_REVISION_ONCE"]);
+const ALLOWED = new Set<LunaAcceptanceControl>(["RETRY_ONCE", "MEMORY_REVISION_ONCE", "CANCELLATION_CHECKPOINTS"]);
 
 /**
  * Test controls are intentionally embedded only in an explicit owner-planned acceptance objective.
@@ -29,4 +29,12 @@ export function shouldInjectControlledRetry(input: { objective: string; activity
 export function shouldCreateMemoryRevision(input: { objective: string; activity: Array<{ action: string; workerId?: string | null }>; workerId: string }) {
   return lunaAcceptanceControl(input.objective) === "MEMORY_REVISION_ONCE"
     && !hasLunaAcceptanceEvent(input.activity, "ACCEPTANCE_MEMORY_REVISION", input.workerId);
+}
+
+/**
+ * Gives the real private worker a brief, non-side-effecting checkpoint interval only for
+ * the explicit active-cancellation acceptance mission. Ordinary missions never wait here.
+ */
+export function shouldExerciseCancellationCheckpoints(objective: string) {
+  return lunaAcceptanceControl(objective) === "CANCELLATION_CHECKPOINTS";
 }
