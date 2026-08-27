@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import LunaChat from "./pages/LunaChat";
 import LunaBrain from "./pages/LunaBrain";
 import NpcAdmin from "./pages/NpcAdmin";
+import KnowledgeSpace from "./pages/KnowledgeSpace";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
       <Route path={"/npc"}><DashboardLayout><NpcAdmin /></DashboardLayout></Route>
       <Route path={"/luna"}><DashboardLayout><LunaChat /></DashboardLayout></Route>
       <Route path={"/luna/brain"}><DashboardLayout><LunaBrain /></DashboardLayout></Route>
+      <Route path={"/knowledge"}><DashboardLayout><KnowledgeSpace /></DashboardLayout></Route>
       <Route path={"/new"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/history"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/memory"}><DashboardLayout><Home /></DashboardLayout></Route>

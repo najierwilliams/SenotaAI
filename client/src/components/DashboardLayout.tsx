@@ -12,7 +12,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bot, Brain, Database, MessageSquare, MoonStar, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bot, Brain, Database, MessageSquare, MoonStar, Network, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useChatSessions } from "@/contexts/ChatSessionsContext";
@@ -21,6 +21,7 @@ const menuItems = [
   { icon: MessageSquare, label: "AI chat", path: "/" },
   { icon: MoonStar, label: "Chat with Luna", path: "/luna" },
   { icon: Brain, label: "Luna Brain", path: "/luna/brain" },
+  { icon: Network, label: "Knowledge Space", path: "/knowledge" },
   { icon: Database, label: "NPC management", path: "/npc" },
 ];
 
