@@ -120,7 +120,8 @@ export async function queueMissionWorkers(input: { userId: number; mission: Luna
   const snapshot = await getLunaCognitiveSnapshot(input.userId);
   const tasks = snapshot.tasks.filter(task => task.missionId === input.mission.id);
   const existing = snapshot.workers.filter(worker => worker.missionId === input.mission.id);
-  const active = existing.filter(worker => ["QUEUED", "RUNNING", "WAITING"].includes(worker.state)).length;
+  const resumedQueuedWorkerIds = new Set(existing.filter(worker => worker.state === "QUEUED" && input.mission.resumeAfter && !snapshot.activity.some(event => event.action === "WORKER_REQUEUED" && event.workerId === worker.id && (event.detail as Record<string, unknown>).runtimeRunId === input.mission.runtimeRunId)).map(worker => worker.id));
+  const active = existing.filter(worker => ["QUEUED", "RUNNING", "WAITING"].includes(worker.state) && !resumedQueuedWorkerIds.has(worker.id)).length;
   const capacity = Math.max(0, input.mission.maxWorkers - active);
   if (!capacity) return [];
 
