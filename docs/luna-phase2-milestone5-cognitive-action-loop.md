@@ -1,6 +1,6 @@
 # Luna Phase 2 — Milestone 5: Governed Cognitive-Action Loop
 
-**Status:** Implemented and locally validated on the current `main` working tree. The additive production schema migration has been executed and read-only verified. A deployment and real bounded production acceptance mission remain pending commit and push.
+**Status:** Implemented, validated, deployed, and production-accepted on the current `main` lineage. The additive production schema migration was executed and read-only verified; the exact committed revision completed one bounded, non-scientific autonomous mission through the configured Vercel Queue runtime.
 
 > **Scope boundary.** Milestone 5 adds a deterministic, owner-scoped decision layer over the established Luna mission system. It does not introduce a browser execution loop, a second worker runtime, a second database, fabricated scientific evidence, coordinate mappings, or biological/physical activity.
 
@@ -56,6 +56,28 @@ The production migration is additive and is stored at [`supabase/migrations/2026
 
 The user executed the migration in the authenticated SenotaAI Supabase production project (`qyyvyiwsqhuzraxuyqxu`). SQL Editor query `1c12fa68-6750-4569-b4e1-7726666f245d` returned the expected one-row result for the final `pg_notify('pgrst', 'reload schema')` statement with no displayed SQL error. The read-only verifier then ran in query `a093ea27-7731-4517-af14-e9133501d842` and returned 18 rows. The visible rows reported `passed = true` for the new tables, columns, RLS posture, no direct browser policies, indexes, triggers, and function; the user confirmed completion of the verifier and no `false` value was observed. The detailed provenance record is maintained in [`docs/.luna-cognitive-migration-execution-log.md`](.luna-cognitive-migration-execution-log.md).
 
+## Production deployment and bounded acceptance evidence
+
+The validated source was committed to the actual `main` lineage as [`cbb9b21bb11e958e8c328790f403863dc9afa7cf`](https://github.com/najierwilliams/SenotaAI/commit/cbb9b21bb11e958e8c328790f403863dc9afa7cf), `feat(luna): add governed cognitive action loop`. GitHub `main` was read back at that exact SHA. Vercel deployed that same commit in production as `dpl_F1ddAQC9L7uchGE7XoYweN2UQZfU`, state `READY`, at [https://senota-qjtho92cy-senota-s-projects.vercel.app/](https://senota-qjtho92cy-senota-s-projects.vercel.app/). A read-only deployment fetch returned HTTP `200 OK`.
+
+The owner conducted one explicitly labelled acceptance-only condition: **“M5 acceptance: bounded internal handoff governance.”** It was persisted as a non-scientific `OPEN` knowledge gap with an explicit internal-context-only provenance and one declared `0.990` priority assessment. The condition prohibited external retrieval, scientific authority, HRA/MNI/Julich mapping, coordinates, clinical, biological, physical, financial, account, and destructive action. It had no project, claim, related-object, provider, or scientific-record linkage.
+
+The existing owner autonomy setting was already enabled; the owner separately enabled the default-off cognitive-action control. The deployed console then produced the one deterministic candidate and accepted one dispatch. The request was observed as `POST /api/trpc/knowledge.cognitive.action.assessAndDispatch 200`; the private queue consumer then received `POST /api/luna/queue-consumer 200` callbacks. The browser was used only to invoke the owner control and observe state; no browser execution loop ran.
+
+| Durable acceptance record | Verified production evidence |
+|---|---|
+| Source gap | `5067d995-d6eb-4a7b-bb2c-1f3d7eba2706`, moved from `OPEN` to conservative `WATCHING`. |
+| Decision | `96c4a3b5-e593-463b-9d0e-cc758112f092`, `COMPLETED`, outcome `NO_ACTION`. |
+| Mission | `039258de-1e16-4e91-a8f9-245303530632`, `COMPLETED`, `mission_origin = AUTONOMOUS`, linked to that decision. |
+| Queue evidence | Provider-issued run ID `1K-1M1V51hKy661Ytt7yy0hsiN9rdeF6sE`; real private Queue callback records observed. |
+| Bounded resource envelope | `4 / 24 / 2 / 900 / 12 / 24000` for workers, steps, retries, seconds, model requests, and token budget. |
+| Reports and validation | `8` auditable report objects linked through immutable validation; `8` immutable validations, `2` `ACCEPTED`. |
+| Learning | Exactly `1` Luna-owned `INFERENCE` memory admitted. The other five displayed review-required handoffs remained audit records and created warning attention; they were not admitted to memory. |
+| Reflection and audit | `1` reflection and `1` `MISSION_COMPLETED` audit record. |
+| Duplicate/infinite-loop check | The console presented `NO ACTION` after completion. A subsequent owner-scoped constrained reassessment created no candidate or mission; the verifier still reported exactly `1` decision for the acceptance gap. |
+
+> **Acceptance interpretation.** The completed outcome `NO_ACTION` is a terminal governed decision outcome, not a claim that the gap was scientifically resolved. The gap remains `WATCHING`, and all accepted learning remains a Luna inference.
+
 ## Learning and scientific safety semantics
 
 Worker reports are persisted first as auditable handoffs with `AI_INFERENCE` / `INFERRED` classification. The report is not represented as provider evidence or scientific authority. The deterministic validator then records an immutable validation. Only `ACCEPTED` output may produce Luna-owned memory, and that memory remains `INFERENCE`; review-required output instead creates an attention item and is excluded from memory admission.
@@ -92,10 +114,10 @@ The Cognitive Console separately displays and controls cognitive-action enableme
 | Immutable result validation before Luna-owned memory admission | Complete and tested. |
 | Decision/validation/reflection/audit records and conservative `WATCHING` gap semantics | Complete and queue-completion tested. |
 | Production additive schema migration | Executed and read-only verified. |
-| Commit current implementation on the actual remote `main` lineage | Pending. |
-| Vercel deployment of the exact committed revision | Pending. |
-| Real production acceptance loop using a clearly labelled non-scientific persisted condition | Pending. It must show a decision, autonomous linked mission, Vercel Queue run identifier, private worker completion, report and immutable validation, accepted inference learning/reflection/audit, conservative gap state, and no duplicate replacement mission. |
+| Commit current implementation on the actual remote `main` lineage | Complete at `cbb9b21bb11e958e8c328790f403863dc9afa7cf`. |
+| Vercel deployment of the exact committed revision | Complete: `dpl_F1ddAQC9L7uchGE7XoYweN2UQZfU`, `READY`, with deployment metadata at the same SHA. |
+| Real production acceptance loop using a clearly labelled non-scientific persisted condition | Complete. The documented acceptance produced a completed autonomous linked mission, provider Queue run identifier, private worker completion, reports, immutable validations, bounded accepted inference learning, reflection/audit, conservative `WATCHING` status, and a no-duplicate reassessment. |
 
 ## Remaining limitations
 
-Milestone 5 intentionally does not make durable runtime availability appear when Vercel Queue is unconfigured. In that case, planning and decision records may exist while the mission remains `WAITING_FOR_RUNTIME`; this is an explicit blocked state rather than fake worker activity. The planned production acceptance must be completed only after the Vercel deployment is verified to use the exact commit and production Queue configuration is healthy. The legacy full-suite configuration failures and unrelated `server/storage` TypeScript import remain outside the Milestone 5 change surface and are documented rather than hidden.
+Milestone 5 intentionally does not make durable runtime availability appear when Vercel Queue is unconfigured. In that case, planning and decision records may exist while the mission remains `WAITING_FOR_RUNTIME`; this is an explicit blocked state rather than fake worker activity. This acceptance was intentionally narrow: five reports correctly failed structural heading validation and remained review-required audit records, demonstrating that nonconforming worker output is withheld from learning. The legacy full-suite configuration failures and unrelated `server/storage` TypeScript import remain outside the Milestone 5 change surface and are documented rather than hidden.
