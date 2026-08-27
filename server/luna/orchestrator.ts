@@ -129,9 +129,12 @@ export async function queueMissionWorkers(input: { userId: number; mission: Luna
     if (!task.workerRole) continue;
     const workerId = deterministicWorkerId(input.mission.id, task.id);
     const existingWorker = existing.find(worker => worker.id === workerId) ?? null;
-    if (existingWorker?.state === "PAUSED") {
-      const requeued = await updateLunaWorker({ userId: input.userId, workerId, missionId: input.mission.id, state: "QUEUED", resetForRetry: true, actor: "luna:queue" });
-      await recordLunaRuntimeEvent({ userId: input.userId, action: "WORKER_REQUEUED", subjectType: "WORKER", subjectId: requeued.id, missionId: input.mission.id, workerId: requeued.id, actor: "luna:queue", detail: { taskId: task.id, role: requeued.role, reason: "Mission resumed." } });
+    const resumeRequeueRecorded = snapshot.activity.some(event => event.action === "WORKER_REQUEUED" && event.workerId === workerId && (event.detail as Record<string, unknown>).runtimeRunId === input.mission.runtimeRunId);
+    if ((existingWorker?.state === "PAUSED" || (existingWorker?.state === "QUEUED" && input.mission.resumeAfter && !resumeRequeueRecorded))) {
+      const requeued = existingWorker.state === "PAUSED"
+        ? await updateLunaWorker({ userId: input.userId, workerId, missionId: input.mission.id, state: "QUEUED", resetForRetry: true, actor: "luna:queue" })
+        : existingWorker;
+      await recordLunaRuntimeEvent({ userId: input.userId, action: "WORKER_REQUEUED", subjectType: "WORKER", subjectId: requeued.id, missionId: input.mission.id, workerId: requeued.id, actor: "luna:queue", detail: { taskId: task.id, role: requeued.role, runtimeRunId: input.mission.runtimeRunId, reason: "Mission resumed." } });
       workers.push(requeued);
       continue;
     }

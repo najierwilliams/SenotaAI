@@ -54,7 +54,7 @@ async function publishWorkers(input: { mission: LunaMission; workers: LunaWorker
         workerId: worker.id,
         missionRunId: input.mission.runtimeRunId ?? "",
       }),
-      { idempotencyKey: `mission:${input.mission.id}:worker:${worker.id}`, retentionSeconds: 604_800 },
+      { idempotencyKey: `mission:${input.mission.id}:run:${input.mission.runtimeRunId ?? "initial"}:worker:${worker.id}`, retentionSeconds: 604_800 },
     );
     await recordLunaRuntimeEvent({
       userId: LUNA_QUEUE_OWNER_ID,
