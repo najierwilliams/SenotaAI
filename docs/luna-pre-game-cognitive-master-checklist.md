@@ -2,7 +2,7 @@
 
 **Status updated:** `2026-08-28`  
 **Starting repository revision:** `eb09673d65d00fc6ba1df930f944ffc0ca693832`  
-**Implementation status:** Source, owner API, Console, migration, and local test work is complete for the bounded foundation below. The additive production migration has **not** been applied yet, so no source addition is represented as production-complete.
+**Implementation status:** The additive production schema and one narrowly scoped focus-history correction are applied and verified. Owner API, Console, source-ingestion, bounded-maintenance, and fixture-retirement production acceptance are complete for the bounded foundation below. Individual untested capabilities remain marked partial or unimplemented rather than being represented as production-complete.
 
 | Marker | Meaning |
 |---|---|
@@ -136,7 +136,7 @@
 - [x] **Luna Chat cognitive input.** Owner-authorized remembered Luna preview chat is bridged through the new safe input path; it is not an unbounded autonomous loop.
 - [~] **Human-readable explanation.** Existing and new high-level rationales are visible; a full unified activity narrative is not yet assembled.
 - [x] **Audit/reconstructability.** New mutable records write generic cognitive versions; append-only records have immutable triggers; all new writes produce cognitive audit events.
-- [x] **Additive database migration and verifier.** `20260827_luna_pre_game_cognitive_master.sql` and `verify_luna_pre_game_cognitive_master.sql` add no provider modification, direct browser policy, or destructive data operation.
+- [x] **Additive database migration and verifier.** `20260827_luna_pre_game_cognitive_master.sql` and its single-grid verifier passed all 28 table-security rows, owner-scope, cognitive-version, and scientific-invariant checks in production. `20260828_luna_pre_game_focus_replacement_fix.sql` then corrected only the intended one-way focus `replaced_at` lifecycle and its verifier returned `PASS`. Neither migration modifies provider records, mappings, Queue behavior, or RLS browser policies.
 - [~] **Owner APIs across domains.** Owner snapshot, bounded input/world/maintenance, preference, self assertion, goal profile/dependency, gap merge/reopen, commitment, hypothesis, and plan record APIs exist. Arbitrary raw writes are intentionally omitted; several review/update lifecycle operations remain to be added.
 - [x] **World adapter interface.** See world-event entry above.
 - [~] **NPC-ready identity boundary.** Workspace isolation and `agent_identity`/`participant_identity` exist. Current Luna runtime identity is fixed as `luna`; generic multi-agent creation/cloning is a future scope and is not simulated.
@@ -144,9 +144,9 @@
 
 ## Parts 55–60 — Tests and production acceptance
 
-- [x] **Focused local tests for implemented domains.** `preGameCognitive.test.ts` (10), `preGameCognitiveService.test.ts` (3), `preGameCognitiveMigration.test.ts` (3), and `knowledge.preGameCognitive.test.ts` (4) cover relevance/sensitive rejection, lifecycle/focus/budget guards, source pipeline idempotency, world events, migration posture, and owner gating. Existing full Luna suite remains green locally.
-- [ ] **Production end-to-end acceptance.** Requires the reviewed additive migration, deployment, and a temporary, explicitly non-scientific owner source input. It must not rerun M5 merely for this feature and must clean only temporary source fixtures using supported lifecycle status while retaining audit history.
-- [ ] **Production conversation, correction, repeated-evidence self-development, and maintenance acceptance.** These require a deployed migration and a carefully bounded owner test path; no false production claim is made.
+- [x] **Focused local tests for implemented domains.** `preGameCognitive.test.ts` (10), `preGameCognitiveService.test.ts` (4), `preGameCognitiveMigration.test.ts` (3), `preGameFocusReplacementMigration.test.ts` (2), and `knowledge.preGameCognitive.test.ts` (5) cover relevance/sensitive rejection, lifecycle/focus/budget guards, source pipeline idempotency, world events, maintenance, migration posture, focus-history safety, and owner gating. The dedicated final focus/API suite passed 11/11; the full repository suite reported 325 passed, 14 pre-existing external-integration failures, and 2 skipped.
+- [x] **Production end-to-end source, maintenance, and cleanup acceptance.** Through the owner Console, a temporary explicitly non-scientific source was retained and boundedly assessed as one durable input, experience, focus assignment, uncertainty record, profiled gap, curiosity record, and computational observations; it created no mission or Queue work. Maintenance initially revealed and then, after the reviewed trigger-only correction, passed a three-record bounded reconciliation with a durable report. The owner then confirmed the supported retirement workflow, which retained immutable source/experience/audit/version/history but cleared active focus, active attention, open uncertainty, active curiosity, and the temporary gap from the open summary. No M5 mission was rerun.
+- [~] **Production conversation, correction, and repeated-evidence self-development acceptance.** The code paths are owner-gated and focused-tested, but these additional production scenarios were intentionally not run because they would create unnecessary durable private cognitive history and are not prerequisites for the delivered bounded foundation.
 
 ## Parts 61–82 — Performance, termination, future API, final checks
 
@@ -156,11 +156,11 @@
 - [~] **Unified cognitive activity stream.** New write events use the established cognitive audit stream and version records; a single cross-domain activity read model remains future work.
 - [~] **Future-facing API surface.** Current surface covers source/world event, state snapshot, focus projection, attention, gap, curiosity, goal profile/dependency, plan record, hypothesis, relationship data, learning, maintenance, and existing M5 decisions/actions. Generic agent creation, replan and reflect/learn commands remain out of scope until safe policy design is reviewed.
 - [ ] **Future NPC cloning architecture.** Requires a reviewed multi-agent identity/workspace model; current implementation intentionally does not mass-clone Luna.
-- [ ] **Final production capability check and report.** Pending schema approval/application, deployment, production evidence, full test/build results, and exact Git/Vercel identifiers.
+- [x] **Final production capability check and report.** The production migrations were user-applied and verified; the owner Console acceptance and supported fixture retirement completed; the final production deployment is `dpl_BG54k9LmcgbFEbQfG1eHydputi5T` for commit `fe62959550900ebf8f1f6db15ebaa65be22420a2`. See `docs/luna-pre-game-cognitive-production-notes.md` and the final report.
 
-## Production migration gate
+## Production migration evidence
 
-The next execution gate is **not** a code change. The migration must be reviewed and applied to the authenticated Supabase project by the owner. The read-only verifier must then return `PASS` for table/RLS/no-direct-policy/trigger and cognitive-version checks. Until this is complete, no deployed source route may attempt to write the new tables.
+The owner applied both reviewed migrations to Supabase project `qyyvyiwsqhuzraxuyqxu`. The consolidated read-only verifier returned `PASS` for all 28 table-security rows, the owner-scope contract, the extended cognitive-version constraint, and the scientific invariant. The follow-up focus-history verifier returned `FOCUS_REPLACEMENT_TRIGGER ... PASS`. Production acceptance evidence and the exact temporary-fixture retirement scope are recorded in `docs/luna-pre-game-cognitive-production-notes.md`.
 
 ## Architecture dependency chain
 
