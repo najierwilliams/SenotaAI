@@ -531,3 +531,184 @@ export function workerContract(role: LunaWorkerRole): LunaWorkerContract {
   if (!contract) throw new Error(`No Luna worker contract is registered for ${role}.`);
   return contract;
 }
+
+
+// Additive pre-game cognitive architecture contracts. These types describe bounded
+// computational records; they never assert consciousness or biological state.
+export const LUNA_COGNITIVE_INPUT_TYPES = ["CONVERSATION", "USER_CORRECTION", "OWNER_NOTE", "WORKER_RESULT", "PROJECT_OUTCOME", "WORLD_EVENT", "MAINTENANCE"] as const;
+export type LunaCognitiveInputType = (typeof LUNA_COGNITIVE_INPUT_TYPES)[number];
+export const LUNA_COGNITIVE_INPUT_RELEVANCE = ["RELEVANT", "CONTEXT_ONLY", "IGNORED", "SENSITIVE_REJECTED"] as const;
+export type LunaCognitiveInputRelevance = (typeof LUNA_COGNITIVE_INPUT_RELEVANCE)[number];
+export const LUNA_EXPERIENCE_KINDS = ["CONVERSATION", "CORRECTION", "OBSERVATION", "WORKER_OUTCOME", "PROJECT_OUTCOME", "WORLD_EVENT", "MAINTENANCE"] as const;
+export type LunaExperienceKind = (typeof LUNA_EXPERIENCE_KINDS)[number];
+export const LUNA_COGNITIVE_CYCLE_TYPES = ["MANUAL", "CONVERSATION", "WORKER_COMPLETION", "WORLD_EVENT", "MAINTENANCE"] as const;
+export type LunaCognitiveCycleType = (typeof LUNA_COGNITIVE_CYCLE_TYPES)[number];
+
+export type LunaCognitiveInput = {
+  id: string; workspaceId: string; sourceKey: string; inputType: LunaCognitiveInputType;
+  summary: string; relevance: LunaCognitiveInputRelevance; privacyClass: "OWNER_PRIVATE" | "SYSTEM_DERIVED";
+  projectId: string | null; goalId: string | null; missionId: string | null; workerId: string | null;
+  provenance: LunaProvenance; createdAt: string;
+};
+export type LunaExperience = {
+  id: string; workspaceId: string; inputId: string | null; experienceKind: LunaExperienceKind;
+  summary: string; importance: number; confidence: number; projectId: string | null; goalId: string | null;
+  missionId: string | null; workerId: string | null; provenance: LunaProvenance; createdAt: string;
+};
+export type LunaCognitiveCycle = {
+  id: string; workspaceId: string; cycleKey: string; cycleType: LunaCognitiveCycleType;
+  inputId: string | null; status: "COMPLETED" | "STOPPED" | "FAILED"; evaluatedCount: number;
+  derivedCount: number; stopReason: string | null; createdAt: string;
+};
+
+export const LUNA_ATTENTION_ASSESSMENT_STATES = ["ACTIVE", "SUPPRESSED", "RESOLVED", "EXPIRED"] as const;
+export type LunaAttentionAssessmentState = (typeof LUNA_ATTENTION_ASSESSMENT_STATES)[number];
+export const LUNA_FOCUS_TIERS = ["PRIMARY", "SECONDARY", "BACKGROUND"] as const;
+export type LunaFocusTier = (typeof LUNA_FOCUS_TIERS)[number];
+export type LunaAttentionAssessment = {
+  id: string; workspaceId: string; sourceType: string; sourceId: string; targetType: string; targetId: string;
+  severity: LunaAttentionSeverity; score: number; factors: Record<string, number>; state: LunaAttentionAssessmentState;
+  focusTier: LunaFocusTier | null; suppressionReason: string | null; expiresAt: string | null; createdAt: string; updatedAt: string;
+};
+export type LunaFocusAssignment = {
+  id: string; workspaceId: string; attentionId: string; targetType: string; targetId: string;
+  tier: LunaFocusTier; rank: number; score: number; cycleId: string | null; replacedAt: string | null; createdAt: string;
+};
+
+export const LUNA_UNCERTAINTY_STATUSES = ["OPEN", "REDUCED", "ACCEPTED", "RESOLVED"] as const;
+export type LunaUncertaintyStatus = (typeof LUNA_UNCERTAINTY_STATUSES)[number];
+export type LunaUncertaintyRecord = {
+  id: string; workspaceId: string; targetType: string; targetId: string; score: number; importance: number;
+  evidenceBasis: string; status: LunaUncertaintyStatus; provenance: LunaProvenance; currentVersion: number; createdAt: string; updatedAt: string;
+};
+export type LunaNoveltyRecord = {
+  id: string; workspaceId: string; targetType: string; targetId: string; noveltyKey: string; score: number;
+  rationale: string; sourceInputId: string | null; createdAt: string;
+};
+
+export const LUNA_CONTRADICTION_STATUSES = ["UNRESOLVED", "UNDER_INVESTIGATION", "RESOLVED", "ACCEPTED_A", "ACCEPTED_B", "INCONCLUSIVE"] as const;
+export type LunaContradictionStatus = (typeof LUNA_CONTRADICTION_STATUSES)[number];
+export type LunaContradiction = {
+  id: string; workspaceId: string; anchorAType: string; anchorAId: string; anchorBType: string; anchorBId: string;
+  summary: string; impact: number; status: LunaContradictionStatus; projectId: string | null; goalId: string | null;
+  provenance: LunaProvenance; currentVersion: number; createdAt: string; updatedAt: string;
+};
+
+export const LUNA_GAP_CATEGORIES = ["FACTUAL", "RELATIONAL", "CAUSAL", "PROCEDURAL", "CONTEXTUAL", "TEMPORAL", "PROVENANCE", "CONTRADICTION", "PROJECT", "GOAL", "SOCIAL", "SELF_MODEL", "UNKNOWN"] as const;
+export type LunaGapCategory = (typeof LUNA_GAP_CATEGORIES)[number];
+export const LUNA_EXTENDED_GAP_STATUSES = ["OPEN", "WATCHING", "RESOLVED", "DISMISSED", "MERGED", "EXPIRED"] as const;
+export type LunaExtendedGapStatus = (typeof LUNA_EXTENDED_GAP_STATUSES)[number];
+export type LunaGapProfile = {
+  gapId: string; workspaceId: string; category: LunaGapCategory; status: LunaExtendedGapStatus; confidence: number;
+  canonicalGapId: string | null; normalizedKey: string; reopenedFromId: string | null; cooldownUntil: string | null;
+  currentVersion: number; createdAt: string; updatedAt: string;
+};
+export const LUNA_CURIOSITY_EXTENDED_STATUSES = ["CANDIDATE", "INTERESTING", "QUEUED", "INVESTIGATING", "SATISFIED", "DEFERRED", "DISMISSED", "EXPIRED"] as const;
+export type LunaCuriosityExtendedStatus = (typeof LUNA_CURIOSITY_EXTENDED_STATUSES)[number];
+export type LunaCuriosityAssessment = {
+  id: string; workspaceId: string; candidateId: string | null; gapId: string | null; triggerType: string; triggerId: string;
+  expectedInformationValue: number; noveltyScore: number; importance: number; status: LunaCuriosityExtendedStatus;
+  cooldownUntil: string | null; expiresAt: string | null; cycleId: string | null; rationale: string; createdAt: string; updatedAt: string;
+};
+
+export const LUNA_PREFERENCE_KINDS = ["USER", "LEARNED", "TASK", "TEMPORARY", "STABLE", "CONTEXTUAL"] as const;
+export type LunaPreferenceKind = (typeof LUNA_PREFERENCE_KINDS)[number];
+export type LunaPreference = {
+  id: string; workspaceId: string; preferenceKind: LunaPreferenceKind; subject: string; value: string;
+  context: Record<string, unknown>; confidence: number; evidenceCount: number; active: boolean;
+  provenance: LunaProvenance; currentVersion: number; createdAt: string; updatedAt: string;
+};
+export const LUNA_INTERNAL_STATE_DIMENSIONS = ["SATISFACTION", "FRUSTRATION", "CURIOSITY", "UNCERTAINTY", "CONFIDENCE", "URGENCY", "SOCIAL_ATTACHMENT", "LOAD", "INTEREST", "CONCERN", "ANTICIPATION"] as const;
+export type LunaInternalStateDimension = (typeof LUNA_INTERNAL_STATE_DIMENSIONS)[number];
+export type LunaInternalStateObservation = {
+  id: string; workspaceId: string; dimension: LunaInternalStateDimension; value: number; delta: number;
+  reason: string; inputId: string | null; experienceId: string | null; cycleId: string | null; createdAt: string;
+};
+export const LUNA_SELF_MODEL_FACT_KINDS = ["OBSERVED", "INFERRED", "USER_ASSERTED"] as const;
+export type LunaSelfModelFactKind = (typeof LUNA_SELF_MODEL_FACT_KINDS)[number];
+export type LunaSelfModelFact = {
+  id: string; workspaceId: string; factKind: LunaSelfModelFactKind; facet: string; statement: string;
+  confidence: number; evidenceCount: number; status: "ACTIVE" | "WEAKENED" | "ARCHIVED";
+  currentVersion: number; createdAt: string; updatedAt: string;
+};
+
+export const LUNA_GOAL_EXTENDED_STATUSES = ["PROPOSED", "ACTIVE", "PAUSED", "COMPLETED", "ABANDONED", "SUPERSEDED", "BLOCKED"] as const;
+export type LunaGoalExtendedStatus = (typeof LUNA_GOAL_EXTENDED_STATUSES)[number];
+export type LunaGoalProfile = {
+  goalId: string; workspaceId: string; origin: "OWNER" | "LUNA" | "SYSTEM"; importance: number; motivation: string;
+  deadlineAt: string | null; successCriteria: string; failureCriteria: string; status: LunaGoalExtendedStatus;
+  currentVersion: number; createdAt: string; updatedAt: string;
+};
+export type LunaGoalDependency = { id: string; workspaceId: string; goalId: string; dependsOnGoalId: string; dependencyKind: "REQUIRES" | "BLOCKS" | "SUPPORTS"; status: "ACTIVE" | "SATISFIED" | "WAIVED"; createdAt: string; };
+export type LunaCommitment = {
+  id: string; workspaceId: string; projectId: string | null; goalId: string | null; relationshipId: string | null;
+  title: string; detail: string; status: "PROPOSED" | "ACTIVE" | "FULFILLED" | "RELEASED" | "BREACHED" | "EXPIRED";
+  dueAt: string | null; confidence: number; externalActionRequired: boolean; currentVersion: number; createdAt: string; updatedAt: string;
+};
+export type LunaHypothesis = {
+  id: string; workspaceId: string; projectId: string | null; goalId: string | null; gapId: string | null;
+  statement: string; plannedTest: string; confidence: number; status: "PROPOSED" | "TESTING" | "SUPPORTED" | "WEAKENED" | "REJECTED" | "INCONCLUSIVE";
+  currentVersion: number; createdAt: string; updatedAt: string;
+};
+export type LunaReasoningArtifact = {
+  id: string; workspaceId: string; cycleId: string | null; subjectType: string; subjectId: string;
+  conclusion: string; confidence: number; uncertaintySummary: string; options: Array<{ label: string; summary: string; }>;
+  recommendation: string; evidenceIds: string[]; createdAt: string;
+};
+export type LunaPlanRevision = {
+  id: string; workspaceId: string; goalId: string | null; missionId: string | null; revisionKind: "CREATED" | "REVISED" | "DEFERRED" | "SUPERSEDED";
+  summary: string; reason: string; alternatives: string[]; createdAt: string;
+};
+export type LunaLearningRecord = {
+  id: string; workspaceId: string; learningKind: "CORRECTION" | "OUTCOME" | "STRATEGY" | "PATTERN";
+  sourceInputId: string | null; experienceId: string | null; validationId: string | null; targetType: string; targetId: string;
+  summary: string; confidenceDelta: number; provenance: LunaProvenance; createdAt: string;
+};
+export type LunaWorkerPerformanceSnapshot = {
+  id: string; workspaceId: string; workerRole: LunaWorkerRole; workerId: string | null; missionId: string | null;
+  outcome: "ACCEPTED" | "NEEDS_REVIEW" | "REJECTED" | "FAILED"; durationMs: number | null; strategy: string; createdAt: string;
+};
+
+export type LunaRelationship = {
+  id: string; workspaceId: string; agentIdentity: string; participantIdentity: string; familiarity: number; trust: number;
+  affinity: number; conflict: number; cooperation: number; expectations: string; uncertainty: number;
+  status: "ACTIVE" | "DORMANT" | "ARCHIVED"; currentVersion: number; createdAt: string; updatedAt: string;
+};
+export type LunaSocialInteraction = {
+  id: string; workspaceId: string; relationshipId: string; inputId: string | null; experienceId: string | null;
+  interactionKind: "CONVERSATION" | "COOPERATION" | "CONFLICT" | "COMMITMENT" | "OBSERVATION";
+  summary: string; impact: number; provenance: LunaProvenance; createdAt: string;
+};
+export type LunaWorldEvent = {
+  id: string; workspaceId: string; sourceKey: string; eventType: string; subjectIdentity: string | null;
+  objectIdentity: string | null; locationRef: string | null; occurredAt: string | null; summary: string;
+  constraints: Record<string, unknown>; consequences: Record<string, unknown>; inputId: string | null; createdAt: string;
+};
+export type LunaMaintenanceReport = {
+  id: string; workspaceId: string; cycleId: string | null; scope: string; evaluatedCount: number; updatedCount: number;
+  issueCount: number; status: "COMPLETED" | "STOPPED" | "FAILED"; stopReason: string | null; summary: string; createdAt: string;
+};
+
+export type LunaPreGameCognitiveSnapshot = {
+  inputs: LunaCognitiveInput[]; experiences: LunaExperience[]; cycles: LunaCognitiveCycle[];
+  attentionAssessments: LunaAttentionAssessment[]; focusAssignments: LunaFocusAssignment[];
+  uncertaintyRecords: LunaUncertaintyRecord[]; noveltyRecords: LunaNoveltyRecord[]; contradictions: LunaContradiction[];
+  gapProfiles: LunaGapProfile[]; curiosityAssessments: LunaCuriosityAssessment[]; preferences: LunaPreference[];
+  internalState: LunaInternalStateObservation[]; selfModelFacts: LunaSelfModelFact[]; goalProfiles: LunaGoalProfile[];
+  goalDependencies: LunaGoalDependency[]; commitments: LunaCommitment[]; hypotheses: LunaHypothesis[];
+  reasoningArtifacts: LunaReasoningArtifact[]; planRevisions: LunaPlanRevision[]; learningRecords: LunaLearningRecord[];
+  workerPerformance: LunaWorkerPerformanceSnapshot[]; relationships: LunaRelationship[]; socialInteractions: LunaSocialInteraction[];
+  worldEvents: LunaWorldEvent[]; maintenanceReports: LunaMaintenanceReport[];
+};
+
+export type LunaWorldEventInput = {
+  sourceKey: string; eventType: string; summary: string; subjectIdentity?: string | null; objectIdentity?: string | null;
+  locationRef?: string | null; occurredAt?: string | null; constraints?: Record<string, unknown>; consequences?: Record<string, unknown>;
+};
+
+export type LunaCognitiveAssessment = {
+  relevance: LunaCognitiveInputRelevance; summary: string; importance: number; confidence: number;
+  detectedCorrection: boolean; detectedGoal: boolean; detectedCommitment: boolean; detectedQuestion: boolean;
+  noveltyScore: number; uncertaintyScore: number; attentionScore: number; recommendedGapCategory: LunaGapCategory | null;
+  reasoning: { conclusion: string; uncertaintySummary: string; recommendation: string; options: Array<{ label: string; summary: string; }> };
+};

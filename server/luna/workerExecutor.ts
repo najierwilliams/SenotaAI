@@ -8,6 +8,7 @@ import { assessLunaWorkerResult } from "./learningService";
 import {
   createLunaAttention,
   createLunaMemory,
+  createLunaWorkerPerformanceSnapshot,
   createOrGetLunaResultValidation,
   createLunaToolCall,
   getLunaCognitiveSnapshot,
@@ -95,6 +96,7 @@ function deterministicWorkerResult(input: { role: LunaWorkerRole; objective: str
  * It is not registered as an ordinary browser/API operation.
  */
 export async function executeLunaWorkerStep(input: { userId: number; missionId: string; workerId: string; model?: LunaModel }): Promise<LunaWorkerExecutionResult> {
+  const workerExecutionStartedAt = Date.now();
   const snapshot = await getLunaCognitiveSnapshot(input.userId);
   const mission = snapshot.missions.find(item => item.id === input.missionId);
   const worker = snapshot.workers.find(item => item.id === input.workerId && item.missionId === input.missionId);
@@ -168,6 +170,18 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
       status: resultAssessment.status, outputHash: resultAssessment.outputHash, resultSummary: resultAssessment.resultSummary,
       checks: resultAssessment.checks, detail: resultAssessment.detail, actor: "luna:validator",
     });
+    if (validation.created) {
+      await createLunaWorkerPerformanceSnapshot({
+        userId: input.userId,
+        workerRole: worker.role,
+        workerId: worker.id,
+        missionId: mission.id,
+        outcome: validation.validation.status === "ACCEPTED" ? "ACCEPTED" : validation.validation.status === "NEEDS_REVIEW" ? "NEEDS_REVIEW" : "REJECTED",
+        durationMs: Date.now() - workerExecutionStartedAt,
+        strategy: modelRequestUsed ? "bounded-model-report" : "deterministic-persisted-context-report",
+        actor: "luna:learning",
+      });
+    }
     if (validation.validation.status !== "ACCEPTED") {
       await createLunaAttention({
         userId: input.userId, missionId: mission.id, severity: "WARNING", category: "KNOWLEDGE_GAP",

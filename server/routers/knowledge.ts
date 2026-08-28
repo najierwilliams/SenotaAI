@@ -41,7 +41,8 @@ import { consolidateLunaOwnedExactDuplicateMemories, getLunaActivitySummary, get
 import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMission, resumeLunaMission, runLunaRecoverySweep } from "../luna/orchestrator";
 import { getLunaRuntimeAvailability } from "../luna/runtime";
 import { assessAndDispatchLunaCognitiveAction } from "../luna/cognitiveActionService";
-import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCuriosityCandidate, createLunaGoal, createLunaKnowledgeGap, createLunaMemory, createLunaPriorityAssessment, createLunaProject, getLunaCognitiveSnapshot, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
+import { ingestLunaCognitiveInput, ingestLunaWorldEvent, runLunaCognitiveMaintenance } from "../luna/preGameCognitiveService";
+import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCommitment, createLunaCuriosityCandidate, createLunaGoal, createLunaGoalDependency, createLunaHypothesis, createLunaKnowledgeGap, createLunaMemory, createLunaPlanRevision, createOrUpdateLunaPreference, createLunaPriorityAssessment, createLunaProject, createOrUpdateLunaGoalProfile, createOrUpdateLunaSelfModelFact, getLunaCognitiveSnapshot, mergeLunaKnowledgeGaps, listLunaPreGameCognitiveSnapshot, reopenLunaKnowledgeGap, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = readKnowledgeCookie(ctx.req.header("cookie"));
@@ -432,7 +433,10 @@ export const knowledgeRouter = router({
     })),
 
     snapshot: knowledgeOwnerProcedure.query(async () => {
-      try { return await getLunaCognitiveSnapshot(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+      try {
+        const [snapshot, preGame] = await Promise.all([getLunaCognitiveSnapshot(KNOWLEDGE_OWNER_ID), listLunaPreGameCognitiveSnapshot(KNOWLEDGE_OWNER_ID)]);
+        return { ...snapshot, preGame };
+      } catch (error) { return databaseError(error); }
     }),
 
     home: knowledgeOwnerProcedure.query(async () => {
@@ -629,9 +633,83 @@ export const knowledgeRouter = router({
       }),
     }),
 
+    preGame: router({
+      snapshot: knowledgeOwnerProcedure.query(async () => {
+        try { return await listLunaPreGameCognitiveSnapshot(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+      }),
+      input: router({
+        ingest: knowledgeOwnerProcedure.input(z.object({
+          inputType: z.enum(["CONVERSATION", "USER_CORRECTION", "OWNER_NOTE", "PROJECT_OUTCOME"]),
+          content: boundedText(4_000).min(1), participantIdentity: boundedText(120).min(1).nullable().optional(),
+          projectId: uuidSchema.nullable().optional(), goalId: uuidSchema.nullable().optional(),
+          correctionTarget: z.object({ type: boundedText(80).min(1), id: uuidSchema }).nullable().optional(),
+          declaredImportance: z.number().finite().min(0).max(1).optional(), declaredConfidence: z.number().finite().min(0).max(1).optional(),
+        })).mutation(async ({ input }) => {
+          try { return await ingestLunaCognitiveInput({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      world: router({
+        ingest: knowledgeOwnerProcedure.input(z.object({
+          sourceKey: boundedText(240).min(8), eventType: boundedText(120).min(1), summary: boundedText(1_600).min(1),
+          subjectIdentity: boundedText(120).min(1).nullable().optional(), objectIdentity: boundedText(120).min(1).nullable().optional(), locationRef: boundedText(240).min(1).nullable().optional(), occurredAt: z.string().datetime().nullable().optional(),
+          constraints: z.record(z.string(), z.unknown()).optional(), consequences: z.record(z.string(), z.unknown()).optional(), projectId: uuidSchema.nullable().optional(), goalId: uuidSchema.nullable().optional(),
+        })).mutation(async ({ input }) => {
+          try {
+            const { projectId, goalId, ...event } = input;
+            return await ingestLunaWorldEvent({ userId: KNOWLEDGE_OWNER_ID, event, projectId, goalId, actor: "knowledge-owner" });
+          } catch (error) { return databaseError(error); }
+        }),
+      }),
+      preference: router({
+        set: knowledgeOwnerProcedure.input(z.object({
+          preferenceKind: z.enum(["USER", "TASK", "TEMPORARY", "CONTEXTUAL"]), subject: boundedText(240).min(1), value: boundedText(1_600).min(1), context: z.record(z.string(), z.unknown()).optional(), confidence: z.number().finite().min(0).max(1).default(1), reason: boundedText(1_000).min(3),
+        })).mutation(async ({ input }) => {
+          try { return await createOrUpdateLunaPreference({ userId: KNOWLEDGE_OWNER_ID, ...input, evidenceCount: 1, provenance: { method: "owner-explicit-preference" }, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      selfModel: router({
+        assertOwnerFact: knowledgeOwnerProcedure.input(z.object({ facet: boundedText(120).min(1), statement: boundedText(1_600).min(1), confidence: z.number().finite().min(0).max(1).default(1), reason: boundedText(1_000).min(3) })).mutation(async ({ input }) => {
+          try { return await createOrUpdateLunaSelfModelFact({ userId: KNOWLEDGE_OWNER_ID, ...input, factKind: "USER_ASSERTED", evidenceCount: 1, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      goal: router({
+        profile: knowledgeOwnerProcedure.input(z.object({ goalId: uuidSchema, importance: z.number().finite().min(0).max(1), motivation: boundedText(1_600).optional(), deadlineAt: z.string().datetime().nullable().optional(), successCriteria: boundedText(1_600).optional(), failureCriteria: boundedText(1_600).optional(), status: z.enum(["PROPOSED", "ACTIVE", "PAUSED", "COMPLETED", "ABANDONED", "SUPERSEDED", "BLOCKED"]).optional(), reason: boundedText(1_000).min(3) })).mutation(async ({ input }) => {
+          try { return await createOrUpdateLunaGoalProfile({ userId: KNOWLEDGE_OWNER_ID, ...input, origin: "OWNER", actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+        addDependency: knowledgeOwnerProcedure.input(z.object({ goalId: uuidSchema, dependsOnGoalId: uuidSchema, dependencyKind: z.enum(["REQUIRES", "BLOCKS", "SUPPORTS"]) })).mutation(async ({ input }) => {
+          try { return await createLunaGoalDependency({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      gap: router({
+        merge: knowledgeOwnerProcedure.input(z.object({ sourceGapId: uuidSchema, canonicalGapId: uuidSchema, reason: boundedText(1_000).min(3) })).mutation(async ({ input }) => {
+          try { return await mergeLunaKnowledgeGaps({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+        reopen: knowledgeOwnerProcedure.input(z.object({ gapId: uuidSchema, reason: boundedText(1_000).min(3) })).mutation(async ({ input }) => {
+          try { return await reopenLunaKnowledgeGap({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      commitment: router({
+        create: knowledgeOwnerProcedure.input(z.object({ title: boundedText(240).min(1), detail: boundedText(1_600).optional(), projectId: uuidSchema.nullable().optional(), goalId: uuidSchema.nullable().optional(), relationshipId: uuidSchema.nullable().optional(), dueAt: z.string().datetime().nullable().optional(), confidence: z.number().finite().min(0).max(1).optional(), externalActionRequired: z.boolean().optional() })).mutation(async ({ input }) => {
+          try { return await createLunaCommitment({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      hypothesis: router({
+        create: knowledgeOwnerProcedure.input(z.object({ statement: boundedText(1_600).min(1), plannedTest: boundedText(1_600).optional(), confidence: z.number().finite().min(0).max(1).optional(), projectId: uuidSchema.nullable().optional(), goalId: uuidSchema.nullable().optional(), gapId: uuidSchema.nullable().optional() })).mutation(async ({ input }) => {
+          try { return await createLunaHypothesis({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+      plan: router({
+        record: knowledgeOwnerProcedure.input(z.object({ goalId: uuidSchema.nullable().optional(), missionId: uuidSchema.nullable().optional(), revisionKind: z.enum(["CREATED", "REVISED", "DEFERRED", "SUPERSEDED"]), summary: boundedText(1_600).min(1), reason: boundedText(1_600).min(3), alternatives: z.array(boundedText(600).min(1)).max(5).optional() })).mutation(async ({ input }) => {
+          try { return await createLunaPlanRevision({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+      }),
+    }),
     maintenance: router({
       reconcile: knowledgeOwnerProcedure.mutation(async () => {
         try { return await reconcileLunaAttention({ userId: KNOWLEDGE_OWNER_ID }); } catch (error) { return databaseError(error); }
+      }),
+      run: knowledgeOwnerProcedure.mutation(async () => {
+        try { return await runLunaCognitiveMaintenance({ userId: KNOWLEDGE_OWNER_ID, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
       }),
     }),
   }),

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parse as parseCookie } from "cookie";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -26,6 +27,8 @@ import { chatWithOllama } from "../agent/ollama";
 import { deactivateWorkspaceMemory, listWorkspaceMemories, syncWorkspaceMemory } from "../workspaceMemoryDb";
 import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
+import { KNOWLEDGE_OWNER_ID, isValidKnowledgeOwnerSession, readKnowledgeCookie } from "../knowledgeSpace/ownerAuth";
+import { ingestLunaCognitiveInput } from "../luna/preGameCognitiveService";
 import { createNpcCanonDraft, createNpcCanonDraftBatch, isNpcCanonPublishingConfigured, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
 import { runNpcPreviewDialogue } from "../npcMemory/previewDialogue";
 import { enforceLunaResponseFormat } from "../npcMemory/dialogueFormat";
@@ -157,9 +160,29 @@ export const agentRouter = router({
       message: z.string().trim().min(1).max(4_000),
       remember: z.boolean().optional(),
       timeZone: z.string().trim().max(100).optional().refine((value) => { try { resolveTimeZone(value); return true; } catch { return false; } }, "Use a valid IANA time zone such as America/New_York."),
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ ctx, input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
       const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001" });
+      const knowledgeOwnerToken = readKnowledgeCookie(ctx.req.headers.cookie ?? "");
+      // The legacy preview remains separately owner-admin-gated. A message becomes a
+      // Luna cognitive source only when that caller also has the independent Knowledge
+      // Space owner session and explicitly leaves remembering enabled.
+      if (input.remember !== false && await isValidKnowledgeOwnerSession(knowledgeOwnerToken)) {
+        try {
+          await ingestLunaCognitiveInput({
+            userId: KNOWLEDGE_OWNER_ID,
+            sourceKey: `luna-preview:${input.playerId}:${createHash("sha256").update(input.message.trim().toLowerCase()).digest("hex")}`,
+            inputType: "CONVERSATION",
+            content: input.message,
+            participantIdentity: `player:${input.playerId}`,
+            provenance: { method: "owner-authorized-luna-preview-bridge", npcId: "luna001", remember: true },
+            actor: "luna:conversation-bridge",
+          });
+        } catch (error) {
+          // Do not represent a failed durable ingestion as a remembered cognitive record.
+          console.warn("[Luna] Owner-authorized conversation cognitive ingestion failed:", error instanceof Error ? error.message : error);
+        }
+      }
       return { ...response, content: enforceLunaResponseFormat(input.message, response.content, "luna001", response.selfAwarenessPercent) };
     }),
   }),
