@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   ingest: vi.fn(),
   ingestWorld: vi.fn(),
   maintenance: vi.fn(),
+  retireFixture: vi.fn(),
 }));
 
 vi.mock("../knowledgeSpace/ownerAuth", () => ({
@@ -21,6 +22,11 @@ vi.mock("../luna/preGameCognitiveService", () => ({
   ingestLunaCognitiveInput: mocks.ingest,
   ingestLunaWorldEvent: mocks.ingestWorld,
   runLunaCognitiveMaintenance: mocks.maintenance,
+}));
+
+vi.mock("../luna/supabase", async importOriginal => ({
+  ...await importOriginal<typeof import("../luna/supabase")>(),
+  retireLunaPreGameAcceptanceFixture: mocks.retireFixture,
 }));
 
 import { knowledgeRouter } from "./knowledge";
@@ -60,5 +66,15 @@ describe("pre-game Luna cognitive owner APIs", () => {
     mocks.maintenance.mockResolvedValue({ evaluatedCount: 4, updatedCount: 1, issueCount: 0 });
     await expect(caller("senota_knowledge_owner=session").cognitive.maintenance.run()).resolves.toMatchObject({ evaluatedCount: 4 });
     expect(mocks.maintenance).toHaveBeenCalledWith({ userId: 1, actor: "knowledge-owner" });
+  });
+
+  it("allows only an owner session to send the explicit temporary-fixture identifier through the retirement guard", async () => {
+    mocks.validOwnerSession.mockResolvedValue(false);
+    await expect(caller().cognitive.preGame.input.retireTemporaryAcceptanceFixture({ inputId: "11111111-1111-4111-8111-111111111111", reason: "Retire the labelled temporary acceptance fixture." })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(mocks.retireFixture).not.toHaveBeenCalled();
+    mocks.validOwnerSession.mockResolvedValue(true);
+    mocks.retireFixture.mockResolvedValue({ suppressedAttention: 1, dismissedGaps: 1, immutableHistoryRetained: true });
+    await expect(caller("senota_knowledge_owner=session").cognitive.preGame.input.retireTemporaryAcceptanceFixture({ inputId: "11111111-1111-4111-8111-111111111111", reason: "Retire the labelled temporary acceptance fixture." })).resolves.toMatchObject({ dismissedGaps: 1 });
+    expect(mocks.retireFixture).toHaveBeenCalledWith({ userId: 1, inputId: "11111111-1111-4111-8111-111111111111", reason: "Retire the labelled temporary acceptance fixture.", actor: "knowledge-owner" });
   });
 });

@@ -65,6 +65,7 @@ import type {
 import { isLunaRoutineOwnedTruth, isLunaScientificElevation, workerContract } from "@shared/lunaCognitive";
 import { getOrCreateKnowledgeWorkspace } from "../knowledgeSpace/supabase";
 import { explainLunaPriority } from "./milestone3";
+import { allocateLunaFocus } from "./preGameCognitive";
 
 const OWNER_PREFIX = "senota-user-";
 const MAX_LIST = 200;
@@ -1545,4 +1546,52 @@ export async function reopenLunaKnowledgeGap(input: { userId: number; gapId: str
   const updated = await createOrUpdateLunaGapProfile({ userId: input.userId, gapId: profile.gapId, category: profile.category, status: "OPEN", confidence: profile.confidence, normalizedKey: profile.normalizedKey, reopenedFromId: profile.reopenedFromId, cooldownUntil: null, actor, reason: input.reason });
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "GAP_REOPENED", subjectType: "GAP", subjectId: profile.gapId, detail: { profileVersion: updated.currentVersion } });
   return updated;
+}
+
+
+/**
+ * Retires only an explicitly labelled pre-game production acceptance fixture.
+ * Immutable inputs, experiences, focus history, versions, audit events, and reports remain retained.
+ */
+export async function retireLunaPreGameAcceptanceFixture(input: { userId: number; inputId: string; reason: string; actor?: string }) {
+  const workspace = await workspaceFor(input.userId); const actor = input.actor ?? "knowledge-owner";
+  const sourceRows = await rows("luna_cognitive_inputs", scopedParams(workspace.id, "*", { id: `eq.${input.inputId}`, limit: "1" }));
+  if (!sourceRows[0]) throw new Error("The requested acceptance fixture input is unavailable in this owner workspace.");
+  const source = mapCognitiveInput(sourceRows[0]);
+  if (!source.summary.includes("PRE_GAME_ACCEPTANCE_20260828")) throw new Error("Only the explicitly labelled pre-game acceptance fixture may be retired through this control.");
+  const reason = requiredText(input.reason, "Acceptance fixture retirement reason", 3, 1_000);
+  const state = await listLunaPreGameCognitiveSnapshot(input.userId);
+  const experience = state.experiences.find(item => item.inputId === source.id) ?? null;
+  let suppressedAttention = 0; let dismissedGaps = 0; let dismissedCuriosity = 0; let resolvedUncertainty = 0;
+  if (experience) {
+    for (const attention of state.attentionAssessments.filter(item => item.sourceId === experience.id && item.state === "ACTIVE")) {
+      await createOrUpdateLunaAttentionAssessment({ userId: input.userId, sourceType: attention.sourceType, sourceId: attention.sourceId, targetType: attention.targetType, targetId: attention.targetId, severity: attention.severity, score: attention.score, factors: attention.factors, state: "SUPPRESSED", focusTier: null, suppressionReason: "Temporary pre-game production acceptance fixture retired; immutable evidence remains retained.", expiresAt: attention.expiresAt, actor, reason });
+      suppressedAttention += 1;
+    }
+    for (const uncertainty of state.uncertaintyRecords.filter(item => item.targetType === "EXPERIENCE" && item.targetId === experience.id && item.status === "OPEN")) {
+      await createOrUpdateLunaUncertainty({ userId: input.userId, targetType: uncertainty.targetType, targetId: uncertainty.targetId, score: uncertainty.score, importance: uncertainty.importance, evidenceBasis: uncertainty.evidenceBasis, status: "RESOLVED", provenance: { ...uncertainty.provenance, retiredFixtureInputId: source.id }, actor, reason });
+      resolvedUncertainty += 1;
+    }
+  }
+  const gapRows = await rows("luna_knowledge_gaps", scopedParams(workspace.id, "*", { limit: String(MAX_LIST) }));
+  const matchingGapIds = gapRows.filter(row => String(asRecord(row.provenance).sourceInputId ?? "") === source.id && String(row.status) !== "DISMISSED").map(row => String(row.id));
+  for (const gapId of matchingGapIds) {
+    await updateLunaKnowledgeGap({ userId: input.userId, gapId, status: "DISMISSED", actor, reason, rationale: "Temporary pre-game production acceptance fixture retired; immutable source and audit history remain retained." });
+    const profile = state.gapProfiles.find(item => item.gapId === gapId);
+    if (profile) await createOrUpdateLunaGapProfile({ userId: input.userId, gapId, category: profile.category, status: "DISMISSED", confidence: profile.confidence, normalizedKey: profile.normalizedKey, canonicalGapId: profile.canonicalGapId, reopenedFromId: profile.reopenedFromId, cooldownUntil: profile.cooldownUntil, actor, reason });
+    dismissedGaps += 1;
+  }
+  for (const curiosity of state.curiosityAssessments.filter(item => matchingGapIds.includes(item.gapId ?? "") && ["CANDIDATE", "INTERESTING", "QUEUED", "INVESTIGATING"].includes(item.status))) {
+    await createOrUpdateLunaCuriosityAssessment({ userId: input.userId, candidateId: curiosity.candidateId, gapId: curiosity.gapId, triggerType: curiosity.triggerType, triggerId: curiosity.triggerId, expectedInformationValue: curiosity.expectedInformationValue, noveltyScore: curiosity.noveltyScore, importance: curiosity.importance, status: "DISMISSED", cooldownUntil: curiosity.cooldownUntil, expiresAt: curiosity.expiresAt, cycleId: curiosity.cycleId, rationale: curiosity.rationale, actor, reason });
+    dismissedCuriosity += 1;
+  }
+  const fresh = await listLunaPreGameCognitiveSnapshot(input.userId);
+  const allocations = allocateLunaFocus(fresh.attentionAssessments.filter(item => item.state === "ACTIVE"));
+  const focusAssignments = await replaceLunaFocusAssignments({ userId: input.userId, assignments: allocations.map(allocation => {
+    const attention = fresh.attentionAssessments.find(item => item.id === allocation.attentionId);
+    if (!attention) throw new Error("Active attention source disappeared while retiring the acceptance fixture.");
+    return { attentionId: attention.id, targetType: attention.targetType, targetId: attention.targetId, tier: allocation.tier, rank: allocation.rank, score: allocation.score };
+  }), actor });
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "PRE_GAME_ACCEPTANCE_FIXTURE_RETIRED", subjectType: "COGNITIVE_INPUT", subjectId: source.id, detail: { suppressedAttention, resolvedUncertainty, dismissedGaps, dismissedCuriosity, replacementFocusAssignments: focusAssignments.length, immutableHistoryRetained: true } });
+  return { input: source, suppressedAttention, resolvedUncertainty, dismissedGaps, dismissedCuriosity, focusAssignments: focusAssignments.length };
 }

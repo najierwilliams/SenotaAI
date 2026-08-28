@@ -17,3 +17,9 @@ The UI did not immediately refresh its aggregate counters in the same rendered v
 After an owner-console refresh, the new production snapshot showed exactly `1` input, `1` experience, `1` focus assignment, `1` uncertainty record, `1` profiled gap, `1` active curiosity item, and `3` bounded computational-state observations. It showed `0` contradictions and `0` learning records, as expected for a non-correction source. The top attention assessment was `WARNING` with score `0.674`, importance `0.55`, and uncertainty `0.68`. The Console explicitly stated that no automatic mission was created, and the existing M5 next-candidate state remained `NO ACTION`.
 
 The owner invoked the displayed `Run bounded maintenance` control. Its response will be verified from a refreshed read-only console snapshot; it remains designed not to dispatch workers or missions.
+
+## 2026-08-28 — Bounded maintenance acceptance after focus-history correction
+
+The owner applied `20260828_luna_pre_game_focus_replacement_fix.sql`; its read-only verifier returned `FOCUS_REPLACEMENT_TRIGGER ... PASS`, confirming that the focus row may only move once from a null replacement timestamp to a timestamp with all other fields unchanged.
+
+The deployed owner console then ran bounded maintenance successfully. It returned: `Bounded maintenance reviewed 3 record(s) and retained a durable report.` The input/experience/attention counters did not create additional source records, and the Console still reported `1` active focus assignment. The existing M5 action panel remained `NO ACTION`; no mission, Queue message, worker, external call, scientific record, provider mapping, or HRA/MNI/Julich state was created or modified by this maintenance acceptance.

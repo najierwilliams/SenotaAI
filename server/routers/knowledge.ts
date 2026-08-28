@@ -42,7 +42,7 @@ import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMissi
 import { getLunaRuntimeAvailability } from "../luna/runtime";
 import { assessAndDispatchLunaCognitiveAction } from "../luna/cognitiveActionService";
 import { ingestLunaCognitiveInput, ingestLunaWorldEvent, runLunaCognitiveMaintenance } from "../luna/preGameCognitiveService";
-import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCommitment, createLunaCuriosityCandidate, createLunaGoal, createLunaGoalDependency, createLunaHypothesis, createLunaKnowledgeGap, createLunaMemory, createLunaPlanRevision, createOrUpdateLunaPreference, createLunaPriorityAssessment, createLunaProject, createOrUpdateLunaGoalProfile, createOrUpdateLunaSelfModelFact, getLunaCognitiveSnapshot, mergeLunaKnowledgeGaps, listLunaPreGameCognitiveSnapshot, reopenLunaKnowledgeGap, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
+import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCommitment, createLunaCuriosityCandidate, createLunaGoal, createLunaGoalDependency, createLunaHypothesis, createLunaKnowledgeGap, createLunaMemory, createLunaPlanRevision, createOrUpdateLunaPreference, createLunaPriorityAssessment, createLunaProject, createOrUpdateLunaGoalProfile, createOrUpdateLunaSelfModelFact, getLunaCognitiveSnapshot, mergeLunaKnowledgeGaps, listLunaPreGameCognitiveSnapshot, reopenLunaKnowledgeGap, retireLunaPreGameAcceptanceFixture, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = readKnowledgeCookie(ctx.req.header("cookie"));
@@ -646,6 +646,9 @@ export const knowledgeRouter = router({
           declaredImportance: z.number().finite().min(0).max(1).optional(), declaredConfidence: z.number().finite().min(0).max(1).optional(),
         })).mutation(async ({ input }) => {
           try { return await ingestLunaCognitiveInput({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+        }),
+        retireTemporaryAcceptanceFixture: knowledgeOwnerProcedure.input(z.object({ inputId: uuidSchema, reason: boundedText(1_000).min(3) })).mutation(async ({ input }) => {
+          try { return await retireLunaPreGameAcceptanceFixture({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
         }),
       }),
       world: router({
