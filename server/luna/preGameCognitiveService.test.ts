@@ -27,7 +27,7 @@ const storage = vi.hoisted(() => ({
 
 vi.mock("./supabase", () => storage);
 
-import { ingestLunaCognitiveInput, ingestLunaWorldEvent } from "./preGameCognitiveService";
+import { ingestLunaCognitiveInput, ingestLunaWorldEvent, runLunaCognitiveMaintenance } from "./preGameCognitiveService";
 
 const blankSnapshot = () => ({
   inputs: [], experiences: [], cycles: [], attentionAssessments: [], focusAssignments: [], uncertaintyRecords: [], noveltyRecords: [], contradictions: [], gapProfiles: [], curiosityAssessments: [], preferences: [], internalState: [], selfModelFacts: [], goalProfiles: [], goalDependencies: [], commitments: [], hypotheses: [], reasoningArtifacts: [], planRevisions: [], learningRecords: [], workerPerformance: [], relationships: [], socialInteractions: [], worldEvents: [], maintenanceReports: [],
@@ -89,5 +89,20 @@ describe("pre-game cognitive source ingestion", () => {
     expect(storage.createOrGetLunaCognitiveInput).toHaveBeenCalledWith(expect.objectContaining({ inputType: "WORLD_EVENT" }));
     expect(storage.createOrGetLunaWorldEvent).toHaveBeenCalledWith(expect.objectContaining({ eventType: "OBSERVATION", sourceKey: "world-event:0001" }));
     expect(storage.createOrGetLunaCognitiveCycle).toHaveBeenCalledOnce();
+  });
+
+  it("records a capped maintenance cycle and replaces focus through persistence without any mission dispatch", async () => {
+    const activeAttention = { id: "attention-active", state: "ACTIVE", sourceType: "COGNITIVE_INPUT", sourceId: "input-1", targetType: "EXPERIENCE", targetId: "experience-1", score: 0.7, severity: "WARNING", factors: {}, expiresAt: null };
+    storage.listLunaPreGameCognitiveSnapshot.mockResolvedValue({ ...blankSnapshot(), attentionAssessments: [activeAttention] });
+    storage.replaceLunaFocusAssignments.mockResolvedValue([{ id: "focus-new" }]);
+    storage.createLunaMaintenanceReport.mockResolvedValue({ id: "maintenance-report-1" });
+    const result = await runLunaCognitiveMaintenance({ userId: 1 });
+    expect(result.evaluatedCount).toBe(1);
+    expect(result.focusAssignments).toBe(1);
+    expect(storage.replaceLunaFocusAssignments).toHaveBeenCalledWith(expect.objectContaining({ assignments: [expect.objectContaining({ attentionId: "attention-active" })] }));
+    expect(storage.createOrGetLunaCognitiveCycle).toHaveBeenCalledWith(expect.objectContaining({ cycleType: "MAINTENANCE" }));
+    expect(storage.createLunaMaintenanceReport).toHaveBeenCalledWith(expect.objectContaining({ scope: "pre-game-cognitive-reconciliation" }));
+    expect(storage.createOrGetLunaCognitiveInput).not.toHaveBeenCalled();
+    expect(storage.createOrGetLunaExperience).not.toHaveBeenCalled();
   });
 });
