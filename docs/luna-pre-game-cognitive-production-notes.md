@@ -23,3 +23,11 @@ The owner invoked the displayed `Run bounded maintenance` control. Its response 
 The owner applied `20260828_luna_pre_game_focus_replacement_fix.sql`; its read-only verifier returned `FOCUS_REPLACEMENT_TRIGGER ... PASS`, confirming that the focus row may only move once from a null replacement timestamp to a timestamp with all other fields unchanged.
 
 The deployed owner console then ran bounded maintenance successfully. It returned: `Bounded maintenance reviewed 3 record(s) and retained a durable report.` The input/experience/attention counters did not create additional source records, and the Console still reported `1` active focus assignment. The existing M5 action panel remained `NO ACTION`; no mission, Queue message, worker, external call, scientific record, provider mapping, or HRA/MNI/Julich state was created or modified by this maintenance acceptance.
+
+## Final deployed cleanup-control availability
+
+Production deployment `dpl_AqVJoTmfGtKk6Gw1FPJKQC7rjqmF` was READY for commit `80c284155659e68eb91782ca9138ff7cdf72604a` at `https://senota-r82i93r4l-senota-s-projects.vercel.app`. After owner authentication, the deployed **Luna cognition** view displayed a fixture-specific **Retire temporary fixture** control and stated its exact scope: only derived mutable records are retired while immutable input, experience, focus history, audit events, versions, and maintenance reports remain retained. The owner explicitly confirmed the single bounded cleanup action.
+
+## 2026-08-28 — Owner-confirmed temporary fixture retirement
+
+After explicit owner confirmation, the deployed `Retire temporary fixture` control completed successfully and displayed the success message: `Temporary pre-game acceptance fixture retired; immutable source, experience, audit, version, and maintenance history remain retained.` The refreshed durable counters showed **1** source input retained, **1** immutable experience retained, **0** active focus assignments, **0** open uncertainty records, **0** active curiosity items, and no active scored pre-game attention record. The existing Luna summary’s open knowledge-gap count returned from 3 to 2; no M5 action candidate, mission, worker, Queue message, external action, provider record, or scientific mapping was created.
