@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { getOllamaConfig } from "./ollama";
+import { describe, expect, it, vi } from "vitest";
+import { getOllamaConfig, streamChatWithOllama } from "./ollama";
 
 describe("Ollama configuration", () => {
   it("requires an endpoint before an agent can execute", () => {
@@ -19,8 +19,22 @@ describe("Ollama configuration", () => {
     });
   });
 
-  it("uses the verified available GPT-OSS model when no default model is configured", () => {
-    expect(getOllamaConfig({ OLLAMA_BASE_URL: "https://ollama.com" }).defaultModel).toBe("gpt-oss:20b");
+  it("uses GLM-5.3-Flash by default and supports the deep model override", () => {
+    expect(getOllamaConfig({ OLLAMA_BASE_URL: "https://ollama.com" }).defaultModel).toBe("glm-5.3-flash:cloud");
+    expect(getOllamaConfig({ OLLAMA_BASE_URL: "https://ollama.com", OLLAMA_DEFAULT_MODEL: "glm-5.3:cloud" }).defaultModel).toBe("glm-5.3:cloud");
+  });
+
+  it("uses the Flash default and forwards conversation context in a streamed request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{"message":{"content":"hello"}}\n{"done":true}\n', { status: 200, headers: { "Content-Type": "application/x-ndjson" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("OLLAMA_BASE_URL", "https://ollama.com");
+    await expect(streamChatWithOllama({ messages: [{ role: "user", content: "Remember the persisted context." }] }, () => undefined)).resolves.toMatchObject({ content: "hello" });
+    const request = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as { model: string; messages: unknown[]; stream: boolean };
+    expect(request.model).toBe("glm-5.3-flash:cloud");
+    expect(request.messages).toEqual([{ role: "user", content: "Remember the persisted context." }]);
+    expect(request.stream).toBe(true);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("rejects non-HTTPS inference endpoints in production", () => {

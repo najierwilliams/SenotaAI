@@ -31,7 +31,7 @@ export function getOllamaConfig(env: NodeJS.ProcessEnv = process.env): OllamaCon
   return {
     baseUrl,
     apiKey: env.OLLAMA_API_KEY?.trim() || undefined,
-    defaultModel: env.OLLAMA_DEFAULT_MODEL?.trim() || "gpt-oss:20b",
+    defaultModel: env.OLLAMA_DEFAULT_MODEL?.trim() || "glm-5.3-flash:cloud",
   };
 }
 
