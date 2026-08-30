@@ -66,6 +66,7 @@ import { isLunaRoutineOwnedTruth, isLunaScientificElevation, workerContract } fr
 import { getOrCreateKnowledgeWorkspace } from "../knowledgeSpace/supabase";
 import { explainLunaPriority } from "./milestone3";
 import { allocateLunaFocus } from "./preGameCognitive";
+import type { SelfModificationFile, SelfModificationRun, SelfModificationTest } from "./selfModification";
 
 const OWNER_PREFIX = "senota-user-";
 const MAX_LIST = 200;
@@ -1594,4 +1595,55 @@ export async function retireLunaPreGameAcceptanceFixture(input: { userId: number
   }), actor });
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "PRE_GAME_ACCEPTANCE_FIXTURE_RETIRED", subjectType: "COGNITIVE_INPUT", subjectId: source.id, detail: { suppressedAttention, resolvedUncertainty, dismissedGaps, dismissedCuriosity, replacementFocusAssignments: focusAssignments.length, immutableHistoryRetained: true } });
   return { input: source, suppressedAttention, resolvedUncertainty, dismissedGaps, dismissedCuriosity, focusAssignments: focusAssignments.length };
+}
+
+
+function mapSelfModificationRun(row: Record<string, unknown>): SelfModificationRun {
+  return {
+    id: String(row.id), workspaceId: String(row.workspace_id), objective: String(row.objective), reason: String(row.reason),
+    status: row.status as SelfModificationRun["status"], previousVersion: asString(row.previous_version), candidateVersion: asString(row.candidate_version),
+    rollbackAvailable: asBoolean(row.rollback_available), limits: asRecord(row.limits), safetyResult: asRecord(row.safety_result), deploymentResult: asRecord(row.deployment_result), rollbackResult: asRecord(row.rollback_result), outcome: asString(row.outcome), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+  };
+}
+function mapSelfModificationFile(row: Record<string, unknown>): SelfModificationFile {
+  return { id: String(row.id), workspaceId: String(row.workspace_id), runId: String(row.run_id), path: String(row.path), beforeSha256: asString(row.before_sha256), afterSha256: asString(row.after_sha256), beforeContent: asString(row.before_content), afterContent: asString(row.after_content), diff: asString(row.diff), protected: asBoolean(row.protected), createdAt: String(row.created_at) };
+}
+function mapSelfModificationTest(row: Record<string, unknown>): SelfModificationTest {
+  return { id: String(row.id), workspaceId: String(row.workspace_id), runId: String(row.run_id), testName: String(row.test_name), status: row.status as SelfModificationTest["status"], output: String(row.output ?? ""), durationMs: asNumber(row.duration_ms), createdAt: String(row.created_at) };
+}
+
+export async function listLunaSelfModificationRuns(userId: number, limit = 20) {
+  const workspace = await workspaceFor(userId);
+  const runs = (await rows("luna_self_modification_runs", scopedParams(workspace.id, "*", { order: "created_at.desc", limit: String(Math.min(Math.max(limit, 1), 50)) }))).map(mapSelfModificationRun);
+  const details = await Promise.all(runs.map(async run => {
+    const [files, tests] = await Promise.all([
+      rows("luna_self_modification_files", scopedParams(workspace.id, "*", { run_id: `eq.${run.id}`, order: "path.asc", limit: "50" })),
+      rows("luna_self_modification_tests", scopedParams(workspace.id, "*", { run_id: `eq.${run.id}`, order: "created_at.desc", limit: "50" })),
+    ]);
+    return { ...run, files: files.map(mapSelfModificationFile), tests: tests.map(mapSelfModificationTest) };
+  }));
+  return details;
+}
+
+export async function createLunaSelfModificationRun(input: { userId: number; objective: string; reason: string; previousVersion?: string | null; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  const row = await insert("luna_self_modification_runs", { workspace_id: workspace.id, objective: requiredText(input.objective, "Self-modification objective", 12, 4_000), reason: requiredText(input.reason, "Self-modification reason", 1, 4_000), status: "PROPOSED", previous_version: input.previousVersion ?? null, limits: { maxGenerationAttempts: 3, maxTestAttempts: 2, maxExecutionMs: 120000, maxModelCalls: 3, maxTokenBudget: 24000, maxConcurrentJobs: 1 }, safety_result: { passed: false, deploymentAuthorized: false, status: "PENDING_EXTERNAL_GATE" }, deployment_result: { status: "BLOCKED_EXTERNAL_GATE_UNAVAILABLE" }, rollback_result: { status: "AVAILABLE", automatic: false }, outcome: "Candidate generation is not yet executed." });
+  const result = mapSelfModificationRun(row); const actor = input.actor ?? "luna:self-modification";
+  await cognitiveAudit({ workspaceId: workspace.id, actor, action: "SELF_MODIFICATION_PROPOSED", subjectType: "SELF_MODIFICATION", subjectId: result.id, detail: { objective: result.objective, status: result.status, deploymentAuthorized: false } });
+  return result;
+}
+
+export async function appendLunaSelfModificationFiles(input: { userId: number; runId: string; files: Array<{ path: string; beforeSha256?: string | null; afterSha256?: string | null; beforeContent?: string | null; afterContent?: string | null; diff?: string | null; protected?: boolean }>; actor?: string }) {
+  const workspace = await workspaceFor(input.userId); await assertOwnedLunaTarget(workspace.id, "luna_self_modification_runs", input.runId, "Self-modification run");
+  if (input.files.length > 12) throw new Error("Self-modification candidate exceeds the bounded file limit.");
+  const results: SelfModificationFile[] = [];
+  for (const file of input.files) { const row = await insert("luna_self_modification_files", { workspace_id: workspace.id, run_id: input.runId, path: requiredText(file.path, "Candidate file path", 1, 400), before_sha256: file.beforeSha256 ?? null, after_sha256: file.afterSha256 ?? null, before_content: file.beforeContent ?? null, after_content: file.afterContent ?? null, diff: file.diff ?? null, protected: Boolean(file.protected) }); results.push(mapSelfModificationFile(row)); }
+  await cognitiveAudit({ workspaceId: workspace.id, actor: input.actor ?? "luna:self-modification", action: "SELF_MODIFICATION_FILES_RECORDED", subjectType: "SELF_MODIFICATION", subjectId: input.runId, detail: { fileCount: results.length } });
+  return results;
+}
+
+export async function appendLunaSelfModificationTest(input: { userId: number; runId: string; testName: string; status: SelfModificationTest["status"]; output?: string; durationMs?: number; actor?: string }) {
+  const workspace = await workspaceFor(input.userId); await assertOwnedLunaTarget(workspace.id, "luna_self_modification_runs", input.runId, "Self-modification run");
+  const row = await insert("luna_self_modification_tests", { workspace_id: workspace.id, run_id: input.runId, test_name: requiredText(input.testName, "Self-modification test name", 1, 240), status: input.status, output: (input.output ?? "").slice(0, 20_000), duration_ms: boundedInt(input.durationMs ?? 0, 0, 900_000, "Self-modification test duration") });
+  return mapSelfModificationTest(row);
 }

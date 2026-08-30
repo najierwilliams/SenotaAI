@@ -11,6 +11,7 @@ import LunaBrain from "./pages/LunaBrain";
 import NpcAdmin from "./pages/NpcAdmin";
 import KnowledgeSpace from "./pages/KnowledgeSpace";
 import DashboardLayout from "./components/DashboardLayout";
+import LunaSelfModification from "./pages/LunaSelfModification";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -21,6 +22,7 @@ function Router() {
       <Route path={"/luna"}><DashboardLayout><LunaChat /></DashboardLayout></Route>
       <Route path={"/luna/brain"}><DashboardLayout><LunaBrain /></DashboardLayout></Route>
       <Route path={"/knowledge"}><DashboardLayout><KnowledgeSpace /></DashboardLayout></Route>
+      <Route path={"/self-modification"}><DashboardLayout><LunaSelfModification /></DashboardLayout></Route>
       <Route path={"/new"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/history"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/memory"}><DashboardLayout><Home /></DashboardLayout></Route>

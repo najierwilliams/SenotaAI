@@ -40,6 +40,7 @@ import { runKnowledgeMission } from "../knowledgeSpace/missionRunner";
 import { consolidateLunaOwnedExactDuplicateMemories, getLunaActivitySummary, getLunaCognitiveHome, reconcileLunaAttention, retrieveLunaContext } from "../luna/cognitiveService";
 import { cancelLunaMission, dispatchLunaMission, pauseLunaMission, planLunaMission, resumeLunaMission, runLunaRecoverySweep } from "../luna/orchestrator";
 import { getLunaRuntimeAvailability } from "../luna/runtime";
+import { createLunaSelfModificationRun, listLunaSelfModificationRuns } from "../luna/supabase";
 import { assessAndDispatchLunaCognitiveAction } from "../luna/cognitiveActionService";
 import { ingestLunaCognitiveInput, ingestLunaWorldEvent, runLunaCognitiveMaintenance } from "../luna/preGameCognitiveService";
 import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCommitment, createLunaCuriosityCandidate, createLunaGoal, createLunaGoalDependency, createLunaHypothesis, createLunaKnowledgeGap, createLunaMemory, createLunaPlanRevision, createOrUpdateLunaPreference, createLunaPriorityAssessment, createLunaProject, createOrUpdateLunaGoalProfile, createOrUpdateLunaSelfModelFact, getLunaCognitiveSnapshot, mergeLunaKnowledgeGaps, listLunaPreGameCognitiveSnapshot, reopenLunaKnowledgeGap, retireLunaPreGameAcceptanceFixture, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
@@ -630,6 +631,15 @@ export const knowledgeRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Cognitive commands are limited to an owner-scoped request to run, assess, review, or dispatch the next bounded cognitive action." });
         }
         try { return await assessAndDispatchLunaCognitiveAction({ userId: KNOWLEDGE_OWNER_ID }); } catch (error) { return databaseError(error); }
+      }),
+    }),
+
+    selfModification: router({
+      history: knowledgeOwnerProcedure.query(async () => {
+        try { return await listLunaSelfModificationRuns(KNOWLEDGE_OWNER_ID); } catch (error) { return databaseError(error); }
+      }),
+      propose: knowledgeOwnerProcedure.input(z.object({ objective: boundedText(4_000).min(12), reason: boundedText(4_000).min(1), previousVersion: boundedText(240).nullable().optional() })).mutation(async ({ input }) => {
+        try { return await createLunaSelfModificationRun({ userId: KNOWLEDGE_OWNER_ID, ...input, actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
       }),
     }),
 
