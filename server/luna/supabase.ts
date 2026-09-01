@@ -256,6 +256,15 @@ function scopedParams(workspaceId: string, select = "*", extra: Record<string, s
 function mapSelf(row: Record<string, unknown>): LunaSelfState {
   return {
     workspaceId: String(row.workspace_id),
+    foundation: {
+      name: String(row.luna_name ?? "Luna"),
+      startingAge: asNumber(row.luna_starting_age, 0),
+      currentAge: asNumber(row.luna_current_age, 0),
+      nativeLanguage: String(row.luna_native_language ?? "English"),
+      personalityFoundation: String(row.luna_personality_foundation ?? ""),
+      personalityKnowledge: String(row.luna_personality_knowledge ?? ""),
+      appearanceReference: String(row.luna_appearance_reference ?? ""),
+    },
     identitySummary: String(row.identity_summary),
     capabilities: asStringArray(row.capabilities),
     limitations: asStringArray(row.limitations),
@@ -483,6 +492,13 @@ export async function getOrCreateLunaSelfState(userId: number): Promise<{ self: 
     try {
       row = await insert("luna_cognitive_state", {
         workspace_id: workspace.id, owner_scope: workspace.ownerScope,
+        luna_name: "Luna",
+        luna_starting_age: 0,
+        luna_current_age: 0,
+        luna_native_language: "English",
+        luna_personality_foundation: "Curious, reflective, kind, and committed to learning within her safety boundaries.",
+        luna_personality_knowledge: "Luna begins with creator-provided foundation knowledge and develops her personality over time.",
+        luna_appearance_reference: "Creator-controlled appearance reference not yet defined.",
         capabilities: ["Persistent Knowledge Space", "Evidence-bounded planning", "Audited software-worker coordination"],
         limitations: ["Does not fabricate scientific evidence, provider records, coordinates, MNI registration, or Julich correspondence.", "Does not perform physical, clinical, cellular, molecular, or biological operations.", "Long-running background execution requires a configured durable runtime."],
       });
@@ -501,7 +517,7 @@ export async function getOrCreateLunaSelfState(userId: number): Promise<{ self: 
   return { self: mapSelf(row), autonomyEnabled: asBoolean(row.autonomy_enabled), maintenanceEnabled: asBoolean(row.maintenance_enabled), cognitiveActionsEnabled: asBoolean(row.cognitive_actions_enabled) };
 }
 
-export async function updateLunaSelfState(input: { userId: number; currentFocus?: string | null; autonomyEnabled?: boolean; maintenanceEnabled?: boolean; cognitiveActionsEnabled?: boolean; identitySummary?: string; capabilities?: string[]; limitations?: string[]; uncertaintySummary?: string; reason: string; actor?: string }) {
+export async function updateLunaSelfState(input: { userId: number; currentFocus?: string | null; autonomyEnabled?: boolean; maintenanceEnabled?: boolean; cognitiveActionsEnabled?: boolean; identitySummary?: string; capabilities?: string[]; limitations?: string[]; uncertaintySummary?: string; foundation?: Partial<LunaSelfState["foundation"]>; reason: string; actor?: string }) {
   const workspace = await workspaceFor(input.userId);
   const current = await getOrCreateLunaSelfState(input.userId);
   const patchValues: Record<string, unknown> = { current_version: current.self.currentVersion + 1 };
@@ -513,6 +529,13 @@ export async function updateLunaSelfState(input: { userId: number; currentFocus?
   if (input.capabilities !== undefined) patchValues.capabilities = input.capabilities.map(item => requiredText(item, "Capability", 1, 400)).slice(0, 30);
   if (input.limitations !== undefined) patchValues.limitations = input.limitations.map(item => requiredText(item, "Limitation", 1, 400)).slice(0, 30);
   if (input.uncertaintySummary !== undefined) patchValues.uncertainty_summary = requiredText(input.uncertaintySummary, "Uncertainty summary", 4, 4_000);
+  if (input.foundation?.name !== undefined) patchValues.luna_name = requiredText(input.foundation.name, "Luna name", 1, 128);
+  if (input.foundation?.startingAge !== undefined) patchValues.luna_starting_age = boundedInt(input.foundation.startingAge, 0, 150, "Luna starting age");
+  if (input.foundation?.currentAge !== undefined) patchValues.luna_current_age = boundedInt(input.foundation.currentAge, 0, 150, "Luna current age");
+  if (input.foundation?.nativeLanguage !== undefined) patchValues.luna_native_language = requiredText(input.foundation.nativeLanguage, "Native language", 1, 64);
+  if (input.foundation?.personalityFoundation !== undefined) patchValues.luna_personality_foundation = requiredText(input.foundation.personalityFoundation, "Personality foundation", 12, 8_000);
+  if (input.foundation?.personalityKnowledge !== undefined) patchValues.luna_personality_knowledge = requiredText(input.foundation.personalityKnowledge, "Personality foundation knowledge", 12, 8_000);
+  if (input.foundation?.appearanceReference !== undefined) patchValues.luna_appearance_reference = requiredText(input.foundation.appearanceReference, "Appearance reference", 1, 2_000);
   const result = await patch("luna_cognitive_state", scopedParams(workspace.id, "*", { limit: "1" }), patchValues);
   const actor = input.actor ?? workspace.ownerScope;
   await cognitiveVersion({ workspaceId: workspace.id, subjectType: "STATE", subjectId: workspace.id, version: asNumber(result.current_version, 2), action: "UPDATED", actor, reason: requiredText(input.reason, "State change reason", 3, 1_000), snapshot: asRecord(result) });

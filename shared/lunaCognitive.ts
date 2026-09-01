@@ -444,8 +444,19 @@ export type LunaAttentionItem = {
   resolvedAt: string | null;
 };
 
+export type LunaFoundation = {
+  name: string;
+  startingAge: number;
+  currentAge: number;
+  nativeLanguage: string;
+  personalityFoundation: string;
+  personalityKnowledge: string;
+  appearanceReference: string;
+};
+
 export type LunaSelfState = {
   workspaceId: string;
+  foundation: LunaFoundation;
   identitySummary: string;
   capabilities: string[];
   limitations: string[];

@@ -29,6 +29,7 @@ import { isNpcMemoryCloudReady } from "../npcMemory/supabase";
 import { NPC_ADMIN_COOKIE, isValidNpcAdminSession } from "../npcMemory/adminAuth";
 import { KNOWLEDGE_OWNER_ID, isValidKnowledgeOwnerSession, readKnowledgeCookie } from "../knowledgeSpace/ownerAuth";
 import { ingestLunaCognitiveInput } from "../luna/preGameCognitiveService";
+import { getOrCreateLunaSelfState } from "../luna/supabase";
 import { createNpcCanonDraft, createNpcCanonDraftBatch, isNpcCanonPublishingConfigured, listNpcCanonTargets, publishNpcCanonDraft, validateNpcCanonDraft } from "../npcMemory/canonDrafts";
 import { runNpcPreviewDialogue } from "../npcMemory/previewDialogue";
 import { enforceLunaResponseFormat } from "../npcMemory/dialogueFormat";
@@ -162,8 +163,8 @@ export const agentRouter = router({
       timeZone: z.string().trim().max(100).optional().refine((value) => { try { resolveTimeZone(value); return true; } catch { return false; } }, "Use a valid IANA time zone such as America/New_York."),
     })).mutation(async ({ ctx, input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
-      const foundation = await getOrCreateAgentSettings(ctx.user?.id ?? KNOWLEDGE_OWNER_ID);
-      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001", foundation: { name: foundation.lunaName, startingAge: foundation.lunaStartingAge, nativeLanguage: foundation.lunaNativeLanguage, personalityFoundation: foundation.lunaPersonalityFoundation, personalityKnowledge: foundation.lunaPersonalityKnowledge } });
+      const foundation = (await getOrCreateLunaSelfState(ctx.user?.id ?? KNOWLEDGE_OWNER_ID)).self.foundation;
+      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001", foundation: { name: foundation.name, startingAge: foundation.startingAge, nativeLanguage: foundation.nativeLanguage, personalityFoundation: foundation.personalityFoundation, personalityKnowledge: foundation.personalityKnowledge } });
       const knowledgeOwnerToken = readKnowledgeCookie(ctx.req.headers.cookie ?? "");
       // The legacy preview remains separately owner-admin-gated. A message becomes a
       // Luna cognitive source only when that caller also has the independent Knowledge

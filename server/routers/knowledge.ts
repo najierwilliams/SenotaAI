@@ -43,7 +43,7 @@ import { getLunaRuntimeAvailability } from "../luna/runtime";
 import { createLunaSelfModificationRun, listLunaSelfModificationRuns } from "../luna/supabase";
 import { assessAndDispatchLunaCognitiveAction } from "../luna/cognitiveActionService";
 import { ingestLunaCognitiveInput, ingestLunaWorldEvent, runLunaCognitiveMaintenance } from "../luna/preGameCognitiveService";
-import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCommitment, createLunaCuriosityCandidate, createLunaGoal, createLunaGoalDependency, createLunaHypothesis, createLunaKnowledgeGap, createLunaMemory, createLunaPlanRevision, createOrUpdateLunaPreference, createLunaPriorityAssessment, createLunaProject, createOrUpdateLunaGoalProfile, createOrUpdateLunaSelfModelFact, getLunaCognitiveSnapshot, mergeLunaKnowledgeGaps, listLunaPreGameCognitiveSnapshot, reopenLunaKnowledgeGap, retireLunaPreGameAcceptanceFixture, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState } from "../luna/supabase";
+import { archiveDuplicateLunaMemory, createLunaClaim, createLunaClaimEvidence, createLunaCommitment, createLunaCuriosityCandidate, createLunaGoal, createLunaGoalDependency, createLunaHypothesis, createLunaKnowledgeGap, createLunaMemory, createLunaPlanRevision, createOrUpdateLunaPreference, createLunaPriorityAssessment, createLunaProject, createOrUpdateLunaGoalProfile, createOrUpdateLunaSelfModelFact, getLunaCognitiveSnapshot, mergeLunaKnowledgeGaps, listLunaPreGameCognitiveSnapshot, reopenLunaKnowledgeGap, retireLunaPreGameAcceptanceFixture, reviseLunaClaim, rollbackLunaOwnedMemory, updateLunaKnowledgeGap, updateLunaMemory, updateLunaSelfState, getOrCreateLunaSelfState } from "../luna/supabase";
 
 const knowledgeOwnerProcedure = publicProcedure.use(async ({ ctx, next }) => {
   const token = readKnowledgeCookie(ctx.req.header("cookie"));
@@ -425,6 +425,22 @@ export const knowledgeRouter = router({
   }),
 
   cognitive: router({
+    foundation: router({
+      get: knowledgeOwnerProcedure.query(async () => {
+        try { return (await getOrCreateLunaSelfState(KNOWLEDGE_OWNER_ID)).self; } catch (error) { return databaseError(error); }
+      }),
+      update: knowledgeOwnerProcedure.input(z.object({
+        name: boundedText(128).min(1),
+        startingAge: z.number().int().min(0).max(150),
+        currentAge: z.number().int().min(0).max(150),
+        nativeLanguage: boundedText(64).min(1),
+        personalityFoundation: boundedText(8_000).min(12),
+        personalityKnowledge: boundedText(8_000).min(12),
+        appearanceReference: boundedText(2_000).min(1),
+      })).mutation(async ({ input }) => {
+        try { return await updateLunaSelfState({ userId: KNOWLEDGE_OWNER_ID, foundation: input, reason: "Creator updated Luna Foundation starting context.", actor: "knowledge-owner" }); } catch (error) { return databaseError(error); }
+      }),
+    }),
     status: publicProcedure.query(async () => ({
       cloudReady: isKnowledgeSpaceCloudReady(),
       runtime: await getLunaRuntimeAvailability(),
