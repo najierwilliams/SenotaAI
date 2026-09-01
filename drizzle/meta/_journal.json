@@ -50,6 +50,13 @@
       "when": 1787265250926,
       "tag": "0006_round_bill_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788280000000,
+      "tag": "0007_luna_foundation",
+      "breakpoints": true
     }
   ]
 }

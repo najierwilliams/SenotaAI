@@ -162,7 +162,8 @@ export const agentRouter = router({
       timeZone: z.string().trim().max(100).optional().refine((value) => { try { resolveTimeZone(value); return true; } catch { return false; } }, "Use a valid IANA time zone such as America/New_York."),
     })).mutation(async ({ ctx, input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
-      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001" });
+      const foundation = await getOrCreateAgentSettings(ctx.user?.id ?? KNOWLEDGE_OWNER_ID);
+      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001", foundation: { name: foundation.lunaName, startingAge: foundation.lunaStartingAge, nativeLanguage: foundation.lunaNativeLanguage, personalityFoundation: foundation.lunaPersonalityFoundation, personalityKnowledge: foundation.lunaPersonalityKnowledge } });
       const knowledgeOwnerToken = readKnowledgeCookie(ctx.req.headers.cookie ?? "");
       // The legacy preview remains separately owner-admin-gated. A message becomes a
       // Luna cognitive source only when that caller also has the independent Knowledge
@@ -197,6 +198,12 @@ export const agentRouter = router({
         githubRepository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "Use owner/repository format.").optional(),
         vercelProject: z.string().trim().min(1).max(128).nullable().optional(),
         notificationsEnabled: z.boolean().optional(),
+        lunaName: z.string().trim().min(1).max(128).optional(),
+        lunaStartingAge: z.number().int().min(0).max(150).optional(),
+        lunaNativeLanguage: z.string().trim().min(1).max(64).optional(),
+        lunaPersonalityFoundation: z.string().trim().min(12).max(8_000).optional(),
+        lunaPersonalityKnowledge: z.string().trim().min(12).max(8_000).optional(),
+        lunaAppearanceReference: z.string().trim().min(1).max(2_000).optional(),
       }))
       .mutation(({ ctx, input }) => updateAgentSettings(ctx.user.id, input)),
   }),

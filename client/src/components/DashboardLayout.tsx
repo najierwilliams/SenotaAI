@@ -12,18 +12,17 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bot, Brain, Code2, Database, MessageSquare, MoonStar, Network, PanelLeft, Pencil, Plus, Trash2 } from "lucide-react";
+import { Bot, Brain, MessageSquare, Network, PanelLeft, Pencil, Plus, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useChatSessions } from "@/contexts/ChatSessionsContext";
 
 const menuItems = [
-  { icon: MessageSquare, label: "AI chat", path: "/" },
-  { icon: MoonStar, label: "Chat with Luna", path: "/luna" },
-  { icon: Brain, label: "Luna Brain", path: "/luna/brain" },
-  { icon: Network, label: "Knowledge Space", path: "/knowledge" },
-  { icon: Code2, label: "Self-Modification", path: "/self-modification" },
-  { icon: Database, label: "NPC management", path: "/npc" },
+  { icon: MessageSquare, label: "Chat", path: "/luna" },
+  { icon: Brain, label: "Brain", path: "/luna/brain" },
+  { icon: Network, label: "Knowledge", path: "/knowledge" },
+  { icon: Sparkles, label: "Self", path: "/self" },
+  { icon: Settings2, label: "Settings", path: "/settings" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -130,7 +129,7 @@ function DashboardLayoutContent({
               >
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
-              {!isCollapsed ? <div className="flex items-center gap-2 min-w-0"><div className="grid size-7 place-items-center rounded-lg bg-cyan-300 text-slate-950"><Bot className="size-4" /></div><div><span className="font-display text-base font-semibold tracking-tight text-white">SenotaAI</span><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70">Agent console</p></div></div> : null}
+              {!isCollapsed ? <div className="flex items-center gap-2 min-w-0"><div className="grid size-7 place-items-center rounded-lg bg-cyan-300 text-slate-950"><Bot className="size-4" /></div><div><span className="font-display text-base font-semibold tracking-tight text-white">Luna</span><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70">Foundation</p></div></div> : null}
             </div>
           </SidebarHeader>
 

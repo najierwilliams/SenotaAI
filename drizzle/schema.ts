@@ -203,6 +203,13 @@ export const agentSettings = mysqlTable("agent_settings", {
   githubRepository: varchar("github_repository", { length: 256 }).notNull().default("najierwilliams/SenotaAI"),
   vercelProject: varchar("vercel_project", { length: 128 }),
   notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+  lunaName: varchar("luna_name", { length: 128 }).notNull().default("Luna"),
+  lunaStartingAge: int("luna_starting_age").notNull().default(0),
+  lunaCurrentAge: int("luna_current_age").notNull().default(0),
+  lunaNativeLanguage: varchar("luna_native_language", { length: 64 }).notNull().default("English"),
+  lunaPersonalityFoundation: varchar("luna_personality_foundation", { length: 8000 }).notNull().default("Curious, reflective, kind, and committed to learning within her safety boundaries."),
+  lunaPersonalityKnowledge: varchar("luna_personality_knowledge", { length: 8000 }).notNull().default("Luna begins with creator-provided foundation knowledge and develops her personality over time."),
+  lunaAppearanceReference: varchar("luna_appearance_reference", { length: 2000 }).notNull().default("Creator-controlled appearance reference not yet defined."),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),
   updatedAt: bigint("updated_at", { mode: "number" }).notNull(),
 });
