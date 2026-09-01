@@ -11,6 +11,7 @@ export default function LunaFoundation() {
   const { data: connections } = trpc.agent.connections.useQuery();
   const update = trpc.knowledge.cognitive.foundation.update.useMutation({
     onSuccess: (result) => {
+      utils.knowledge.cognitive.foundation.get.setData(undefined, result.self);
       setForm(result.self.foundation);
       void Promise.all([
         utils.knowledge.cognitive.foundation.get.invalidate(),
