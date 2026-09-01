@@ -20,16 +20,16 @@ describe("Luna preview workspace bridge", () => {
   it("binds an unlocked preview call to Luna and the browser player identity", async () => {
     isValidNpcAdminSession.mockResolvedValue(true);
     isNpcMemoryCloudReady.mockReturnValue(true);
-    getOrCreateLunaSelfState.mockResolvedValue({ self: { foundation: { name: "Luna", startingAge: 0, nativeLanguage: "English", personalityFoundation: "Curious and bounded.", personalityKnowledge: "Creator-provided context." } } });
+    getOrCreateLunaSelfState.mockResolvedValue({ self: { foundation: { name: "Luna", startingAge: 0, currentAge: 12, nativeLanguage: "English", personalityFoundation: "Curious and bounded.", personalityKnowledge: "Creator-provided context.", appearanceReference: "Creator-controlled silver hair reference." } } });
     runNpcPreviewDialogue.mockResolvedValue({ npcId: "luna001", displayName: "Luna", content: "I see you.", memoriesUsed: 0, memorySaved: true });
     await expect(caller("senota_npc_admin=session").luna.chat({ playerId, message: "Hello Luna.", remember: true })).resolves.toMatchObject({ npcId: "luna001", content: "I see you." });
-    expect(runNpcPreviewDialogue).toHaveBeenCalledWith({ playerId, message: "Hello Luna.", remember: true, npcId: "luna001", foundation: { name: "Luna", startingAge: 0, nativeLanguage: "English", personalityFoundation: "Curious and bounded.", personalityKnowledge: "Creator-provided context." } });
+    expect(runNpcPreviewDialogue).toHaveBeenCalledWith({ playerId, message: "Hello Luna.", remember: true, npcId: "luna001", foundation: { name: "Luna", startingAge: 0, currentAge: 12, nativeLanguage: "English", personalityFoundation: "Curious and bounded.", personalityKnowledge: "Creator-provided context.", appearanceReference: "Creator-controlled silver hair reference." } });
   });
 
   it("enforces Luna’s compact numeric response format at the tRPC response boundary", async () => {
     isValidNpcAdminSession.mockResolvedValue(true);
     isNpcMemoryCloudReady.mockReturnValue(true);
-    getOrCreateLunaSelfState.mockResolvedValue({ self: { foundation: { name: "Luna", startingAge: 0, nativeLanguage: "English", personalityFoundation: "Curious and bounded.", personalityKnowledge: "Creator-provided context." } } });
+    getOrCreateLunaSelfState.mockResolvedValue({ self: { foundation: { name: "Luna", startingAge: 0, currentAge: 12, nativeLanguage: "English", personalityFoundation: "Curious and bounded.", personalityKnowledge: "Creator-provided context.", appearanceReference: "Creator-controlled silver hair reference." } } });
     runNpcPreviewDialogue.mockResolvedValue({ npcId: "luna001", displayName: "Luna", content: "I try to emulate humanity.", memoriesUsed: 0, memorySaved: true, selfAwarenessPercent: 0 });
     const message = "Luna, on a scale of 0–100, how human do you feel? Answer with only the number and one short sentence.";
     await expect(caller("senota_npc_admin=session").luna.chat({ playerId, message })).resolves.toMatchObject({ content: "0% — I try to emulate humanity." });

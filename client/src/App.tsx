@@ -13,6 +13,7 @@ import KnowledgeSpace from "./pages/KnowledgeSpace";
 import DashboardLayout from "./components/DashboardLayout";
 import LunaSelfModification from "./pages/LunaSelfModification";
 import LunaFoundation from "./pages/LunaFoundation";
+import Settings from "./pages/Settings";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -28,7 +29,7 @@ function Router() {
       <Route path={"/new"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/history"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/memory"}><DashboardLayout><Home /></DashboardLayout></Route>
-      <Route path={"/settings"}><DashboardLayout><Home /></DashboardLayout></Route>
+      <Route path={"/settings"}><DashboardLayout><Settings /></DashboardLayout></Route>
       <Route path={"/tasks/:id"}><DashboardLayout><Home /></DashboardLayout></Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

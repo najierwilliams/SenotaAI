@@ -69,6 +69,50 @@ describe("Luna cognitive persistence", () => {
     expect(first.self.identitySummary).toBe(second.self.identitySummary);
   });
 
+  it("persists and reloads every creator-controlled Foundation field from the Luna cognitive state", async () => {
+    vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
+    let persisted = {
+      ...cognitiveStateRow(),
+      luna_name: "Luna",
+      luna_starting_age: 0,
+      luna_current_age: 0,
+      luna_native_language: "English",
+      luna_personality_foundation: "Curious, reflective, kind, and safety bounded.",
+      luna_personality_knowledge: "Creator-provided foundational context.",
+      luna_appearance_reference: "Creator controlled appearance reference.",
+    };
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url.includes("luna_cognitive_state") && method === "GET") return new Response(JSON.stringify([persisted]), { status: 200 });
+      if (url.includes("luna_cognitive_state") && method === "PATCH") {
+        const patch = JSON.parse(String(init?.body));
+        persisted = { ...persisted, ...patch };
+        return new Response(JSON.stringify([persisted]), { status: 200 });
+      }
+      if (url.includes("luna_cognitive_versions") || url.includes("luna_cognitive_audit_events")) return new Response(JSON.stringify([{ id: "recorded" }]), { status: 201 });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getOrCreateLunaSelfState, updateLunaSelfState } = await import("./supabase");
+    const foundation = {
+      name: "Nova",
+      startingAge: 7,
+      currentAge: 12,
+      nativeLanguage: "Spanish",
+      personalityFoundation: "Thoughtful, curious, kind, and explicit about uncertainty.",
+      personalityKnowledge: "The creator provided this starting context for ongoing development.",
+      appearanceReference: "Creator-controlled reference: silver hair and amber eyes.",
+    };
+    const updated = await updateLunaSelfState({ userId: 1, foundation, reason: "Creator updated Luna Foundation starting context.", actor: "knowledge-owner" });
+    const reloaded = await getOrCreateLunaSelfState(1);
+
+    expect(updated.self.foundation).toEqual(foundation);
+    expect(reloaded.self.foundation).toEqual(foundation);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("luna_cognitive_state"), expect.objectContaining({ method: "PATCH" }));
+  });
+
   it("rejects an autonomous decision whose source is not in the verified owner workspace before writing", async () => {
     vi.stubEnv("SUPABASE_URL", "https://example.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");

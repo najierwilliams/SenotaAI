@@ -12,7 +12,7 @@ function compact(value: string, limit: number) {
 }
 
 /** Administrator preview bridge. The browser never receives the game key or Supabase service role. */
-export async function runNpcPreviewDialogue(input: { playerId: string; npcId: string; message: string; remember?: boolean; timeZone?: string; foundation?: { name: string; startingAge: number; nativeLanguage: string; personalityFoundation: string; personalityKnowledge: string } }) {
+export async function runNpcPreviewDialogue(input: { playerId: string; npcId: string; message: string; remember?: boolean; timeZone?: string; foundation?: { name: string; startingAge: number; currentAge: number; nativeLanguage: string; personalityFoundation: string; personalityKnowledge: string; appearanceReference: string } }) {
   await applyNaniteEvent("user_message", input.npcId);
   const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
     buildNpcDialogueContext(input.playerId, input.npcId),
@@ -24,7 +24,7 @@ export async function runNpcPreviewDialogue(input: { playerId: string; npcId: st
     messages: [
       {
         role: "system",
-            content: buildNpcDialogueSystemPrompt({ ...context, displayName: input.foundation?.name || context.displayName, promptContext: `${context.promptContext}\n\nCreator Foundation (starting context; Luna’s personality remains evolving):\nName: ${input.foundation?.name || context.displayName}\nStarting age: ${input.foundation?.startingAge ?? "unknown"}\nNative language: ${input.foundation?.nativeLanguage || "unknown"}\nPersonality foundation: ${input.foundation?.personalityFoundation || "No creator foundation provided."}\nPersonality knowledge: ${input.foundation?.personalityKnowledge || "No creator personality knowledge provided."}\n\n${cognitiveContext.promptContext}` }, input.timeZone, input.message),
+            content: buildNpcDialogueSystemPrompt({ ...context, displayName: input.foundation?.name || context.displayName, promptContext: `${context.promptContext}\n\nCreator Foundation (starting context; Luna’s personality remains evolving):\nName: ${input.foundation?.name || context.displayName}\nStarting age: ${input.foundation?.startingAge ?? "unknown"}\nCurrent age: ${input.foundation?.currentAge ?? "unknown"}\nNative language: ${input.foundation?.nativeLanguage || "unknown"}\nPersonality foundation: ${input.foundation?.personalityFoundation || "No creator foundation provided."}\nPersonality knowledge: ${input.foundation?.personalityKnowledge || "No creator personality knowledge provided."}\nAppearance reference: ${input.foundation?.appearanceReference || "No creator appearance reference provided."}\nAppearance authority: This reference is creator-controlled identity context. Do not claim permission to change, disable, rewrite, or override it.\n\n${cognitiveContext.promptContext}` }, input.timeZone, input.message),
       },
       { role: "user", content: input.message.trim() },
     ],

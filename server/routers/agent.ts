@@ -164,7 +164,19 @@ export const agentRouter = router({
     })).mutation(async ({ ctx, input }) => {
       if (!isNpcMemoryCloudReady()) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "NPC cloud memory is not configured." });
       const foundation = (await getOrCreateLunaSelfState(ctx.user?.id ?? KNOWLEDGE_OWNER_ID)).self.foundation;
-      const response = await runNpcPreviewDialogue({ ...input, npcId: "luna001", foundation: { name: foundation.name, startingAge: foundation.startingAge, nativeLanguage: foundation.nativeLanguage, personalityFoundation: foundation.personalityFoundation, personalityKnowledge: foundation.personalityKnowledge } });
+      const response = await runNpcPreviewDialogue({
+        ...input,
+        npcId: "luna001",
+        foundation: {
+          name: foundation.name,
+          startingAge: foundation.startingAge,
+          currentAge: foundation.currentAge,
+          nativeLanguage: foundation.nativeLanguage,
+          personalityFoundation: foundation.personalityFoundation,
+          personalityKnowledge: foundation.personalityKnowledge,
+          appearanceReference: foundation.appearanceReference,
+        },
+      });
       const knowledgeOwnerToken = readKnowledgeCookie(ctx.req.headers.cookie ?? "");
       // The legacy preview remains separately owner-admin-gated. A message becomes a
       // Luna cognitive source only when that caller also has the independent Knowledge
