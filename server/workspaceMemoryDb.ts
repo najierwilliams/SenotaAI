@@ -63,7 +63,7 @@ export async function syncWorkspaceMemory(input: CloudMemoryInput): Promise<Work
     isActive: true,
     createdAt: now,
     updatedAt: now,
-  }).$returningId();
+  }).returning();
   const created = await db.select().from(workspaceMemories).where(eq(workspaceMemories.id, Number(inserted[0]?.id))).limit(1);
   return created[0] ?? null;
 }

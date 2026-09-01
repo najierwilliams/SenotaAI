@@ -64,7 +64,7 @@ export async function createAgentTask(input: {
     pauseRequested: false,
     createdAt: now,
     updatedAt: now,
-  }).$returningId();
+  }).returning();
   const task = await getAgentTaskForUser(Number(inserted[0]?.id), input.userId);
   if (!task) throw new Error("Unable to create agent task");
   return task;
@@ -106,7 +106,7 @@ export async function createAgentStep(input: {
     createdAt,
     startedAt: input.status === "running" ? createdAt : null,
     finishedAt: ["completed", "failed", "skipped"].includes(input.status) ? createdAt : null,
-  }).$returningId();
+  }).returning();
   const records = await db.select().from(agentSteps).where(eq(agentSteps.id, Number(inserted[0]?.id))).limit(1);
   if (!records[0]) throw new Error("Unable to create agent step");
   return records[0];
@@ -138,7 +138,7 @@ export async function createAgentApproval(input: {
     stepId: input.stepId ?? null,
     status: "requested",
     requestedAt: Date.now(),
-  }).$returningId();
+  }).returning();
   const records = await db.select().from(agentApprovals).where(eq(agentApprovals.id, Number(inserted[0]?.id))).limit(1);
   if (!records[0]) throw new Error("Unable to create agent approval");
   return records[0];
@@ -194,7 +194,7 @@ export async function createAgentMemory(input: {
     isActive: true,
     createdAt: now,
     updatedAt: now,
-  }).$returningId();
+  }).returning();
   const created = await db.select().from(agentMemories).where(eq(agentMemories.id, Number(inserted[0]?.id))).limit(1);
   if (!created[0]) throw new Error("Unable to create agent memory");
   return created[0];
@@ -239,7 +239,7 @@ export async function createAgentSchedule(input: {
     status: "active",
     createdAt: now,
     updatedAt: now,
-  }).$returningId();
+  }).returning();
   const created = await db.select().from(agentSchedules).where(eq(agentSchedules.id, Number(inserted[0]?.id))).limit(1);
   if (!created[0]) throw new Error("Unable to create agent schedule");
   return created[0];
