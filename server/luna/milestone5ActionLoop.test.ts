@@ -46,7 +46,7 @@ describe("Milestone 5 deterministic cognitive action policy", () => {
   });
 
   it("uses the live Foundation developmental context for autonomous eligibility", () => {
-    const child: LunaFoundation = { name: "Luna", startingAge: 8, currentAge: 8, nativeLanguage: "English", personalityFoundation: "Curious and kind.", personalityKnowledge: "Creator context.", appearanceReference: "Protected reference." };
+    const child: LunaFoundation = { name: "Luna", currentAge: 8, nativeLanguage: "English", personalityFoundation: "Curious and kind.", personalityKnowledge: "Creator context.", appearanceReference: "Protected reference." };
     const adult: LunaFoundation = { ...child, currentAge: 30 };
     const adultGap = { ...gap("gap-high"), question: "Take adult employment and manage a company" };
     const adultAssessment = assessment("assessment-high", "gap-high", 0.9);

@@ -32,7 +32,7 @@ describe("administrator NPC preview dialogue", () => {
     expect(rememberPlayerNpcInteraction).toHaveBeenCalledWith(expect.objectContaining({ npcId: "luna001", memoryKind: "summary", summary: expect.stringContaining("Preview conversation") }));
   });
 
-  it("provides current Foundation identity context to self-knowledge without confusing starting and current age", async () => {
+  it("provides current Foundation identity context to self-knowledge from Current age", async () => {
     await runNpcPreviewDialogue({
       playerId: "e3f8edc7-6a3a-437d-9d8e-afd23e6fbc50",
       npcId: "luna001",
@@ -40,7 +40,6 @@ describe("administrator NPC preview dialogue", () => {
       remember: false,
       foundation: {
         name: "Nova",
-        startingAge: 8,
         currentAge: 15,
         nativeLanguage: "Spanish",
         personalityFoundation: "Curious, reflective, and kind.",
@@ -49,10 +48,10 @@ describe("administrator NPC preview dialogue", () => {
       },
     });
     const prompt = String(chatWithOllama.mock.calls[0]?.[0]?.messages?.[0]?.content ?? "");
-    expect(prompt).toContain("Starting age: 8");
     expect(prompt).toContain("Current age: 15");
+    expect(prompt).not.toContain("Starting age");
     expect(prompt).toContain("Native language: Spanish");
-    expect(prompt).toContain("use this instead of starting age");
+    expect(prompt).toContain("use this when answering how old you are");
   });
 
   it("does not save preview memory when the user turns remembering off", async () => {

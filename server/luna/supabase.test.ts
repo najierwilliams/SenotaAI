@@ -98,7 +98,6 @@ describe("Luna cognitive persistence", () => {
     const { getOrCreateLunaSelfState, updateLunaSelfState } = await import("./supabase");
     const foundation = {
       name: "Nova",
-      startingAge: 7,
       currentAge: 12,
       nativeLanguage: "Spanish",
       personalityFoundation: "Thoughtful, curious, kind, and explicit about uncertainty.",

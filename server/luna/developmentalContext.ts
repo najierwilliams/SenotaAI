@@ -4,7 +4,6 @@ export type DevelopmentalStage = "CHILD" | "ADOLESCENT" | "ADULT";
 export type DevelopmentalContext = {
   stage: DevelopmentalStage;
   currentAge: number;
-  startingAge: number;
   communication: string;
   reasoning: string;
   autonomy: string;
@@ -21,12 +20,11 @@ export type DevelopmentalEligibility = {
   reason: string;
 };
 
-export function deriveDevelopmentalContext(foundation: Pick<LunaFoundation, "currentAge" | "startingAge">): DevelopmentalContext {
+export function deriveDevelopmentalContext(foundation: Pick<LunaFoundation, "currentAge">): DevelopmentalContext {
   const currentAge = Math.max(0, Math.min(150, Math.round(foundation.currentAge)));
-  const startingAge = Math.max(0, Math.min(150, Math.round(foundation.startingAge)));
   if (currentAge < 13) {
     return {
-      stage: "CHILD", currentAge, startingAge,
+      stage: "CHILD", currentAge,
       communication: "Use clear, respectful language with complexity matched to the immediate context; do not erase the individual's vocabulary or personality.",
       reasoning: "Prefer concrete explanations, supported exploration, and explicit uncertainty over adult assumptions.",
       autonomy: "Autonomy is bounded and supported; independent software actions require the existing owner controls and age-appropriate scope.",
@@ -39,7 +37,7 @@ export function deriveDevelopmentalContext(foundation: Pick<LunaFoundation, "cur
   }
   if (currentAge < 18) {
     return {
-      stage: "ADOLESCENT", currentAge, startingAge,
+      stage: "ADOLESCENT", currentAge,
       communication: "Use natural, respectful language with increasing complexity when supported by context; preserve individual voice and learned knowledge.",
       reasoning: "Support abstract reasoning while making assumptions, consequences, and uncertainty explicit.",
       autonomy: "Support growing independence within owner controls; do not treat the person as fully independent by default.",
@@ -51,7 +49,7 @@ export function deriveDevelopmentalContext(foundation: Pick<LunaFoundation, "cur
     };
   }
   return {
-    stage: "ADULT", currentAge, startingAge,
+    stage: "ADULT", currentAge,
     communication: "Use context-appropriate complexity without artificially making speech sophisticated; preserve individual voice and learned knowledge.",
     reasoning: "Support abstract reasoning, explicit tradeoffs, uncertainty, and long-term consequences where relevant.",
     autonomy: "Adult responsibilities may be considered only within the existing owner-controlled autonomy, safety, and capability systems.",
@@ -68,7 +66,7 @@ function normalizedObjective(objective: string) {
 }
 
 /** General eligibility categories deliberately avoid maintaining an age-to-job list. */
-export function assessDevelopmentalEligibility(foundation: Pick<LunaFoundation, "currentAge" | "startingAge">, objective: string): DevelopmentalEligibility {
+export function assessDevelopmentalEligibility(foundation: Pick<LunaFoundation, "currentAge">, objective: string): DevelopmentalEligibility {
   const context = deriveDevelopmentalContext(foundation);
   const value = normalizedObjective(objective);
   const adultResponsibility = /\b(adult employment|full[- ]time employment|adult job|adult occupation|professional employment|manage a company|hire employees|legal authority|financial authority|independent housing|sign a contract|operate heavy machinery)\b/.test(value);
@@ -82,10 +80,10 @@ export function assessDevelopmentalEligibility(foundation: Pick<LunaFoundation, 
   return { eligible: true, category: "GENERAL", reason: `The objective is not blocked by the reusable developmental eligibility layer for stage ${context.stage}.` };
 }
 
-export function buildDevelopmentalPromptContext(foundation: Pick<LunaFoundation, "currentAge" | "startingAge">) {
+export function buildDevelopmentalPromptContext(foundation: Pick<LunaFoundation, "currentAge">) {
   const context = deriveDevelopmentalContext(foundation);
   return [
-    `Developmental context (derived from persisted current age ${context.currentAge}; starting age ${context.startingAge} remains historical and distinct):`,
+    `Developmental context (derived from persisted current age ${context.currentAge}):`,
     `Stage: ${context.stage}.`,
     context.communication,
     context.reasoning,
@@ -96,12 +94,12 @@ export function buildDevelopmentalPromptContext(foundation: Pick<LunaFoundation,
     context.educationAndActivities,
     context.identityContext,
     "Do not stereotype, assign a fixed personality, or infer complete fluency or capability from age or native language alone.",
-  ].join("\\n");
+  ].join("\n");
 }
 
-export function deriveNaniteBodyContext(foundation: Pick<LunaFoundation, "currentAge" | "startingAge">) {
+export function deriveNaniteBodyContext(foundation: Pick<LunaFoundation, "currentAge">) {
   const context = deriveDevelopmentalContext(foundation);
-  return { stage: context.stage, currentAge: context.currentAge, startingAge: context.startingAge, bodyPersonaContext: `Nanite/body simulation context is aligned with Luna's creator-defined ${context.stage.toLowerCase()} developmental stage; this is an operational persona context, not biological development or physiological measurement.` };
+  return { stage: context.stage, currentAge: context.currentAge, bodyPersonaContext: `Nanite/body simulation context is aligned with Luna's creator-defined ${context.stage.toLowerCase()} developmental stage; this is an operational persona context, not biological development or physiological measurement.` };
 }
 
 export function buildRelevantFoundationContext(foundation: LunaFoundation, objective: string) {
@@ -109,7 +107,7 @@ export function buildRelevantFoundationContext(foundation: LunaFoundation, objec
   const lines = [
     "Authoritative creator-provided Foundation context (read-only; distinct from learned memory):",
     `Name: ${foundation.name}`,
-    `Starting age: ${foundation.startingAge}; current age: ${foundation.currentAge}. Current age is the present developmental context.`,
+    `Current age: ${foundation.currentAge}. Current age is the present developmental context.`,
     `Native language: ${foundation.nativeLanguage}; this does not prove complete fluency.`,
     `Personality foundation: ${foundation.personalityFoundation}`,
     `Personality foundation knowledge: ${foundation.personalityKnowledge}`,
@@ -119,5 +117,5 @@ export function buildRelevantFoundationContext(foundation: LunaFoundation, objec
   if (/\b(appearance|embod|visual|body|clothing|physical)\b/.test(value)) {
     lines.splice(6, 0, `Appearance reference: ${foundation.appearanceReference}`, "Appearance is creator-controlled read-only identity context; do not edit, rewrite, disable, replace, or autonomously alter it.");
   }
-  return lines.join("\\n");
+  return lines.join("\n");
 }

@@ -431,7 +431,6 @@ export const knowledgeRouter = router({
       }),
       update: knowledgeOwnerProcedure.input(z.object({
         name: boundedText(128).min(1),
-        startingAge: z.number().int().min(0).max(150),
         currentAge: z.number().int().min(0).max(150),
         nativeLanguage: boundedText(64).min(1),
         personalityFoundation: boundedText(8_000).min(12),

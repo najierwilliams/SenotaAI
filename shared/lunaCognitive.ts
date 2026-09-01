@@ -446,7 +446,6 @@ export type LunaAttentionItem = {
 
 export type LunaFoundation = {
   name: string;
-  startingAge: number;
   currentAge: number;
   nativeLanguage: string;
   personalityFoundation: string;

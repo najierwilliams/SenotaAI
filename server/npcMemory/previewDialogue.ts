@@ -13,7 +13,7 @@ function compact(value: string, limit: number) {
 }
 
 /** Administrator preview bridge. The browser never receives the game key or Supabase service role. */
-export async function runNpcPreviewDialogue(input: { playerId: string; npcId: string; message: string; remember?: boolean; timeZone?: string; foundation?: { name: string; startingAge: number; currentAge: number; nativeLanguage: string; personalityFoundation: string; personalityKnowledge: string; appearanceReference: string } }) {
+export async function runNpcPreviewDialogue(input: { playerId: string; npcId: string; message: string; remember?: boolean; timeZone?: string; foundation?: { name: string; currentAge: number; nativeLanguage: string; personalityFoundation: string; personalityKnowledge: string; appearanceReference: string } }) {
   await applyNaniteEvent("user_message", input.npcId, input.foundation);
   const [context, cognitiveContext, selfAwarenessPercent] = await Promise.all([
     buildNpcDialogueContext(input.playerId, input.npcId),
@@ -24,8 +24,7 @@ export async function runNpcPreviewDialogue(input: { playerId: string; npcId: st
   const foundationSelfKnowledge = foundation ? [
     "Creator-provided Foundation self-knowledge (authoritative persisted context; not an ordinary learned memory):",
     `Name: ${foundation.name}`,
-    `Starting age: ${foundation.startingAge}`,
-    `Current age: ${foundation.currentAge} (present age; use this instead of starting age when answering how old you are)`,
+    `Current age: ${foundation.currentAge} (present age; use this when answering how old you are)`,
     `Native language: ${foundation.nativeLanguage} (identity context, not proof of complete fluency)`,
     `Personality foundation: ${foundation.personalityFoundation}`,
     `Personality foundation knowledge: ${foundation.personalityKnowledge}`,

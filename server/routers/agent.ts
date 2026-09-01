@@ -169,7 +169,6 @@ export const agentRouter = router({
         npcId: "luna001",
         foundation: {
           name: foundation.name,
-          startingAge: foundation.startingAge,
           currentAge: foundation.currentAge,
           nativeLanguage: foundation.nativeLanguage,
           personalityFoundation: foundation.personalityFoundation,
