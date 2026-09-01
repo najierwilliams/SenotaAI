@@ -3,6 +3,7 @@ import { dispatchLunaMission, planLunaMission } from "./orchestrator";
 import {
   createOrGetLunaAutonomousDecision,
   getLunaCognitiveSnapshot,
+  getOrCreateLunaSelfState,
   recordLunaRuntimeEvent,
   updateLunaAutonomousDecision,
 } from "./supabase";
@@ -19,6 +20,7 @@ function missionPriority(priorityScore: number) {
  */
 export async function assessAndDispatchLunaCognitiveAction(input: { userId: number; runtime?: LunaDurableRuntime }) {
   const snapshot = await getLunaCognitiveSnapshot(input.userId);
+  const self = await getOrCreateLunaSelfState(input.userId);
   const candidate = assessNextLunaAutonomousDecision({
     autonomyEnabled: snapshot.state.autonomyEnabled,
     cognitiveActionsEnabled: snapshot.state.cognitiveActionsEnabled,
@@ -27,6 +29,7 @@ export async function assessAndDispatchLunaCognitiveAction(input: { userId: numb
     attention: snapshot.attention,
     missions: snapshot.missions,
     decisions: snapshot.decisions,
+    foundation: self.self.foundation,
   });
 
   if (!candidate) {

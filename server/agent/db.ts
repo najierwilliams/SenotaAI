@@ -37,7 +37,7 @@ export async function getOrCreateAgentSettings(userId: number): Promise<AgentSet
 
 export async function updateAgentSettings(
   userId: number,
-  changes: Partial<Pick<AgentSettings, "defaultModel" | "defaultExecutionMode" | "defaultMaxRetries" | "githubRepository" | "vercelProject" | "notificationsEnabled" | "lunaName" | "lunaStartingAge" | "lunaNativeLanguage" | "lunaPersonalityFoundation" | "lunaPersonalityKnowledge" | "lunaAppearanceReference">>,
+  changes: Partial<Pick<AgentSettings, "defaultModel" | "defaultExecutionMode" | "defaultMaxRetries" | "githubRepository" | "vercelProject" | "notificationsEnabled">>,
 ): Promise<AgentSettings> {
   const db = await requireDb();
   await getOrCreateAgentSettings(userId);

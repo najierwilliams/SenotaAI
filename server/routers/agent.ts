@@ -211,12 +211,6 @@ export const agentRouter = router({
         githubRepository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, "Use owner/repository format.").optional(),
         vercelProject: z.string().trim().min(1).max(128).nullable().optional(),
         notificationsEnabled: z.boolean().optional(),
-        lunaName: z.string().trim().min(1).max(128).optional(),
-        lunaStartingAge: z.number().int().min(0).max(150).optional(),
-        lunaNativeLanguage: z.string().trim().min(1).max(64).optional(),
-        lunaPersonalityFoundation: z.string().trim().min(12).max(8_000).optional(),
-        lunaPersonalityKnowledge: z.string().trim().min(12).max(8_000).optional(),
-        lunaAppearanceReference: z.string().trim().min(1).max(2_000).optional(),
       }))
       .mutation(({ ctx, input }) => updateAgentSettings(ctx.user.id, input)),
   }),

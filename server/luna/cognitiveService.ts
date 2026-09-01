@@ -20,6 +20,7 @@ import { inspectLunaClaims } from "./milestone2";
 import { inspectLunaAttentionSystem } from "./milestone3";
 import { adviseLunaWorkerSelection } from "./milestone4";
 import { summarizeLunaLearning } from "./milestone5";
+import { buildRelevantFoundationContext } from "./developmentalContext";
 import { assessNextLunaAutonomousDecision } from "./milestone5ActionLoop";
 
 export type LunaActivitySummary = {
@@ -33,11 +34,17 @@ export type LunaActivitySummary = {
 };
 
 export async function retrieveLunaContext(input: { userId: number; query: string; projectId?: string | null; limit?: number }) {
-  const memories = await listLunaMemories(input.userId, 200);
+  const [memories, self] = await Promise.all([
+    listLunaMemories(input.userId, 200),
+    getOrCreateLunaSelfState(input.userId),
+  ]);
   const retrieved = retrieveRelevantMemories({ query: input.query, memories, projectId: input.projectId, limit: input.limit ?? 8 });
+  const foundationRelevant = /\b(name|age|old|language|speak|personality|creator|appearance|identity|who are you|yourself|development|responsib|autonom|plan|goal|task|decision|work|role)\b/i.test(input.query);
+  const foundationContext = foundationRelevant ? buildRelevantFoundationContext(self.self.foundation, input.query) : "";
   return {
     memories: retrieved,
-    promptContext: buildBoundedCognitiveContext({ objective: input.query, memories: retrieved }),
+    foundation: self.self.foundation,
+    promptContext: `${buildBoundedCognitiveContext({ objective: input.query, memories: retrieved })}${foundationContext ? `\n\n${foundationContext}` : ""}`.slice(0, 20_000),
     explanation: explainMemoryRetrieval({
       query: input.query,
       limit: input.limit ?? 8,
@@ -134,6 +141,7 @@ export async function getLunaCognitiveHome(userId: number) {
     attention: snapshot.attention,
     missions: snapshot.missions,
     decisions: snapshot.decisions,
+    foundation: self.self.foundation,
   });
   return { snapshot, summary, self, observedSelfModel, claimInspections, attentionSystem, workerSelectionAdvice, learningSummary, actionCandidate };
 }

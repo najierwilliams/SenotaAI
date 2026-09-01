@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { buildCognitivePlan } from "./cognition";
+import { assessDevelopmentalEligibility } from "./developmentalContext";
 import { getLunaDurableRuntime, type LunaRuntimeAvailability } from "./runtime";
 import {
   createLunaGoal,
@@ -46,6 +47,10 @@ export function workerRolesForTaskGraph(tasks: Array<{ role: LunaWorkerRole }>, 
 export async function planLunaMission(input: { userId: number; objective: string; priority?: number; projectTitle?: string; focusObjectId?: string | null; decisionId?: string | null; missionOrigin?: LunaMission["missionOrigin"]; idempotencyKey?: string; maxWorkers?: number; maxSteps?: number; maxRetries?: number; maxDurationSeconds?: number; maxModelRequests?: number; maxTokenBudget?: number }): Promise<PlannedLunaMission> {
   const self = await getOrCreateLunaSelfState(input.userId);
   if (!self.autonomyEnabled) throw new Error("Luna autonomy is disabled by the owner. Re-enable it before creating a mission.");
+  if (input.missionOrigin === "AUTONOMOUS") {
+    const eligibility = assessDevelopmentalEligibility(self.self.foundation, input.objective);
+    if (!eligibility.eligible) throw new Error(`Developmental eligibility blocked autonomous mission: ${eligibility.reason}`);
+  }
   const plan = buildCognitivePlan(input.objective, input.priority ?? 3);
   assertAcyclicTaskGraph(plan.tasks);
   if (input.decisionId) {

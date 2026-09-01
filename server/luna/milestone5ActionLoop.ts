@@ -7,7 +7,9 @@ import type {
   LunaKnowledgeGap,
   LunaMission,
   LunaPriorityAssessment,
+  LunaFoundation,
 } from "@shared/lunaCognitive";
+import { assessDevelopmentalEligibility } from "./developmentalContext";
 
 export const LUNA_MILESTONE5_POLICY_VERSION = "luna-m5-v1";
 export const LUNA_MILESTONE5_MIN_PRIORITY = 0.55;
@@ -66,6 +68,7 @@ export function assessNextLunaAutonomousDecision(input: {
   attention: LunaAttentionItem[];
   missions: LunaMission[];
   decisions: LunaAutonomousDecision[];
+  foundation?: LunaFoundation;
 }): LunaDecisionCandidate | null {
   if (!input.autonomyEnabled || !input.cognitiveActionsEnabled) return null;
   if (input.attention.some(item => item.state === "OPEN" && item.severity === "ACTION_REQUIRED" && item.category === "SECURITY")) return null;
@@ -80,6 +83,7 @@ export function assessNextLunaAutonomousDecision(input: {
     .map(gap => ({ gap, assessment: assessments.get(gap.id) ?? null }))
     .filter(item => item.assessment && item.assessment.priorityScore >= LUNA_MILESTONE5_MIN_PRIORITY)
     .filter(item => !decidedSourceIds.has(item.gap.id))
+    .filter(item => !input.foundation || assessDevelopmentalEligibility(input.foundation, boundedObjective(item.gap)).eligible)
     .sort((left, right) => {
       const score = (right.assessment?.priorityScore ?? 0) - (left.assessment?.priorityScore ?? 0);
       if (score !== 0) return score;
@@ -107,6 +111,7 @@ export function assessNextLunaAutonomousDecision(input: {
       priorityAssessmentId: candidate.assessment.id,
       declaredPriorityScore: candidate.assessment.priorityScore,
       attentionSecurityBlockerCount: input.attention.filter(item => item.state === "OPEN" && item.severity === "ACTION_REQUIRED" && item.category === "SECURITY").length,
+      developmentalStage: input.foundation ? assessDevelopmentalEligibility(input.foundation, boundedObjective(candidate.gap)).category : "UNASSESSED",
     },
     budget: { ...LUNA_MILESTONE5_BUDGET },
   };

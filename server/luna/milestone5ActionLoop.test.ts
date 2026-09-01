@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LunaAttentionItem, LunaAutonomousDecision, LunaKnowledgeGap, LunaMission, LunaPriorityAssessment } from "@shared/lunaCognitive";
+import type { LunaAttentionItem, LunaAutonomousDecision, LunaFoundation, LunaKnowledgeGap, LunaMission, LunaPriorityAssessment } from "@shared/lunaCognitive";
 import { assessNextLunaAutonomousDecision, LUNA_MILESTONE5_BUDGET, LUNA_MILESTONE5_POLICY_VERSION, transitionLunaDecisionForDispatch } from "./milestone5ActionLoop";
 import { assessLunaWorkerResult } from "./learningService";
 
@@ -43,6 +43,15 @@ describe("Milestone 5 deterministic cognitive action policy", () => {
   it("uses the most recently persisted GAP assessment rather than retaining a stale higher score", () => {
     const recentLower = { ...assessment("assessment-recent", "gap-high", 0.54), createdAt: "2026-08-28T00:00:00.000Z" };
     expect(assess({ gaps: [gap("gap-high")], priorityAssessments: [assessment("assessment-stale", "gap-high", 0.9), recentLower] })).toBeNull();
+  });
+
+  it("uses the live Foundation developmental context for autonomous eligibility", () => {
+    const child: LunaFoundation = { name: "Luna", startingAge: 8, currentAge: 8, nativeLanguage: "English", personalityFoundation: "Curious and kind.", personalityKnowledge: "Creator context.", appearanceReference: "Protected reference." };
+    const adult: LunaFoundation = { ...child, currentAge: 30 };
+    const adultGap = { ...gap("gap-high"), question: "Take adult employment and manage a company" };
+    const adultAssessment = assessment("assessment-high", "gap-high", 0.9);
+    expect(assess({ foundation: child, gaps: [adultGap], priorityAssessments: [adultAssessment] })).toBeNull();
+    expect(assess({ foundation: adult, gaps: [adultGap], priorityAssessments: [adultAssessment] })?.sourceId).toBe("gap-high");
   });
 
   it("reports durable runtime outcomes without treating a missing runtime as execution", () => {

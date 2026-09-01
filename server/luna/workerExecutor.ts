@@ -4,6 +4,7 @@ import { createKnowledgeObject } from "../knowledgeSpace/supabase";
 import { retrieveLunaContext } from "./cognitiveService";
 import { invokeLunaControlledTool } from "./controlledTools";
 import { getLunaModel, type LunaModel } from "./model";
+import { assessDevelopmentalEligibility, buildRelevantFoundationContext } from "./developmentalContext";
 import { assessLunaWorkerResult } from "./learningService";
 import {
   createLunaAttention,
@@ -12,6 +13,7 @@ import {
   createOrGetLunaResultValidation,
   createLunaToolCall,
   getLunaCognitiveSnapshot,
+  getOrCreateLunaSelfState,
   updateLunaMission,
   updateLunaTask,
   updateLunaToolCall,
@@ -106,6 +108,12 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
   if (!["QUEUED", "WAITING", "PAUSED"].includes(worker.state)) throw new Error("Only a queued, waiting, or paused worker can execute a durable step.");
   const task = worker.taskId ? snapshot.tasks.find(item => item.id === worker.taskId) ?? null : null;
   if (task && !["ELIGIBLE", "PENDING"].includes(task.status)) throw new Error("Worker task is not eligible for execution.");
+  const self = await getOrCreateLunaSelfState(input.userId);
+  const eligibility = assessDevelopmentalEligibility(self.self.foundation, `${mission.objective} ${task?.title ?? worker.role} ${task?.details ?? worker.inputSummary}`);
+  if (!eligibility.eligible) {
+    if (task) await updateLunaTask({ userId: input.userId, taskId: task.id, status: "BLOCKED", errorMessage: eligibility.reason, actor: "luna:developmental-policy", reason: "Developmental eligibility policy blocked an ineligible autonomous worker task." });
+    throw new Error(`Developmental eligibility blocked worker task: ${eligibility.reason}`);
+  }
 
   const workerActor = `luna:${worker.role.toLowerCase()}`;
   await updateLunaWorker({ userId: input.userId, workerId: worker.id, missionId: mission.id, state: "RUNNING", actor: workerActor });
@@ -130,7 +138,8 @@ export async function executeLunaWorkerStep(input: { userId: number; missionId: 
     const query = `${mission.objective} ${task?.title ?? worker.role}`;
     const context = await retrieveLunaContext({ userId: input.userId, query, projectId: mission.projectId, limit: 8 });
     const knowledgeContext = await invokeLunaControlledTool({ userId: input.userId, role: worker.role, toolName: "retrieve_knowledge_space", query });
-    const promptContext = `${context.promptContext}\n\n${knowledgeContext.promptContext}`.slice(0, 18_000);
+    const foundationContext = buildRelevantFoundationContext(self.self.foundation, query);
+    const promptContext = `${context.promptContext}\n\n${knowledgeContext.promptContext}\n\n${foundationContext}`.slice(0, 18_000);
     await updateLunaToolCall({ userId: input.userId, missionId: mission.id, toolCallId: toolCall.id, status: "COMPLETED", resultSummary: `Retrieved ${context.memories.length} bounded cognitive memory record(s). ${knowledgeContext.resultSummary}`, actor: `luna:${worker.role.toLowerCase()}` });
 
     const model = input.model ?? getLunaModel();

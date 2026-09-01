@@ -1,4 +1,6 @@
 import { addCognitiveObservation } from "./cognitiveState";
+import { deriveNaniteBodyContext } from "../luna/developmentalContext";
+import type { LunaFoundation } from "@shared/lunaCognitive";
 
 // ============================================================
 // Luna Nanite System — event-driven body simulation
@@ -94,9 +96,13 @@ async function getNaniteMeta(ids: string[]): Promise<Record<string, NaniteMeta>>
  * npcId is threaded through so observations land against the right NPC
  * (currently always "luna001", but kept explicit rather than hardcoded here).
  */
-export async function applyNaniteEvent(eventType: NaniteEventType, npcId: string) {
+export async function applyNaniteEvent(eventType: NaniteEventType, npcId: string, foundation?: LunaFoundation) {
   const spec = EVENT_TARGETS[eventType];
-  if (!spec) return;
+  if (!spec || !config()) return;
+  // The dialogue bridge supplies the freshly retrieved authoritative Foundation. When a
+  // lower-level caller has no Foundation context, nanites remain operational but do not invent
+  // an age or identity; the next owner-authorized event will reconcile the derived context.
+  const bodyContext = foundation ? deriveNaniteBodyContext(foundation) : null;
 
   const [rows, meta] = await Promise.all([getNaniteRows(spec.nanites), getNaniteMeta(spec.nanites)]);
   const rowById = Object.fromEntries(rows.map((r) => [r.nanite_id, r]));
@@ -110,10 +116,10 @@ export async function applyNaniteEvent(eventType: NaniteEventType, npcId: string
     await request(`nanite_state?${new URLSearchParams({ nanite_id: `eq.${naniteId}` })}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({
+        body: JSON.stringify({
         temperature: nextTemp,
         stress: nextStress,
-        last_observation: spec.label,
+        last_observation: bodyContext ? `${spec.label} ${bodyContext.bodyPersonaContext}` : spec.label,
         observation_count: nextCount,
         updated_at: new Date().toISOString(),
       }),
@@ -130,7 +136,7 @@ export async function applyNaniteEvent(eventType: NaniteEventType, npcId: string
           content: `Nanite ${naniteId} (${info?.function ?? "unknown function"}, ${info?.region ?? "unknown region"}) reported ${crossedStress ? `elevated stress (${nextStress.toFixed(2)})` : `elevated temperature (${nextTemp.toFixed(1)}°C)`} following: ${spec.label}`,
           salience: crossedStress && crossedTemp ? 4 : 3,
           entities: [info?.region ?? naniteId],
-          metadata: { source: "nanite", naniteId, cluster: info?.cluster, eventType },
+          metadata: { source: "nanite", naniteId, cluster: info?.cluster, eventType, developmentalContext: bodyContext },
           source: "nanite-system",
         },
         "nanite-system",

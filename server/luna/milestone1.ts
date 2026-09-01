@@ -6,6 +6,7 @@ import {
   type LunaSelfState,
 } from "@shared/lunaCognitive";
 import type { RetrievedMemory } from "./cognition";
+import { deriveDevelopmentalContext } from "./developmentalContext";
 
 export type LunaObservedSelfModel = {
   identity: string;
@@ -78,8 +79,12 @@ export function buildObservedLunaSelfModel(input: {
     ...LUNA_WORKER_CONTRACTS.map(contract => `${contract.role}: ${contract.purpose}`),
   ]));
   const memoryKindsPresent = LUNA_MEMORY_KINDS.filter(kind => input.memories.some(memory => memory.memoryKind === kind));
+  const foundation = input.self.foundation;
+  const developmental = foundation ? deriveDevelopmentalContext(foundation) : null;
   return {
-    identity: input.self.identitySummary,
+    identity: foundation
+      ? `${input.self.identitySummary} Foundation identity: ${foundation.name}; starting age ${foundation.startingAge}; current age ${foundation.currentAge}; native language ${foundation.nativeLanguage}; developmental stage ${developmental?.stage}; personality foundation ${foundation.personalityFoundation}; personality foundation knowledge ${foundation.personalityKnowledge}. Appearance remains creator-controlled and is available only when semantically relevant.`
+      : input.self.identitySummary,
     storedVersion: input.self.currentVersion,
     registeredCapabilities,
     registeredWorkerRoles: LUNA_WORKER_CONTRACTS.map(contract => contract.role),
