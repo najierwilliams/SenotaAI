@@ -83,7 +83,7 @@ export function buildObservedLunaSelfModel(input: {
   const developmental = foundation ? deriveDevelopmentalContext(foundation) : null;
   return {
     identity: foundation
-      ? `${input.self.identitySummary} Foundation identity: ${foundation.name}; current age ${foundation.currentAge}; native language ${foundation.nativeLanguage}; developmental stage ${developmental?.stage}; personality foundation ${foundation.personalityFoundation}; personality foundation knowledge ${foundation.personalityKnowledge}. Appearance remains creator-controlled and is available only when semantically relevant.`
+      ? `${input.self.identitySummary} Foundation identity: ${foundation.name}; starting age ${foundation.startingAge}; current age ${foundation.currentAge}; native language ${foundation.nativeLanguage}; developmental stage ${developmental?.stage}; personality foundation ${foundation.personalityFoundation}; personality foundation knowledge ${foundation.personalityKnowledge}. Appearance remains creator-controlled and is available only when semantically relevant.`
       : input.self.identitySummary,
     storedVersion: input.self.currentVersion,
     registeredCapabilities,

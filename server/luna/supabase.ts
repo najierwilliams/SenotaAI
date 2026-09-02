@@ -258,6 +258,7 @@ function mapSelf(row: Record<string, unknown>): LunaSelfState {
     workspaceId: String(row.workspace_id),
     foundation: {
       name: String(row.luna_name ?? "Luna"),
+      startingAge: asNumber(row.luna_starting_age, 0),
       currentAge: asNumber(row.luna_current_age, 0),
       nativeLanguage: String(row.luna_native_language ?? "English"),
       personalityFoundation: String(row.luna_personality_foundation ?? ""),
@@ -492,6 +493,7 @@ export async function getOrCreateLunaSelfState(userId: number): Promise<{ self: 
       row = await insert("luna_cognitive_state", {
         workspace_id: workspace.id, owner_scope: workspace.ownerScope,
         luna_name: "Luna",
+        luna_starting_age: 0,
         luna_current_age: 0,
         luna_native_language: "English",
         luna_personality_foundation: "Curious, reflective, kind, and committed to learning within her safety boundaries.",
@@ -528,6 +530,7 @@ export async function updateLunaSelfState(input: { userId: number; currentFocus?
   if (input.limitations !== undefined) patchValues.limitations = input.limitations.map(item => requiredText(item, "Limitation", 1, 400)).slice(0, 30);
   if (input.uncertaintySummary !== undefined) patchValues.uncertainty_summary = requiredText(input.uncertaintySummary, "Uncertainty summary", 4, 4_000);
   if (input.foundation?.name !== undefined) patchValues.luna_name = requiredText(input.foundation.name, "Luna name", 1, 128);
+  if (input.foundation?.startingAge !== undefined) patchValues.luna_starting_age = boundedInt(input.foundation.startingAge, 0, 150, "Luna starting age");
   if (input.foundation?.currentAge !== undefined) patchValues.luna_current_age = boundedInt(input.foundation.currentAge, 0, 150, "Luna current age");
   if (input.foundation?.nativeLanguage !== undefined) patchValues.luna_native_language = requiredText(input.foundation.nativeLanguage, "Native language", 1, 64);
   if (input.foundation?.personalityFoundation !== undefined) patchValues.luna_personality_foundation = requiredText(input.foundation.personalityFoundation, "Personality foundation", 12, 8_000);

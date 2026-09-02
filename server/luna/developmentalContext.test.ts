@@ -4,6 +4,7 @@ import { assessDevelopmentalEligibility, buildDevelopmentalPromptContext, buildR
 
 const foundation = (overrides: Partial<LunaFoundation> = {}): LunaFoundation => ({
   name: "Luna",
+  startingAge: 8,
   currentAge: 8,
   nativeLanguage: "English",
   personalityFoundation: "Curious, reflective, and kind.",
@@ -13,20 +14,21 @@ const foundation = (overrides: Partial<LunaFoundation> = {}): LunaFoundation => 
 });
 
 describe("reusable Luna developmental context", () => {
-  it("changes context when Current age changes", () => {
-    const child = deriveDevelopmentalContext(foundation({ currentAge: 8 }));
-    const teenager = deriveDevelopmentalContext(foundation({ currentAge: 15 }));
+  it("keeps starting age distinct from current age and changes context when current age changes", () => {
+    const child = deriveDevelopmentalContext(foundation({ startingAge: 8, currentAge: 8 }));
+    const teenager = deriveDevelopmentalContext(foundation({ startingAge: 8, currentAge: 15 }));
+    expect(child.startingAge).toBe(8);
     expect(child.currentAge).toBe(8);
     expect(child.stage).toBe("CHILD");
+    expect(teenager.startingAge).toBe(8);
     expect(teenager.currentAge).toBe(15);
     expect(teenager.stage).toBe("ADOLESCENT");
     expect(teenager.communication).not.toBe(child.communication);
   });
 
-  it("provides Current age, language, and foundation context without claiming language fluency", () => {
+  it("provides current age, language, and foundation context without claiming language fluency", () => {
     const context = buildRelevantFoundationContext(foundation({ currentAge: 15, nativeLanguage: "Spanish" }), "Plan a conversation");
-    expect(context).toContain("Current age: 15");
-    expect(context).not.toContain("Starting age");
+    expect(context).toContain("Starting age: 8; current age: 15");
     expect(context).toContain("Native language: Spanish");
     expect(context).toContain("does not prove complete fluency");
     expect(context).toContain("Personality foundation: Curious, reflective, and kind.");
@@ -37,7 +39,6 @@ describe("reusable Luna developmental context", () => {
     expect(prompt).toContain("Do not stereotype");
     expect(prompt).toContain("individual's vocabulary or personality");
     expect(prompt).toContain("Current age is present developmental context");
-    expect(prompt).not.toContain("starting age");
   });
 
   it("blocks inappropriate adult and high-risk autonomous objectives for a child without maintaining a job list", () => {
@@ -55,8 +56,8 @@ describe("reusable Luna developmental context", () => {
     expect(appearance).toContain("creator-controlled read-only identity context");
   });
 
-  it("derives an operational nanite/body context from the same Current age", () => {
-    expect(deriveNaniteBodyContext(foundation({ currentAge: 8 }))).toMatchObject({ stage: "CHILD", currentAge: 8 });
+  it("derives an operational nanite/body context from the same Foundation state", () => {
+    expect(deriveNaniteBodyContext(foundation({ currentAge: 8 }))).toMatchObject({ stage: "CHILD", currentAge: 8, startingAge: 8 });
     expect(deriveNaniteBodyContext(foundation({ currentAge: 30 })).bodyPersonaContext).toContain("adult developmental stage");
     expect(deriveNaniteBodyContext(foundation()).bodyPersonaContext).toContain("not biological development");
   });
