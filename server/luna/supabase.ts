@@ -253,6 +253,7 @@ function scopedParams(workspaceId: string, select = "*", extra: Record<string, s
   return new URLSearchParams({ select, workspace_id: `eq.${workspaceId}`, ...extra });
 }
 
+/** Sole mapper from the owner-scoped persisted cognitive-state row to authoritative self-state. */
 function mapSelf(row: Record<string, unknown>): LunaSelfState {
   return {
     workspaceId: String(row.workspace_id),
@@ -1033,6 +1034,7 @@ export function calculateBlockedTasks(tasks: LunaTask[]): LunaTask[] {
   return tasks.filter(task => task.status === "PENDING" || task.status === "ELIGIBLE").filter(task => task.dependencyTaskIds.some(id => ["FAILED", "CANCELLED", "BLOCKED", "RECOVERY_REQUIRED"].includes(byId.get(id)?.status ?? "BLOCKED")));
 }
 
+/** Aggregates authoritative persisted systems without copying them into a competing store. */
 export async function getLunaCognitiveSnapshot(userId: number): Promise<LunaCognitiveSnapshot> {
   const self = await getOrCreateLunaSelfState(userId);
   const [memories, claims, claimEvidence, claimRevisions, knowledgeGaps, knowledgeGapRevisions, curiosityCandidates, priorityAssessments, decisions, resultValidations, projects, goals, tasks, missions, workers, attention, reflections, recoveries, activity] = await Promise.all([

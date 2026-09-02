@@ -444,6 +444,7 @@ export type LunaAttentionItem = {
   resolvedAt: string | null;
 };
 
+/** Creator-controlled Foundation fields persisted in the owner-scoped luna_cognitive_state row. */
 export type LunaFoundation = {
   name: string;
   startingAge: number;
@@ -454,6 +455,11 @@ export type LunaFoundation = {
   appearanceReference: string;
 };
 
+/**
+ * Authoritative objective self-state projection. Foundation fields are read from the persisted
+ * cognitive state; capabilities, goals, memories, and actions remain authoritative in their
+ * existing persisted cognitive systems and are aggregated by LunaCognitiveSnapshot.
+ */
 export type LunaSelfState = {
   workspaceId: string;
   foundation: LunaFoundation;

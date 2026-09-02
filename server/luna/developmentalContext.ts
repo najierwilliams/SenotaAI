@@ -119,5 +119,5 @@ export function buildRelevantFoundationContext(foundation: LunaFoundation, objec
   if (/\b(appearance|embod|visual|body|clothing|physical)\b/.test(value)) {
     lines.splice(6, 0, `Appearance reference: ${foundation.appearanceReference}`, "Appearance is creator-controlled read-only identity context; do not edit, rewrite, disable, replace, or autonomously alter it.");
   }
-  return lines.join("\\n");
+  return lines.join("\n");
 }
