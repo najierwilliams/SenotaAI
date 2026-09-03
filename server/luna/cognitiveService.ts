@@ -22,6 +22,7 @@ import { adviseLunaWorkerSelection } from "./milestone4";
 import { summarizeLunaLearning } from "./milestone5";
 import { buildRelevantFoundationContext } from "./developmentalContext";
 import { assessNextLunaAutonomousDecision } from "./milestone5ActionLoop";
+import { lunaMem0Adapter } from "./mem0Adapter";
 
 export type LunaActivitySummary = {
   currentObjective: string | null;
@@ -38,11 +39,13 @@ export async function retrieveLunaContext(input: { userId: number; query: string
     listLunaMemories(input.userId, 200),
     getOrCreateLunaSelfState(input.userId),
   ]);
+  const mem0Candidates = await lunaMem0Adapter.searchRelevant({ workspaceId: self.self.workspaceId, query: input.query, limit: input.limit });
   const retrieved = retrieveRelevantMemories({ query: input.query, memories, projectId: input.projectId, limit: input.limit ?? 8 });
   const foundationRelevant = /\b(name|age|old|language|speak|personality|creator|appearance|identity|who are you|yourself|development|responsib|autonom|plan|goal|task|decision|work|role)\b/i.test(input.query);
   const foundationContext = foundationRelevant ? buildRelevantFoundationContext(self.self.foundation, input.query) : "";
   return {
     memories: retrieved,
+    mem0Candidates,
     foundation: self.self.foundation,
     promptContext: `${buildBoundedCognitiveContext({ objective: input.query, memories: retrieved })}${foundationContext ? `\n\n${foundationContext}` : ""}`.slice(0, 20_000),
     explanation: explainMemoryRetrieval({
