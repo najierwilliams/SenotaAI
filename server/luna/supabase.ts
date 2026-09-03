@@ -66,7 +66,8 @@ import { isLunaRoutineOwnedTruth, isLunaScientificElevation, workerContract } fr
 import { getOrCreateKnowledgeWorkspace } from "../knowledgeSpace/supabase";
 import { explainLunaPriority } from "./milestone3";
 import { allocateLunaFocus } from "./preGameCognitive";
-import type { SelfModificationFile, SelfModificationRun, SelfModificationTest } from "./selfModification";
+import { assertSelfModificationTransition, isSelfModificationExecutionState, validateCandidateChanges } from "./selfModification";
+import type { SelfModificationExecutionState, SelfModificationFile, SelfModificationRun, SelfModificationTest, SelfModificationTransitionEvidence } from "./selfModification";
 
 const OWNER_PREFIX = "senota-user-";
 const MAX_LIST = 200;
@@ -1627,7 +1628,9 @@ function mapSelfModificationRun(row: Record<string, unknown>): SelfModificationR
   return {
     id: String(row.id), workspaceId: String(row.workspace_id), objective: String(row.objective), reason: String(row.reason),
     status: row.status as SelfModificationRun["status"], previousVersion: asString(row.previous_version), candidateVersion: asString(row.candidate_version),
-    rollbackAvailable: asBoolean(row.rollback_available), limits: asRecord(row.limits), safetyResult: asRecord(row.safety_result), deploymentResult: asRecord(row.deployment_result), rollbackResult: asRecord(row.rollback_result), outcome: asString(row.outcome), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    rollbackAvailable: asBoolean(row.rollback_available), limits: asRecord(row.limits), safetyResult: asRecord(row.safety_result), deploymentResult: asRecord(row.deployment_result), rollbackResult: asRecord(row.rollback_result), outcome: asString(row.outcome),
+    initiatedBy: asString(row.initiated_by), workerJobId: asString(row.worker_job_id), workerWorkspaceRef: asString(row.worker_workspace_ref), workerResult: asRecord(row.worker_result), validationResult: asRecord(row.validation_result), safetyDecision: asRecord(row.safety_decision), healthCheckResult: asRecord(row.health_check_result),
+    acceptedAt: asString(row.accepted_at), workerPendingAt: asString(row.worker_pending_at), workerStartedAt: asString(row.worker_started_at), workerCompletedAt: asString(row.worker_completed_at), validationAt: asString(row.validation_at), safetyAt: asString(row.safety_at), deploymentAuthorizedAt: asString(row.deployment_authorized_at), deployingAt: asString(row.deploying_at), deployedAt: asString(row.deployed_at), healthCheckedAt: asString(row.health_checked_at), rollbackCompletedAt: asString(row.rollback_completed_at), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
   };
 }
 function mapSelfModificationFile(row: Record<string, unknown>): SelfModificationFile {
@@ -1655,6 +1658,40 @@ export async function createLunaSelfModificationRun(input: { userId: number; obj
   const row = await insert("luna_self_modification_runs", { workspace_id: workspace.id, objective: requiredText(input.objective, "Self-modification objective", 12, 4_000), reason: requiredText(input.reason, "Self-modification reason", 1, 4_000), status: "PROPOSED", previous_version: input.previousVersion ?? null, limits: { maxGenerationAttempts: 3, maxTestAttempts: 2, maxExecutionMs: 120000, maxModelCalls: 3, maxTokenBudget: 24000, maxConcurrentJobs: 1 }, safety_result: { passed: false, deploymentAuthorized: false, status: "PENDING_EXTERNAL_GATE" }, deployment_result: { status: "BLOCKED_EXTERNAL_GATE_UNAVAILABLE" }, rollback_result: { status: "AVAILABLE", automatic: false }, outcome: "Candidate generation is not yet executed." });
   const result = mapSelfModificationRun(row); const actor = input.actor ?? "luna:self-modification";
   await cognitiveAudit({ workspaceId: workspace.id, actor, action: "SELF_MODIFICATION_PROPOSED", subjectType: "SELF_MODIFICATION", subjectId: result.id, detail: { objective: result.objective, status: result.status, deploymentAuthorized: false } });
+  return result;
+}
+
+export async function transitionLunaSelfModificationRun(input: { userId: number; runId: string; to: SelfModificationExecutionState; evidence?: SelfModificationTransitionEvidence; actor?: string }) {
+  const workspace = await workspaceFor(input.userId);
+  const currentRows = await rows("luna_self_modification_runs", scopedParams(workspace.id, "*", { id: `eq.${input.runId}`, limit: "1" }));
+  if (!currentRows[0]) throw new Error("Self-modification run is unavailable in this owner workspace.");
+  const current = mapSelfModificationRun(currentRows[0]);
+  if (!isSelfModificationExecutionState(current.status)) throw new Error(`Legacy self-modification status ${current.status} cannot enter the execution controller without an explicit migration.`);
+  if (input.to === "WORKER_COMPLETED") {
+    const result = input.evidence?.workerResult;
+    if (!result || result.status !== "COMPLETED") throw new Error("Worker completion requires a completed structured worker result.");
+    const validatedFiles = validateCandidateChanges(result.files);
+    await appendLunaSelfModificationFiles({ userId: input.userId, runId: input.runId, files: validatedFiles, actor: input.actor ?? "luna:self-modification-controller" });
+    for (const test of result.tests.slice(0, 50)) await appendLunaSelfModificationTest({ userId: input.userId, runId: input.runId, testName: test.testName, status: test.status, output: test.output, durationMs: test.durationMs, actor: input.actor ?? "luna:self-modification-controller" });
+  }
+  assertSelfModificationTransition(current.status, input.to, input.evidence);
+  const now = new Date().toISOString();
+  const patchValues: Record<string, unknown> = { status: input.to };
+  const evidence = input.evidence ?? {};
+  if (input.to === "ACCEPTED_FOR_EXECUTION") patchValues.accepted_at = now;
+  if (input.to === "WORKER_PENDING") { patchValues.worker_pending_at = now; patchValues.worker_job_id = evidence.workerJobId; patchValues.worker_workspace_ref = evidence.workerWorkspaceRef; }
+  if (input.to === "WORKER_RUNNING") { patchValues.worker_started_at = now; patchValues.worker_job_id = evidence.workerJobId; patchValues.worker_workspace_ref = evidence.workerWorkspaceRef; }
+  if (input.to === "WORKER_COMPLETED") { patchValues.worker_completed_at = now; patchValues.worker_result = evidence.workerResult; patchValues.worker_job_id = evidence.workerJobId; patchValues.worker_workspace_ref = evidence.workerWorkspaceRef; }
+  if (input.to === "AWAITING_SAFETY") { patchValues.validation_at = now; patchValues.validation_result = evidence.validationResult; }
+  if (input.to === "SAFETY_REJECTED" || input.to === "DEPLOYMENT_AUTHORIZED") { patchValues.safety_at = now; patchValues.safety_decision = evidence.safetyDecision; }
+  if (input.to === "DEPLOYMENT_AUTHORIZED") patchValues.deployment_authorized_at = now;
+  if (input.to === "DEPLOYING") patchValues.deploying_at = now;
+  if (input.to === "DEPLOYED") { patchValues.deployed_at = now; patchValues.deployment_result = evidence.deploymentResult; }
+  if (input.to === "HEALTH_CHECK_FAILED") { patchValues.health_checked_at = now; patchValues.health_check_result = evidence.healthCheckResult; }
+  if (input.to === "ROLLED_BACK") { patchValues.rollback_completed_at = now; patchValues.rollback_result = evidence.rollbackResult; }
+  if (input.to === "FAILED" || input.to === "VALIDATION_FAILED") { patchValues.outcome = evidence.validationResult ?? evidence.workerResult ?? evidence.deploymentResult ?? evidence.rollbackResult ?? "Controller failure recorded."; }
+  const result = mapSelfModificationRun(await patch("luna_self_modification_runs", scopedParams(workspace.id, "*", { id: `eq.${input.runId}`, limit: "1" }), patchValues));
+  await cognitiveAudit({ workspaceId: workspace.id, actor: input.actor ?? "luna:self-modification-controller", action: `SELF_MODIFICATION_${input.to}`, subjectType: "SELF_MODIFICATION", subjectId: result.id, detail: { from: current.status, to: result.status, workerJobId: result.workerJobId, workerWorkspaceRef: result.workerWorkspaceRef, evidenceKeys: Object.keys(evidence) } });
   return result;
 }
 
