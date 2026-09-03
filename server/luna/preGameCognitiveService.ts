@@ -15,6 +15,8 @@ import {
 import {
   createLunaInternalStateObservation,
   createLunaLearningRecord,
+  createLunaMemory,
+  listLunaMemories,
   createLunaMaintenanceReport,
   createLunaReasoningArtifact,
   createLunaSocialInteraction,
@@ -36,6 +38,7 @@ import {
   listLunaPreGameCognitiveSnapshot,
   replaceLunaFocusAssignments,
 } from "./supabase";
+import { lunaMem0Adapter } from "./mem0Adapter";
 
 function deterministicKey(prefix: string, values: string[]) {
   return `${prefix}:${createHash("sha256").update(values.join("\u001f")).digest("hex")}`;
@@ -47,6 +50,58 @@ function derivedCountFor(assessment: ReturnType<typeof assessLunaCognitiveInput>
     LUNA_COGNITIVE_MAX_DERIVATIONS_PER_CYCLE,
     6 + (assessment.detectedQuestion ? 2 : 0) + (assessment.detectedCorrection ? 2 : 0),
   );
+}
+
+async function processMem0Candidates(input: { userId: number; workspaceId: string; sourceInputId: string; experienceId: string; experienceSummary: string; experienceKind: string; projectId: string | null; missionId: string | null; importance: number; confidence: number; actor: string }) {
+  const candidates = await lunaMem0Adapter.addExperience({
+    workspaceId: input.workspaceId,
+    messages: input.experienceSummary,
+    sourceType: "LUNA_EXPERIENCE",
+    sourceId: input.experienceId,
+    metadata: { sourceInputId: input.sourceInputId, experienceKind: input.experienceKind },
+  });
+  if (!candidates.length) return { accepted: 0, rejected: 0 };
+  const existing = await listLunaMemories(input.userId, 200);
+  const existingContent = new Set(existing.map(memory => normalizeLunaCognitiveText(memory.content)));
+  let accepted = 0;
+  let rejected = 0;
+  for (const candidate of candidates.slice(0, 8)) {
+    const content = candidate.content.replace(/\s+/g, " ").trim();
+    const normalized = normalizeLunaCognitiveText(content);
+    if (content.length < 3 || content.length > 16_000 || !normalized || existingContent.has(normalized)) {
+      rejected += 1;
+      continue;
+    }
+    const memory = await createLunaMemory({
+      userId: input.userId,
+      memoryKind: "EPISODIC",
+      content,
+      importance: input.importance,
+      truthState: "PROPOSED",
+      sourceType: "LUNA",
+      sourceObjectIds: [input.sourceInputId, input.experienceId],
+      projectId: input.projectId,
+      missionId: input.missionId,
+      tags: ["mem0-candidate", input.experienceKind.toLowerCase()],
+      provenance: { method: "mem0-oss-candidate", note: `Mem0 candidate ${candidate.id} accepted by Luna validation; Mem0 is not authoritative.` },
+      actor: input.actor,
+    });
+    await createLunaLearningRecord({
+      userId: input.userId,
+      learningKind: "PATTERN",
+      sourceInputId: input.sourceInputId,
+      experienceId: input.experienceId,
+      targetType: "MEMORY",
+      targetId: memory.id,
+      summary: "A Mem0 candidate was accepted as proposed episodic memory after Luna validation and duplicate suppression.",
+      confidenceDelta: 0,
+      provenance: { method: "mem0-oss-candidate-acceptance", note: `Candidate ${candidate.id}; source experience ${input.experienceId}.` },
+      actor: input.actor,
+    });
+    existingContent.add(normalized);
+    accepted += 1;
+  }
+  return { accepted, rejected };
 }
 
 export type LunaInputIngestion = {
@@ -222,6 +277,27 @@ export async function ingestLunaCognitiveInput(input: LunaInputIngestion) {
   });
 
   let learningCount = 0;
+  let mem0AcceptedCount = 0;
+  let mem0RejectedCount = 0;
+  const mem0Eligible = assessment.detectedCorrection || ["WORKER_RESULT", "PROJECT_OUTCOME", "WORLD_EVENT"].includes(input.inputType);
+  if (mem0Eligible) {
+    const processed = await processMem0Candidates({
+      userId: input.userId,
+      workspaceId: experience.experience.workspaceId,
+      sourceInputId: stored.input.id,
+      experienceId: experience.experience.id,
+      experienceSummary: experience.experience.summary,
+      experienceKind: experience.experience.experienceKind,
+      projectId: experience.experience.projectId,
+      missionId: experience.experience.missionId,
+      importance: experience.experience.importance,
+      confidence: experience.experience.confidence,
+      actor: input.actor ?? "luna:mem0",
+    });
+    mem0AcceptedCount = processed.accepted;
+    mem0RejectedCount = processed.rejected;
+    learningCount += processed.accepted;
+  }
   if (assessment.detectedCorrection) {
     await createLunaLearningRecord({
       userId: input.userId,
@@ -296,7 +372,7 @@ export async function ingestLunaCognitiveInput(input: LunaInputIngestion) {
     actor: input.actor ?? "luna:attention",
   });
 
-  return { input: stored.input, assessment, cycle: cycle.cycle, experience: experience.experience, attention, created: true, derived: { experiences: 1, attention: 1, gaps: gapCount, curiosity: curiosityCount, learning: learningCount, focus: focusAssignments.length } };
+  return { input: stored.input, assessment, cycle: cycle.cycle, experience: experience.experience, attention, created: true, derived: { experiences: 1, attention: 1, gaps: gapCount, curiosity: curiosityCount, learning: learningCount, mem0Accepted: mem0AcceptedCount, mem0Rejected: mem0RejectedCount, focus: focusAssignments.length } };
 }
 
 /** World adapter ingress only; it records a neutral event and then uses the same bounded input path. */

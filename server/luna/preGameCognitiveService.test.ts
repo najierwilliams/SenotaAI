@@ -1,8 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mem0 = vi.hoisted(() => ({ addExperience: vi.fn() }));
+
 const storage = vi.hoisted(() => ({
   createLunaInternalStateObservation: vi.fn(),
   createLunaLearningRecord: vi.fn(),
+  createLunaMemory: vi.fn(),
+  listLunaMemories: vi.fn(),
   createLunaMaintenanceReport: vi.fn(),
   createLunaReasoningArtifact: vi.fn(),
   createLunaSocialInteraction: vi.fn(),
@@ -26,6 +30,7 @@ const storage = vi.hoisted(() => ({
 }));
 
 vi.mock("./supabase", () => storage);
+vi.mock("./mem0Adapter", () => ({ lunaMem0Adapter: mem0 }));
 
 import { ingestLunaCognitiveInput, ingestLunaWorldEvent, runLunaCognitiveMaintenance } from "./preGameCognitiveService";
 
@@ -38,7 +43,7 @@ beforeEach(() => {
   storage.listLunaPreGameCognitiveSnapshot.mockResolvedValue(blankSnapshot());
   storage.createOrGetLunaCognitiveInput.mockResolvedValue({ created: true, input: { id: "input-1", summary: "Correction: this is wrong.", workspaceId: "workspace", sourceKey: "input:key", inputType: "USER_CORRECTION", relevance: "RELEVANT", privacyClass: "OWNER_PRIVATE", projectId: null, goalId: null, missionId: null, workerId: null, provenance: {}, createdAt: "2026-08-27T00:00:00Z" } });
   storage.createOrGetLunaCognitiveCycle.mockResolvedValue({ created: true, cycle: { id: "cycle-1" } });
-  storage.createOrGetLunaExperience.mockResolvedValue({ created: true, experience: { id: "experience-1" } });
+  storage.createOrGetLunaExperience.mockResolvedValue({ created: true, experience: { id: "experience-1", workspaceId: "workspace-1", summary: "The worker outcome was successfully validated.", experienceKind: "WORKER_OUTCOME", projectId: null, missionId: null, importance: 3, confidence: 0.9 } });
   storage.createOrGetLunaNovelty.mockResolvedValue({ created: true, novelty: { id: "novelty-1" } });
   storage.createOrUpdateLunaUncertainty.mockResolvedValue({ id: "uncertainty-1" });
   storage.createOrUpdateLunaAttentionAssessment.mockResolvedValue({ id: "attention-1" });
@@ -48,6 +53,9 @@ beforeEach(() => {
   storage.createLunaInternalStateObservation.mockResolvedValue({ id: "state-1" });
   storage.createLunaReasoningArtifact.mockResolvedValue({ id: "reasoning-1" });
   storage.createLunaLearningRecord.mockResolvedValue({ id: "learning-1" });
+  storage.createLunaMemory.mockResolvedValue({ id: "memory-1" });
+  storage.listLunaMemories.mockResolvedValue([]);
+  mem0.addExperience.mockResolvedValue([]);
   storage.createOrGetLunaRelationship.mockResolvedValue({ created: true, relationship: { id: "relationship-1" } });
   storage.createLunaSocialInteraction.mockResolvedValue({ id: "interaction-1" });
   storage.createOrUpdateLunaSelfModelFact.mockResolvedValue({ id: "self-fact-1" });
@@ -72,6 +80,15 @@ describe("pre-game cognitive source ingestion", () => {
     expect(storage.createOrGetLunaRelationship).toHaveBeenCalledWith(expect.objectContaining({ participantIdentity: "player:test" }));
     expect(storage.createLunaSocialInteraction).toHaveBeenCalledOnce();
     expect(storage.createOrGetLunaWorldEvent).not.toHaveBeenCalled();
+  });
+
+  it("accepts Mem0 candidates only through Luna memory persistence and records provenance", async () => {
+    mem0.addExperience.mockResolvedValueOnce([{ id: "mem0-1", content: "The worker outcome was successfully validated.", score: 0.91, metadata: {} }]);
+    const result = await ingestLunaCognitiveInput({ userId: 1, inputType: "WORKER_RESULT", content: "The worker outcome was successfully validated." });
+    expect(result.derived.mem0Accepted).toBe(1);
+    expect(mem0.addExperience).toHaveBeenCalledWith(expect.objectContaining({ workspaceId: "workspace-1", sourceType: "LUNA_EXPERIENCE" }));
+    expect(storage.createLunaMemory).toHaveBeenCalledWith(expect.objectContaining({ content: "The worker outcome was successfully validated.", truthState: "PROPOSED", sourceType: "LUNA", sourceObjectIds: ["input-1", "experience-1"], provenance: expect.objectContaining({ method: "mem0-oss-candidate" }) }));
+    expect(storage.createLunaLearningRecord).toHaveBeenCalledWith(expect.objectContaining({ targetType: "MEMORY", targetId: "memory-1", provenance: expect.objectContaining({ method: "mem0-oss-candidate-acceptance" }) }));
   });
 
   it("does not derive a duplicate source twice", async () => {
